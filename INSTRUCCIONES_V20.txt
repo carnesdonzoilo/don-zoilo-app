@@ -1,0 +1,1 @@
+Versión 20: panel de inicio. No requiere cambios en Supabase.

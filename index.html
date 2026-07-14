@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 17</div>
+      <div class="subtitle">Control de operaciones · Versión 20</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -35,48 +35,19 @@
     </nav>
 
     <section id="dashboard" class="view active">
-      <div class="date-filter">
-        <label>Desde <input type="date" id="dateFrom"></label>
-        <label>Hasta <input type="date" id="dateTo"></label>
-        <button id="applyDates" class="secondary">Aplicar</button>
+      <div class="home-hero"><div><div class="home-kicker">SISTEMA DON ZOILO</div><h1 id="homeGreeting">Resumen del día</h1><div id="homeDate" class="home-date"></div></div><button class="primary quick-nav" data-target="orders">＋ Cargar pedido</button></div>
+      <div class="home-stats">
+        <article class="home-stat"><span>Pedidos de hoy</span><strong id="homeOrders">0</strong></article>
+        <article class="home-stat"><span>Pendientes</span><strong id="homePending">0</strong></article>
+        <article class="home-stat"><span>Entregados</span><strong id="homeDelivered">0</strong></article>
+        <article class="home-stat"><span>Kilos cargados</span><strong id="homeKg">0 kg</strong></article>
+        <article class="home-stat"><span>Facturación estimada</span><strong id="homeBilling">$ 0</strong></article>
+        <article class="home-stat"><span>A cobrar</span><strong id="homeReceivable">$ 0</strong></article>
       </div>
-
-      <div class="cards">
-        <article class="metric">
-          <span>Ventas</span>
-          <strong id="salesTotal">$ 0</strong>
-        </article>
-        <article class="metric">
-          <span>Cobros</span>
-          <strong id="collectionsTotal">$ 0</strong>
-        </article>
-        <article class="metric">
-          <span>Compras</span>
-          <strong id="purchasesTotal">$ 0</strong>
-        </article>
-        <article class="metric">
-          <span>Pagos y gastos</span>
-          <strong id="outTotal">$ 0</strong>
-        </article>
-        <article class="metric highlight">
-          <span>Resultado de caja</span>
-          <strong id="cashResult">$ 0</strong>
-        </article>
-        <article class="metric">
-          <span>Kilos vendidos</span>
-          <strong id="kgTotal">0 kg</strong>
-        </article>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head">
-          <h2>Actividad reciente</h2>
-          <button id="exportCsv" class="secondary">Exportar CSV</button>
-        </div>
-        <div id="recentList" class="movement-list"></div>
-      </div>
+      <div class="progress-panel"><div class="panel-head"><div><h2>Estado del reparto</h2><p class="muted small" id="homeProgressText"></p></div><strong id="homeProgressPercent">0%</strong></div><div class="progress-track"><div id="homeProgressBar" class="progress-fill"></div></div></div>
+      <div class="quick-grid"><button class="quick-card quick-nav" data-target="orders">📋<strong>Pedidos</strong><small>Cargar y entregar</small></button><button class="quick-card quick-nav" data-target="orderSheet">🗂️<strong>Hoja pedidos</strong><small>Imprimir A4</small></button><button class="quick-card quick-nav" data-target="movements">💰<strong>Movimientos</strong><small>Ventas y cobros</small></button><button class="quick-card quick-nav" data-target="balances">👥<strong>Saldos</strong><small>Cuenta corriente</small></button></div>
+      <div class="home-columns"><div class="panel"><h2>Alertas de hoy</h2><div id="homeAlerts" class="alert-list"></div></div><div class="panel"><div class="panel-head"><h2>Actividad reciente</h2><button id="exportCsv" class="secondary">Exportar CSV</button></div><div id="recentList" class="movement-list"></div></div></div>
     </section>
-
 
     <section id="orders" class="view">
       
@@ -158,6 +129,7 @@
           <label>Fecha de reparto<input type="date" id="sheetDate"></label>
           <label>Título<input id="sheetTitle" value="PEDIDOS DON ZOILO"></label>
           <button id="refreshSheet" class="secondary">Actualizar hoja</button>
+          <button id="copyOrders" class="secondary">Copiar pedidos</button>
           <button id="printSheet" class="primary">Imprimir / Guardar PDF</button>
         </div>
         <p class="muted small">Se incluyen los clientes con pedidos de la fecha elegida, ordenados por recorrido. Los casilleros restantes quedan numerados y vacíos.</p>

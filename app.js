@@ -381,6 +381,20 @@ function filteredByDates(){
   return movements.filter(m => (!from || m.date >= from) && (!to || m.date <= to));
 }
 
+function renderHomePanel(){
+  const today=todayISO(), todayOrders=orders.filter(o=>o.delivery_date===today), groups=new Map();
+  todayOrders.forEach(o=>{const k=o.batch_id||o.id;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(o)});
+  const grouped=[...groups.values()], total=grouped.length, delivered=grouped.filter(g=>g.every(x=>x.delivered)).length, pending=total-delivered;
+  const kg=todayOrders.filter(o=>(o.unit||'kg')==='kg').reduce((s,o)=>s+Number(o.quantity||0),0), billing=todayOrders.reduce((s,o)=>s+Number(o.total||0),0);
+  const receivable=movements.filter(m=>m.status!=='pendiente').reduce((s,m)=>m.type==='venta'?s+Number(m.amount||0):m.type==='cobro'?s-Number(m.amount||0):s,0);
+  $('homeOrders').textContent=total;$('homePending').textContent=pending;$('homeDelivered').textContent=delivered;$('homeKg').textContent=kg.toLocaleString('es-AR')+' kg';$('homeBilling').textContent=money(billing);$('homeReceivable').textContent=money(Math.max(receivable,0));
+  const pct=total?Math.round(delivered/total*100):0;$('homeProgressPercent').textContent=pct+'%';$('homeProgressBar').style.width=pct+'%';$('homeProgressText').textContent=total?`${delivered} entregados de ${total} pedidos.`:'Sin pedidos cargados para hoy.';
+  const d=new Date(today+'T12:00:00');$('homeDate').textContent=d.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});$('homeGreeting').textContent=new Date().getHours()<12?'Buenos días':'Resumen del día';
+  const alerts=$('homeAlerts');alerts.innerHTML='';const a=[];if(!total)a.push(['warning','No hay pedidos para hoy','Podés cargarlos desde el botón superior.']);else if(pending)a.push(['warning',pending+' pedidos pendientes','Todavía no fueron marcados como entregados.']);else a.push(['good','Reparto completo','Todos los pedidos de hoy están entregados.']);
+  const noPrice=todayOrders.filter(o=>Number(o.unit_price||0)<=0).length;if(noPrice)a.push(['warning',noPrice+' productos sin precio','Revisalos antes de generar remitos.']);if(receivable>0)a.push(['warning','Saldo pendiente de cobro',money(receivable)]);
+  a.forEach(x=>{const div=document.createElement('div');div.className='alert-item '+x[0];div.innerHTML=`<strong>${escapeHtml(x[1])}</strong><div class="muted small">${escapeHtml(x[2])}</div>`;alerts.append(div)});
+}
+
 function renderDashboard(){
   const list = filteredByDates();
   const sum = (type) => list.filter(m=>m.type===type && m.status!=="pendiente").reduce((a,m)=>a+Number(m.amount||0),0);
@@ -434,7 +448,7 @@ function renderBalances(){
   });
 }
 
-function renderAll(){ renderDashboard(); renderOrders(); renderMovements(); renderBalances(); }
+function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); }
 
 function exportCSV(){
   const cols=["date","type","party","concept","kg","amount","payment_method","status","notes"];
@@ -829,6 +843,44 @@ $("printRemito").addEventListener("click",()=>{
       <td>${money(item.total||0)}</td>
     </tr>`).join("");
 
+  const remitoBody=(copyLabel)=>`
+    <section class="ticket">
+      <div class="header">
+        <div>
+          <div class="logo">DON ZOILO</div>
+          <div class="tag">CARNES · CALIDAD · SERVICIO</div>
+        </div>
+        <div class="title">
+          <div class="copy">${copyLabel}</div>
+          <h1>REMITO</h1>
+          <div class="number">N.º ${remitoNo}</div>
+        </div>
+      </div>
+
+      <div class="info">
+        <div><span>Fecha</span><strong>${fmtDate(first.delivery_date)}</strong></div>
+        <div><span>Cliente</span><strong>${escapeHtml(first.client||"")}</strong></div>
+        <div><span>Condición</span><strong>${escapeHtml((first.payment_method||"").replace("_"," "))}</strong></div>
+        <div><span>Estado</span><strong>${currentRemitoItems.every(i=>i.delivered)?"ENTREGADO":"PENDIENTE"}</strong></div>
+      </div>
+
+      <table>
+        <thead><tr><th>Cant.</th><th>Unidad</th><th>Descripción</th><th>P. unit.</th><th>Importe</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <div class="bottom">
+        <div class="notes"><span>Observaciones</span><div>${escapeHtml(notes)}</div></div>
+        <div class="total"><span>TOTAL</span><strong>${money(total)}</strong></div>
+      </div>
+
+      <div class="signatures">
+        <div><div class="line"></div><span>Entregó</span></div>
+        <div><div class="line"></div><span>Recibió conforme</span></div>
+        <div><div class="line"></div><span>Aclaración / DNI</span></div>
+      </div>
+    </section>`;
+
   const remitoHtml=`<!doctype html>
   <html lang="es">
   <head>
@@ -837,63 +889,45 @@ $("printRemito").addEventListener("click",()=>{
     <title>Remito ${escapeHtml(first.client||"Don Zoilo")}</title>
     <style>
       *{box-sizing:border-box}
-      body{margin:0;background:#eceff1;font-family:Arial,Helvetica,sans-serif;color:#111}
-      .actions{position:sticky;top:0;display:flex;justify-content:center;gap:10px;padding:12px;background:#101820;z-index:10}
-      .actions button{border:0;border-radius:10px;padding:12px 16px;font-weight:800;cursor:pointer}
-      .print{background:#b38a3e;color:#16120a}
-      .close{background:#e9ecef;color:#20262c}
-      .sheet{width:210mm;height:297mm;margin:16px auto;background:white;padding:10mm;box-shadow:0 4px 18px #0002;overflow:hidden}
-      .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:7mm;margin-bottom:7mm}
-      .logo{font-size:28pt;font-weight:900;letter-spacing:1.2px;line-height:1}
-      .tag{font-size:8.5pt;letter-spacing:1.8px;margin-top:2.5mm}
-      .title{text-align:right}
-      .title h1{margin:0;font-size:24pt}
-      .number{font-size:10pt;font-weight:800;margin-top:2mm}
-      .info{display:grid;grid-template-columns:repeat(2,1fr);border:1.5px solid #111;margin-bottom:7mm}
-      .info>div{padding:4mm;border-right:1px solid #111;border-bottom:1px solid #111;min-height:17mm}
-      .info>div:nth-child(2n){border-right:0}
-      .info>div:nth-last-child(-n+2){border-bottom:0}
-      .info span{display:block;font-size:8pt;text-transform:uppercase;font-weight:800;color:#555;margin-bottom:1.5mm}
-      .info strong{font-size:11pt}
-      table{width:100%;border-collapse:collapse;margin-bottom:6mm}
-      th,td{border:1px solid #111;padding:3mm}
-      th{font-size:8pt;text-transform:uppercase;background:#f1f1f1}
-      td{font-size:9.5pt}
-      th:nth-child(1),td:nth-child(1){width:17mm;text-align:right}
-      th:nth-child(2),td:nth-child(2){width:22mm}
-      th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:34mm;text-align:right}
-      .total{display:flex;justify-content:flex-end;align-items:center;gap:12mm;border-top:3px solid #111;padding-top:4mm;font-size:14pt}
-      .total strong{font-size:18pt}
-      .notes{margin-top:8mm;border:1px solid #111;min-height:26mm;padding:4mm}
-      .notes span{display:block;font-size:8pt;font-weight:900;text-transform:uppercase;margin-bottom:3mm}
-      .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:12mm;margin-top:28mm}
-      .signatures>div{text-align:center}
-      .line{border-top:1px solid #111;margin-bottom:2mm}
-      .signatures span{font-size:8.5pt;font-weight:700}
-      .footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #111;margin-top:18mm;padding-top:3mm;font-size:8pt}
+      html,body{margin:0;padding:0;background:#eceff1;font-family:Arial,Helvetica,sans-serif;color:#111}
+      .actions{position:sticky;top:0;display:flex;justify-content:center;gap:10px;padding:10px;background:#101820;z-index:10}
+      .actions button{border:0;border-radius:10px;padding:11px 15px;font-weight:800;cursor:pointer}
+      .print{background:#b38a3e;color:#16120a}.close{background:#e9ecef;color:#20262c}
+      .sheet{width:210mm;height:297mm;margin:12px auto;background:white;padding:6mm;box-shadow:0 4px 18px #0002;overflow:hidden}
+      .ticket{height:137.5mm;border:1.2px solid #111;padding:5mm;overflow:hidden}
+      .cut{height:10mm;display:flex;align-items:center;gap:4mm;color:#555;font-size:8pt}
+      .cut:before,.cut:after{content:"";flex:1;border-top:1px dashed #777}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}
+      .logo{font-size:18pt;font-weight:900;letter-spacing:1px;line-height:1}
+      .tag{font-size:6.5pt;letter-spacing:1.3px;margin-top:1.5mm}
+      .title{text-align:right}.copy{font-size:7pt;font-weight:900;letter-spacing:1px}
+      .title h1{margin:1mm 0 0;font-size:16pt}.number{font-size:8pt;font-weight:800;margin-top:1mm}
+      .info{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #111;margin-bottom:3mm}
+      .info>div{padding:2mm;border-right:1px solid #111;min-height:10mm}.info>div:last-child{border-right:0}
+      .info span{display:block;font-size:6pt;text-transform:uppercase;font-weight:800;color:#555;margin-bottom:.7mm}
+      .info strong{font-size:8pt}
+      table{width:100%;border-collapse:collapse;margin-bottom:2.5mm}
+      th,td{border:1px solid #111;padding:1.4mm}th{font-size:6pt;text-transform:uppercase;background:#f1f1f1}td{font-size:7.2pt}
+      th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}
+      th:nth-child(2),td:nth-child(2){width:17mm}
+      th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
+      .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm;align-items:start}
+      .notes{border:1px solid #111;min-height:16mm;padding:2mm}
+      .notes span{display:block;font-size:6pt;font-weight:900;text-transform:uppercase;margin-bottom:1.5mm}.notes div{font-size:7pt}
+      .total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;align-items:center;font-size:9pt}.total strong{font-size:12pt}
+      .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}
+      .signatures>div{text-align:center}.line{border-top:1px solid #111;margin-bottom:1mm}.signatures span{font-size:6.5pt;font-weight:700}
       @page{size:A4 portrait;margin:0}
       @media print{
         html,body{width:210mm;height:297mm;margin:0!important;padding:0!important;overflow:hidden!important;background:white}
         .actions{display:none!important}
-        .sheet{
-          width:210mm!important;
-          height:297mm!important;
-          min-height:297mm!important;
-          max-height:297mm!important;
-          margin:0!important;
-          padding:10mm!important;
-          box-shadow:none!important;
-          overflow:hidden!important;
-          page-break-after:avoid!important;
-          break-after:avoid-page!important;
-        }
+        .sheet{width:210mm!important;height:297mm!important;margin:0!important;padding:6mm!important;box-shadow:none!important;overflow:hidden!important}
       }
-      @media(max-width:900px){
-        .sheet{width:100%;min-height:auto;margin:0;padding:16px}
-        .info{grid-template-columns:1fr}
-        .info>div{border-right:0!important;border-bottom:1px solid #111!important}
-        .info>div:last-child{border-bottom:0!important}
-        .signatures{grid-template-columns:1fr;gap:18mm}
+      @media screen and (max-width:900px){
+        .sheet{width:100%;height:auto;min-height:100vh;margin:0;padding:10px}
+        .ticket{height:auto;min-height:520px}
+        .info{grid-template-columns:repeat(2,1fr)}
+        .info>div{border-bottom:1px solid #111}
       }
     </style>
   </head>
@@ -902,50 +936,10 @@ $("printRemito").addEventListener("click",()=>{
       <button class="print" onclick="window.print()">Imprimir / Guardar PDF</button>
       <button class="close" onclick="window.close()">Cerrar</button>
     </div>
-
     <main class="sheet">
-      <section class="header">
-        <div>
-          <div class="logo">DON ZOILO</div>
-          <div class="tag">CARNES · CALIDAD · SERVICIO</div>
-        </div>
-        <div class="title">
-          <h1>REMITO</h1>
-          <div class="number">N.º ${remitoNo}</div>
-        </div>
-      </section>
-
-      <section class="info">
-        <div><span>Fecha</span><strong>${fmtDate(first.delivery_date)}</strong></div>
-        <div><span>Cliente</span><strong>${escapeHtml(first.client||"")}</strong></div>
-        <div><span>Condición</span><strong>${escapeHtml((first.payment_method||"").replace("_"," "))}</strong></div>
-        <div><span>Estado</span><strong>${currentRemitoItems.every(i=>i.delivered)?"ENTREGADO":"PENDIENTE"}</strong></div>
-      </section>
-
-      <table>
-        <thead>
-          <tr><th>Cantidad</th><th>Unidad</th><th>Descripción</th><th>Precio unitario</th><th>Importe</th></tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-
-      <div class="total"><span>TOTAL</span><strong>${money(total)}</strong></div>
-
-      <section class="notes">
-        <span>Observaciones</span>
-        <div>${escapeHtml(notes)}</div>
-      </section>
-
-      <section class="signatures">
-        <div><div class="line"></div><span>Entregó</span></div>
-        <div><div class="line"></div><span>Recibió conforme</span></div>
-        <div><div class="line"></div><span>Aclaración / DNI</span></div>
-      </section>
-
-      <footer class="footer">
-        <strong>DON ZOILO</strong>
-        <span>Remito interno no válido como factura</span>
-      </footer>
+      ${remitoBody("ORIGINAL")}
+      <div class="cut">CORTAR AQUÍ</div>
+      ${remitoBody("COPIA")}
     </main>
   </body>
   </html>`;
@@ -983,11 +977,39 @@ function routeIndex(name){
   return idx===-1?999:idx;
 }
 
+
+function sheetDateLong(dateStr){
+  if(!dateStr) return "";
+  const d=new Date(`${dateStr}T12:00:00`);
+  const days=["DOMINGO","LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO"];
+  return `${days[d.getDay()]} ${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+}
+
+function ordersAsText(date){
+  const byClient=new Map();
+  orders.filter(o=>!date||o.delivery_date===date).forEach(o=>{
+    const client=String(o.client||"SIN NOMBRE").trim().toUpperCase();
+    if(!byClient.has(client)) byClient.set(client,[]);
+    byClient.get(client).push(o);
+  });
+
+  return [...byClient.entries()]
+    .sort((a,b)=>routeIndex(a[0])-routeIndex(b[0]) || a[0].localeCompare(b[0]))
+    .map(([client,items])=>{
+      const lines=items.map(item=>{
+        const qty=Number(item.quantity||0).toLocaleString("es-AR");
+        return `${qty} ${item.unit||"kg"} ${item.product}`;
+      });
+      return `${client}\n${lines.join("\n")}`;
+    })
+    .join("\n\n");
+}
+
 function buildOrderSheet(){
   const date=$("sheetDate").value;
   const title=$("sheetTitle").value.trim()||"PEDIDOS DON ZOILO";
-  $("printSheetTitle").textContent=title;
-  $("printSheetDate").textContent=date?fmtDate(date):"";
+  $("printSheetTitle").textContent=date?`${title} – ${sheetDateLong(date)}`:title;
+  $("printSheetDate").textContent="";
 
   const byClient=new Map();
   orders.filter(o=>!date||o.delivery_date===date).forEach(o=>{
@@ -1028,6 +1050,27 @@ function buildOrderSheet(){
 $("sheetDate").addEventListener("change",buildOrderSheet);
 $("sheetTitle").addEventListener("input",buildOrderSheet);
 $("refreshSheet").addEventListener("click",buildOrderSheet);
+
+$("copyOrders").addEventListener("click",async()=>{
+  const text=ordersAsText($("sheetDate").value);
+  if(!text){
+    alert("No hay pedidos para copiar en la fecha elegida.");
+    return;
+  }
+  try{
+    await navigator.clipboard.writeText(text);
+    alert("Pedidos copiados. Ya podés pegarlos en WhatsApp.");
+  }catch(e){
+    const area=document.createElement("textarea");
+    area.value=text;
+    document.body.append(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+    alert("Pedidos copiados. Ya podés pegarlos en WhatsApp.");
+  }
+});
+
 $("printSheet").addEventListener("click",()=>{
   buildOrderSheet();
 
@@ -1096,7 +1139,7 @@ $("printSheet").addEventListener("click",()=>{
         padding-bottom:2.5mm;
         margin-bottom:3mm;
       }
-      .title{font-size:17pt;font-weight:900;letter-spacing:.3px}
+      .title{font-size:18pt;font-weight:900;letter-spacing:.2px}
       .subtitle{font-size:8pt;font-weight:800}
       .date{font-size:10pt;font-weight:900}
       .grid{
@@ -1119,7 +1162,7 @@ $("printSheet").addEventListener("click",()=>{
       }
       .num{position:absolute;top:2mm;right:2.5mm;font-size:8pt;font-weight:900}
       .client{
-        font-size:9.5pt;
+        font-size:10.2pt;
         font-weight:900;
         text-transform:uppercase;
         border-bottom:.8px solid #000;
@@ -1130,7 +1173,7 @@ $("printSheet").addEventListener("click",()=>{
         overflow:hidden;
         text-overflow:ellipsis;
       }
-      .lines{font-size:7.7pt;line-height:1.15}
+      .lines{font-size:8.3pt;line-height:1.18}
       .line{margin-bottom:.7mm}
       .empty{color:transparent}
       @page{size:A4 portrait;margin:0}
@@ -1182,10 +1225,10 @@ $("printSheet").addEventListener("click",()=>{
     <main class="sheet">
       <div class="header">
         <div>
-          <div class="title">${escapeHtml(title)}</div>
+          <div class="title">${escapeHtml(date?`${title} – ${sheetDateLong(date)}`:title)}</div>
           <div class="subtitle">HOJA DE REPARTO</div>
         </div>
-        <div class="date">${date?fmtDate(date):""}</div>
+        <div class="date"></div>
       </div>
       <div class="grid">${boxHtml}</div>
     </main>
@@ -1203,6 +1246,8 @@ $("printSheet").addEventListener("click",()=>{
   printWindow.document.close();
   printWindow.focus();
 });
+
+document.querySelectorAll(".quick-nav").forEach(btn=>btn.addEventListener("click",()=>{const tab=document.querySelector(`.tab[data-view="${btn.dataset.target}"]`);if(tab)tab.click()}));
 
 window.addEventListener("beforeinstallprompt",(e)=>{
   e.preventDefault(); deferredPrompt=e; $("installBtn").classList.remove("hidden");
