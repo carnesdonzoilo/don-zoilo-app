@@ -23,6 +23,7 @@ let supabaseClient = null;
 let deferredPrompt = null;
 
 const $ = (id) => document.getElementById(id);
+const on = (id,event,handler) => { const el=$(id); if(el) el.addEventListener(event,handler); return el; };
 const money = (n) => new Intl.NumberFormat("es-AR", {style:"currency",currency:"ARS",maximumFractionDigits:0}).format(Number(n || 0));
 const fmtDate = (s) => s ? new Date(s + "T12:00:00").toLocaleDateString("es-AR") : "";
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -86,6 +87,32 @@ async function initCloud(){
     $("syncDetail").textContent = "Se continúa en modo local. Revisá la configuración.";
     return false;
   }
+}
+
+
+async function reloadCloudData(){
+  if(!supabaseClient) return;
+  const {data: movementData, error: movementError} = await supabaseClient
+    .from("movements").select("*")
+    .order("date",{ascending:false})
+    .order("created_at",{ascending:false});
+  if(movementError) throw movementError;
+
+  const {data: orderData, error: orderError} = await supabaseClient
+    .from("orders").select("*")
+    .order("delivery_date",{ascending:false})
+    .order("created_at",{ascending:false});
+  if(orderError) throw orderError;
+
+  const {data: priceData, error: priceError} = await supabaseClient
+    .from("product_prices").select("*");
+  if(priceError) throw priceError;
+
+  movements=movementData||[];
+  orders=orderData||[];
+  productPrices={};
+  (priceData||[]).forEach(row=>productPrices[row.product_key]=Number(row.last_price||0));
+  localSave();
 }
 
 async function addMovement(item){
@@ -376,23 +403,85 @@ function escapeHtml(s){
 }
 
 function filteredByDates(){
-  const from = $("dateFrom").value;
-  const to = $("dateTo").value;
+  const from = $("dateFrom")?.value || "";
+  const to = $("dateTo")?.value || "";
   return movements.filter(m => (!from || m.date >= from) && (!to || m.date <= to));
 }
 
+
+function dateWithOffset(offset){
+  const d=new Date();
+  d.setDate(d.getDate()+Number(offset||0));
+  const local=new Date(d.getTime()-d.getTimezoneOffset()*60000);
+  return local.toISOString().slice(0,10);
+}
+
 function renderHomePanel(){
-  const today=todayISO(), todayOrders=orders.filter(o=>o.delivery_date===today), groups=new Map();
-  todayOrders.forEach(o=>{const k=o.batch_id||o.id;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(o)});
-  const grouped=[...groups.values()], total=grouped.length, delivered=grouped.filter(g=>g.every(x=>x.delivered)).length, pending=total-delivered;
-  const kg=todayOrders.filter(o=>(o.unit||'kg')==='kg').reduce((s,o)=>s+Number(o.quantity||0),0), billing=todayOrders.reduce((s,o)=>s+Number(o.total||0),0);
-  const receivable=movements.filter(m=>m.status!=='pendiente').reduce((s,m)=>m.type==='venta'?s+Number(m.amount||0):m.type==='cobro'?s-Number(m.amount||0):s,0);
-  $('homeOrders').textContent=total;$('homePending').textContent=pending;$('homeDelivered').textContent=delivered;$('homeKg').textContent=kg.toLocaleString('es-AR')+' kg';$('homeBilling').textContent=money(billing);$('homeReceivable').textContent=money(Math.max(receivable,0));
-  const pct=total?Math.round(delivered/total*100):0;$('homeProgressPercent').textContent=pct+'%';$('homeProgressBar').style.width=pct+'%';$('homeProgressText').textContent=total?`${delivered} entregados de ${total} pedidos.`:'Sin pedidos cargados para hoy.';
-  const d=new Date(today+'T12:00:00');$('homeDate').textContent=d.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});$('homeGreeting').textContent=new Date().getHours()<12?'Buenos días':'Resumen del día';
-  const alerts=$('homeAlerts');alerts.innerHTML='';const a=[];if(!total)a.push(['warning','No hay pedidos para hoy','Podés cargarlos desde el botón superior.']);else if(pending)a.push(['warning',pending+' pedidos pendientes','Todavía no fueron marcados como entregados.']);else a.push(['good','Reparto completo','Todos los pedidos de hoy están entregados.']);
-  const noPrice=todayOrders.filter(o=>Number(o.unit_price||0)<=0).length;if(noPrice)a.push(['warning',noPrice+' productos sin precio','Revisalos antes de generar remitos.']);if(receivable>0)a.push(['warning','Saldo pendiente de cobro',money(receivable)]);
-  a.forEach(x=>{const div=document.createElement('div');div.className='alert-item '+x[0];div.innerHTML=`<strong>${escapeHtml(x[1])}</strong><div class="muted small">${escapeHtml(x[2])}</div>`;alerts.append(div)});
+  const date=$("homeSelectedDate")?.value || todayISO();
+  const selected=orders.filter(o=>o.delivery_date===date);
+
+  const groups=new Map();
+  selected.forEach(o=>{
+    const key=o.batch_id||o.id;
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(o);
+  });
+
+  const grouped=[...groups.values()];
+  const total=grouped.length;
+  const delivered=grouped.filter(items=>items.every(x=>x.delivered)).length;
+  const pending=total-delivered;
+  const kg=selected.filter(o=>(o.unit||"kg")==="kg").reduce((sum,o)=>sum+Number(o.quantity||0),0);
+  const billing=selected.reduce((sum,o)=>sum+Number(o.total||0),0);
+
+  const receivable=movements.filter(m=>m.status!=="pendiente").reduce((sum,m)=>{
+    if(m.type==="venta") return sum+Number(m.amount||0);
+    if(m.type==="cobro") return sum-Number(m.amount||0);
+    return sum;
+  },0);
+
+  if($("homeOrders")) $("homeOrders").textContent=total;
+  if($("homePending")) $("homePending").textContent=pending;
+  if($("homeDelivered")) $("homeDelivered").textContent=delivered;
+  if($("homeKg")) $("homeKg").textContent=`${kg.toLocaleString("es-AR")} kg`;
+  if($("homeBilling")) $("homeBilling").textContent=money(billing);
+  if($("homeReceivable")) $("homeReceivable").textContent=money(Math.max(receivable,0));
+
+  const pct=total?Math.round(delivered/total*100):0;
+  if($("homeProgressPercent")) $("homeProgressPercent").textContent=`${pct}%`;
+  if($("homeProgressBar")) $("homeProgressBar").style.width=`${pct}%`;
+  if($("homeProgressText")) $("homeProgressText").textContent=total
+    ? `${delivered} entregado${delivered===1?"":"s"} de ${total} pedido${total===1?"":"s"}.`
+    : "Sin pedidos para esta fecha.";
+
+  const d=new Date(`${date}T12:00:00`);
+  if($("homeSelectedDateLabel")) $("homeSelectedDateLabel").textContent=d.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  if($("homeGreeting")) $("homeGreeting").textContent=new Date().getHours()<12?"Buenos días":"Resumen operativo";
+
+  document.querySelectorAll(".home-date-btn").forEach(btn=>{
+    btn.classList.toggle("active",date===dateWithOffset(btn.dataset.offset));
+  });
+
+  const alerts=$("homeAlerts");
+  if(!alerts) return;
+  alerts.innerHTML="";
+  const list=[];
+
+  if(!total) list.push(["warning","No hay pedidos","Todavía no hay pedidos cargados para la fecha elegida."]);
+  if(pending>0) list.push(["warning",`${pending} pedido${pending===1?"":"s"} pendiente${pending===1?"":"s"}`,"Todavía no fueron marcados como entregados."]);
+  if(total>0 && pending===0) list.push(["good","Reparto completo","Todos los pedidos de la fecha están entregados."]);
+
+  const missingPrices=selected.filter(o=>Number(o.unit_price||0)<=0).length;
+  if(missingPrices>0) list.push(["warning",`${missingPrices} producto${missingPrices===1?"":"s"} sin precio`,"Completá los precios antes de emitir remitos."]);
+  if(receivable>0) list.push(["warning","Saldo pendiente de cobro",money(receivable)]);
+  if(!list.length) list.push(["good","Todo en orden","No hay alertas importantes."]);
+
+  list.forEach(([kind,title,text])=>{
+    const div=document.createElement("div");
+    div.className=`alert-item ${kind}`;
+    div.innerHTML=`<strong>${escapeHtml(title)}</strong><div class="muted small">${escapeHtml(text)}</div>`;
+    alerts.append(div);
+  });
 }
 
 function renderDashboard(){
@@ -487,10 +576,10 @@ $("movementForm").addEventListener("submit", async (e)=>{
   try{
     await addMovement(item);
     e.target.reset();
-    $("movementDate").value=todayISO();
-  $("orderDate").value=todayISO();
-  $("importOrderDate").value=todayISO();
-  $("ordersFilterDate").value=todayISO();
+    if($("movementDate")) $("movementDate").value=todayISO();
+  if($("orderDate")) $("orderDate").value=todayISO();
+  if($("importOrderDate")) $("importOrderDate").value=todayISO();
+  if($("ordersFilterDate")) $("ordersFilterDate").value=todayISO();
     renderAll();
     document.querySelector('[data-view="dashboard"]').click();
   }catch(err){
@@ -498,21 +587,31 @@ $("movementForm").addEventListener("submit", async (e)=>{
   }
 });
 
-$("searchText").addEventListener("input",renderMovements);
-$("filterType").addEventListener("change",renderMovements);
-$("applyDates").addEventListener("click",renderDashboard);
-$("exportCsv").addEventListener("click",exportCSV);
-$("openConfig").addEventListener("click",()=>{
+on("searchText","input",renderMovements);
+on("filterType","change",renderMovements);
+on("applyDates","click",renderDashboard);
+on("exportCsv","click",exportCSV);
+on("openConfig","click",()=>{
   const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"null");
-  $("supabaseUrl").value=cfg?.url||"";
-  $("supabaseKey").value=cfg?.key||"";
-  $("configDialog").showModal();
-});
-$("saveConfig").addEventListener("click",()=>{
-  localStorage.setItem(CONFIG_KEY,JSON.stringify({url:$("supabaseUrl").value.trim(),key:$("supabaseKey").value.trim()}));
-  location.reload();
+  if($("supabaseUrl")) $("supabaseUrl").value=cfg?.url||"";
+  if($("supabaseKey")) $("supabaseKey").value=cfg?.key||"";
+  const dialog=$("configDialog");
+  if(!dialog) return alert("No se encontró la ventana de configuración.");
+  if(typeof dialog.showModal==="function") dialog.showModal();
+  else dialog.setAttribute("open","");
 });
 
+on("saveConfig","click",(event)=>{
+  event.preventDefault();
+  const url=$("supabaseUrl")?.value.trim()||"";
+  const key=$("supabaseKey")?.value.trim()||"";
+  if(!url.startsWith("https://") || !key){
+    alert("Completá la URL del proyecto y la clave pública.");
+    return;
+  }
+  localStorage.setItem(CONFIG_KEY,JSON.stringify({url,key}));
+  location.reload();
+});
 
 
 let parsedImportGroups=[];
@@ -771,7 +870,7 @@ $("orderForm").addEventListener("submit",async e=>{
     await addOrder(order);
     await rememberProductPrice(order.product,order.unit_price);
     e.target.reset(); $("orderDate").value=todayISO();
-    $("ordersFilterDate").value=todayISO(); updateOrderPreview(); renderAll();
+    if($("ordersFilterDate")) $("ordersFilterDate").value=todayISO(); updateOrderPreview(); renderAll();
   }catch(err){alert("No se pudo guardar: "+err.message)}
 });
 
@@ -1247,7 +1346,35 @@ $("printSheet").addEventListener("click",()=>{
   printWindow.focus();
 });
 
-document.querySelectorAll(".quick-nav").forEach(btn=>btn.addEventListener("click",()=>{const tab=document.querySelector(`.tab[data-view="${btn.dataset.target}"]`);if(tab)tab.click()}));
+
+document.querySelectorAll(".quick-nav").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    const tab=document.querySelector(`.tab[data-view="${btn.dataset.target}"]`);
+    if(tab) tab.click();
+  });
+});
+
+document.querySelectorAll(".home-date-btn").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    if($("homeSelectedDate")) $("homeSelectedDate").value=dateWithOffset(btn.dataset.offset);
+    renderHomePanel();
+  });
+});
+on("homeSelectedDate","change",renderHomePanel);
+
+on("refreshOrders","click",async()=>{
+  const btn=$("refreshOrders");
+  if(btn) btn.disabled=true;
+  try{
+    if(supabaseClient) await reloadCloudData();
+    renderAll();
+    buildOrderSheet();
+  }catch(error){
+    alert("No se pudieron actualizar los pedidos: "+error.message);
+  }finally{
+    if(btn) btn.disabled=false;
+  }
+});
 
 window.addEventListener("beforeinstallprompt",(e)=>{
   e.preventDefault(); deferredPrompt=e; $("installBtn").classList.remove("hidden");
@@ -1258,12 +1385,13 @@ $("installBtn").addEventListener("click",async()=>{
 });
 
 (async function init(){
-  $("movementDate").value=todayISO();
-  $("orderDate").value=todayISO();
-  $("importOrderDate").value=todayISO();
-  $("ordersFilterDate").value=todayISO();
-  $("dateFrom").value=monthStart();
-  $("dateTo").value=todayISO();
+  if($("movementDate")) $("movementDate").value=todayISO();
+  if($("orderDate")) $("orderDate").value=todayISO();
+  if($("importOrderDate")) $("importOrderDate").value=todayISO();
+  if($("ordersFilterDate")) $("ordersFilterDate").value=todayISO();
+  if($("dateFrom")) $("dateFrom").value=monthStart();
+  if($("dateTo")) $("dateTo").value=todayISO();
+  if($("homeSelectedDate")) $("homeSelectedDate").value=dateWithOffset(1);
   localLoad();
   await initCloud();
   renderAll();

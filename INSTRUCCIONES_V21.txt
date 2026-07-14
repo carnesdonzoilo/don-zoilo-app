@@ -1,0 +1,11 @@
+VERSIÓN 21 ESTABLE
+
+Correcciones:
+- Configurar nube vuelve a abrir.
+- Interpretar pedido de WhatsApp funciona.
+- Actualizar pedidos vuelve a leer Supabase.
+- Hoja de pedidos se actualiza con los pedidos sincronizados.
+- Panel por fecha: Hoy, Mañana u otra fecha.
+- Se evita que un elemento opcional faltante rompa todos los botones.
+
+No requiere cambios en Supabase.
