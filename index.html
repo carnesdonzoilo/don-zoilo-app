@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 21</div>
+      <div class="subtitle">Control de operaciones · Versión 22</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -32,6 +32,7 @@
       <button class="tab" data-view="new">Movimiento</button>
       <button class="tab" data-view="movements">Movimientos</button>
       <button class="tab" data-view="balances">Saldos</button>
+      <button class="tab" data-view="prices">Precios</button>
     </nav>
 
 
@@ -76,6 +77,7 @@
         <button type="button" class="quick-card quick-nav" data-target="orderSheet"><span>🗂️</span><strong>Hoja pedidos</strong><small>Actualizar e imprimir</small></button>
         <button type="button" class="quick-card quick-nav" data-target="movements"><span>💰</span><strong>Movimientos</strong><small>Ventas y cobros</small></button>
         <button type="button" class="quick-card quick-nav" data-target="balances"><span>👥</span><strong>Saldos</strong><small>Cuenta corriente</small></button>
+        <button type="button" class="quick-card quick-nav" data-target="prices"><span>🏷️</span><strong>Precios</strong><small>Editar sugerencias</small></button>
       </div>
 
       <div class="panel home-alert-panel">
@@ -130,8 +132,8 @@
       
         <div class="panel import-panel">
           <h2>Pegar pedido de WhatsApp</h2>
-          <p class="muted small">Podés pegar varios clientes. Cada cliente va en una línea y sus productos debajo. Después podés modificar cantidades y precios.</p>
-          <textarea id="rawOrderText" rows="8" placeholder="HAEDO&#10;2 bondiolas&#10;5 picada&#10;&#10;NOI&#10;3 vacíos&#10;10 kg asado&#10;&#10;PALERMO&#10;20 kg lomo"></textarea>
+          <p class="muted small">Pegá el mensaje directamente desde WhatsApp. Reconoce varios clientes, fechas, remitentes, abreviaturas como 40k, 5 c y 1/2 g. Después podés revisar cantidades, unidades y precios.</p>
+          <textarea id="rawOrderText" rows="8" placeholder="[14/7, 11:20 a.m.] Leandro: HAEDO&#10;2 bondiolas&#10;5 picada&#10;10 kg osobuco&#10;&#10;[14/7, 11:25 a.m.] Leandro: PRINGLES&#10;5 c picaña&#10;&#10;RAMOS&#10;40k lomo&#10;1/2 g chorizo"></textarea>
 
           <div class="import-options">
             <label>Fecha de entrega<input type="date" id="importOrderDate" required></label>
@@ -386,6 +388,35 @@
           <strong>DON ZOILO</strong>
           <span>Remito interno no válido como factura</span>
         </div>
+      </div>
+    </section>
+
+
+    <section id="prices" class="view">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Lista de precios</h2>
+            <p class="muted small">Estos valores se usan como sugerencia al cargar pedidos. Modificarlos no cambia pedidos ya guardados.</p>
+          </div>
+          <button type="button" id="refreshPrices" class="secondary">↻ Actualizar</button>
+        </div>
+
+        <form id="priceForm" class="price-form">
+          <label>Producto
+            <input id="priceProduct" placeholder="Ej.: lomo" autocomplete="off" required>
+          </label>
+          <label>Precio
+            <input id="priceValue" type="number" min="0" step="0.01" placeholder="0" required>
+          </label>
+          <button type="submit" class="primary">Guardar precio</button>
+        </form>
+
+        <div class="price-tools">
+          <input id="priceSearch" placeholder="Buscar producto">
+          <span id="priceCount" class="muted small"></span>
+        </div>
+        <div id="priceList" class="price-list"></div>
       </div>
     </section>
 

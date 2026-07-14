@@ -537,7 +537,7 @@ function renderBalances(){
   });
 }
 
-function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); }
+function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderPrices(); }
 
 function exportCSV(){
   const cols=["date","type","party","concept","kg","amount","payment_method","status","notes"];
@@ -649,24 +649,51 @@ async function rememberProductPrice(product, price){
   }
 }
 
-function normalizeProductName(text){
-  return text
-    .replace(/\bozobuco\b/gi,"osobuco")
-    .replace(/\bbondiolas?\b/gi,"bondiola")
-    .replace(/\bpalomitas?\b/gi,"palomita")
-    .replace(/\s+/g," ")
-    .trim();
+
+function cleanWhatsAppLine(raw){
+  let line=String(raw||"").trim();
+  // Remove copied WhatsApp prefixes: [14/7, 11:20 a.m.] Leandro:
+  line=line.replace(/^\[[^\]]+\]\s*[^:]{1,50}:\s*/u,"");
+  // Remove bullet characters and repeated separators.
+  line=line.replace(/^[\s\-–—•⁠·*]+/u,"").trim();
+  return line;
 }
 
-function inferUnit(product, explicitUnit){
+function normalizeProductName(text){
+  return String(text||"")
+    .replace(/\bozobuco\b/gi,"osobuco")
+    .replace(/\brof\s*bef\b/gi,"roastbeef")
+    .replace(/\broast\s*beef\b/gi,"roastbeef")
+    .replace(/\bbondiolas?\b/gi,"bondiola")
+    .replace(/\bpalomitas?\b/gi,"palomita")
+    .replace(/\bnalgas?\s+s\/?t(?:apa)?\b/gi,"nalga sin tapa")
+    .replace(/\bnalgas?\s+c\/?t(?:apa)?\b/gi,"nalga con tapa")
+    .replace(/\bchinchus?\b/gi,"chinchulín")
+    .replace(/\bsupremas?\b/gi,"suprema")
+    .replace(/\s+/g," ")
+    .trim()
+    .replace(/[.,;:]+$/,"");
+}
+
+function inferUnit(product, explicitUnit, quantityToken=""){
   if(explicitUnit) return explicitUnit;
-  const pieceProducts=["bondiola","nalga","vacío","vacio","lomo","roastbeef","roast beef","palomita","peceto","mondongo","pollo","bife","tapa asado","tapa de asado"];
-  const p=product.toLowerCase();
-  return pieceProducts.some(x=>p.includes(x))?"piezas":"kg";
+  const p=String(product||"").toLowerCase();
+
+  if(/\b(maple|maples)\b/.test(p)) return "unidad";
+  if(/\b(caja|cajón|cajon)\b/.test(p)) return "caja";
+  if(/\b(gancho)\b/.test(p)) return "gancho";
+
+  const pieceProducts=[
+    "bondiola","nalga","vacío","vacio","lomo","roastbeef","palomita",
+    "peceto","mondongo","pollo","bife","tapa asado","tapa de asado",
+    "riñón","riñon","lengua","picaña","carré","carre","churrasco"
+  ];
+  if(pieceProducts.some(x=>p.includes(x)) && !/^\d+[.,]?\d*\s*k$/i.test(quantityToken)) return "piezas";
+  return "kg";
 }
 
 function parseQuantity(raw){
-  raw=raw.trim().replace(",",".");
+  raw=String(raw||"").trim().replace(",",".").replace(/\s/g,"");
   if(raw.includes("/")){
     const [a,b]=raw.split("/").map(Number);
     if(b) return a/b;
@@ -674,57 +701,95 @@ function parseQuantity(raw){
   return Number(raw);
 }
 
+const UNIT_MAP={
+  kg:"kg",k:"kg",kilo:"kg",kilos:"kg",
+  pieza:"piezas",piezas:"piezas",pz:"piezas",p:"piezas",
+  unidad:"unidad",unidades:"unidad",un:"unidad",u:"unidad",
+  caja:"caja",cajas:"caja",cajon:"caja",cajones:"caja",cajón:"caja",cajónes:"caja",c:"caja",
+  gancho:"gancho",ganchos:"gancho",g:"gancho",
+  maple:"unidad",maples:"unidad"
+};
+
+function productMatch(line){
+  const clean=cleanWhatsAppLine(line);
+  // Supports: 40k lomo, 10 kg lomo, 1/2 g chorizo, 5 c picaña, 2 bondiolas.
+  return clean.match(
+    /^(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)\s*(kg|kilos?|k|piezas?|pieza|pz|p|unidades?|unidad|un|u|cajas?|cajones?|cajón|c|ganchos?|gancho|g|maples?|maple)?\s*(?:de\s+)?(.+)$/iu
+  );
+}
 
 function isProductLine(line){
-  return /^[-•]?\s*(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)\s*(kg|kilos?|k|piezas?|pz|unidades?|un|cajas?|cajones?|c|ganchos?|g)?\s+.+$/i.test(line.trim());
+  const match=productMatch(line);
+  return Boolean(match && match[3] && !/^(am|pm|a\.m\.|p\.m\.)$/i.test(match[3].trim()));
 }
 
 function parseProductLine(original){
-  let line=original.replace(/^[-•]\s*/,"").trim();
-  const match=line.match(/^(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)\s*(kg|kilos?|k|piezas?|pz|unidades?|un|cajas?|cajones?|c|ganchos?|g)?\s+(.+)$/i);
+  const match=productMatch(original);
   if(!match) return null;
 
-  const quantity=parseQuantity(match[1].replace(/\s/g,""));
-  const unitToken=(match[2]||"").toLowerCase();
-  const product=normalizeProductName(match[3]);
+  const quantity=parseQuantity(match[1]);
+  if(!Number.isFinite(quantity) || quantity<=0) return null;
 
-  const unitMap={
-    kg:"kg",k:"kg",kilo:"kg",kilos:"kg",
-    pieza:"piezas",piezas:"piezas",pz:"piezas",
-    unidad:"unidad",unidades:"unidad",un:"unidad",
-    caja:"caja",cajas:"caja",cajon:"caja",cajones:"caja",c:"caja",
-    gancho:"gancho",ganchos:"gancho",g:"gancho"
-  };
+  const token=(match[2]||"").toLowerCase();
+  let product=normalizeProductName(match[3]);
+  if(!product) return null;
+
+  // "15 maples de huevo" -> product "huevo", unit unidad.
+  if(/^(maple|maples)$/i.test(token)) product=product.replace(/^de\s+/i,"");
 
   return {
     quantity,
-    unit:inferUnit(product,unitMap[unitToken]),
+    unit:inferUnit(product,UNIT_MAP[token],`${match[1]}${token}`),
     product,
     unit_price:suggestedPrice(product)
   };
 }
 
+function looksLikeNoise(line){
+  const clean=cleanWhatsAppLine(line).toLowerCase();
+  return !clean ||
+    /^(gracias|por favor|buen día|buen dia|hola|pedido|pedidos)$/i.test(clean) ||
+    /^https?:\/\//i.test(clean);
+}
+
 function parseOrderText(raw){
-  const lines=raw.split(/\r?\n/).map(x=>x.trim());
+  const lines=String(raw||"").split(/\r?\n/);
   const groups=[];
   let current=null;
 
-  for(const rawLine of lines){
-    const line=rawLine.trim();
-    if(!line) continue;
+  const pushCurrent=()=>{
+    if(current && current.items.length){
+      groups.push(current);
+    }
+    current=null;
+  };
+
+  for(const original of lines){
+    const line=cleanWhatsAppLine(original);
+    if(looksLikeNoise(line)) continue;
 
     if(isProductLine(line)){
-      if(!current) throw new Error("El texto debe comenzar con el nombre del cliente.");
+      if(!current){
+        throw new Error(`Encontré un producto antes del cliente: "${line}". Poné el nombre del cliente arriba.`);
+      }
       const item=parseProductLine(line);
       if(item) current.items.push(item);
-    }else{
-      if(current && current.items.length) groups.push(current);
-      current={client:line.replace(/:$/,"").trim().toUpperCase(),items:[]};
+      continue;
     }
+
+    // A line without quantity starts a new client.
+    pushCurrent();
+    current={
+      client:line.replace(/:$/,"").trim().toUpperCase(),
+      items:[]
+    };
   }
 
-  if(current && current.items.length) groups.push(current);
-  if(!groups.length) throw new Error("No pude reconocer pedidos. Poné el cliente en una línea y sus productos debajo.");
+  pushCurrent();
+
+  if(!groups.length){
+    throw new Error("No pude reconocer pedidos. Pegá el cliente en una línea y los productos con cantidad debajo.");
+  }
   return groups;
 }
 
@@ -802,11 +867,18 @@ function renderImportPreview(){
   $("previewClient").textContent=`${parsedImportGroups.length} pedido${parsedImportGroups.length===1?"":"s"}`;
 }
 
-$("parseOrderBtn").addEventListener("click",()=>{
+on("parseOrderBtn","click",()=>{
   try{
-    parsedImportGroups=parseOrderText($("rawOrderText").value);
-    $("importPreview").classList.remove("hidden");
+    parsedImportGroups=parseOrderText($("rawOrderText")?.value||"");
+    $("importPreview")?.classList.remove("hidden");
     renderImportPreview();
+    const totalItems=parsedImportGroups.reduce((sum,g)=>sum+g.items.length,0);
+    const old=document.querySelector(".import-detected");
+    if(old) old.remove();
+    const note=document.createElement("div");
+    note.className="import-detected";
+    note.textContent=`✓ Detecté ${parsedImportGroups.length} cliente${parsedImportGroups.length===1?"":"s"} y ${totalItems} producto${totalItems===1?"":"s"}.`;
+    $("parseOrderBtn")?.insertAdjacentElement("afterend",note);
   }catch(e){alert(e.message)}
 });
 
@@ -1346,6 +1418,79 @@ $("printSheet").addEventListener("click",()=>{
   printWindow.focus();
 });
 
+
+
+function priceEntries(){
+  return Object.entries(productPrices)
+    .map(([key,value])=>({key,name:key.replace(/\s+/g," "),value:Number(value||0)}))
+    .sort((a,b)=>a.name.localeCompare(b.name,"es"));
+}
+
+function renderPrices(){
+  const list=$("priceList");
+  if(!list) return;
+  const search=($("priceSearch")?.value||"").trim().toLowerCase();
+  const entries=priceEntries().filter(row=>row.name.includes(search));
+  if($("priceCount")) $("priceCount").textContent=`${entries.length} producto${entries.length===1?"":"s"}`;
+  list.innerHTML="";
+
+  if(!entries.length){
+    list.innerHTML='<div class="price-empty">No hay precios guardados con ese nombre.</div>';
+    return;
+  }
+
+  entries.forEach(row=>{
+    const div=document.createElement("div");
+    div.className="price-row";
+    div.innerHTML=`
+      <div class="price-name">${escapeHtml(row.name)}</div>
+      <input type="number" min="0" step="0.01" value="${row.value}">
+      <div class="price-actions">
+        <button type="button" class="secondary save-price-row">Guardar</button>
+        <button type="button" class="danger delete-price-row">Eliminar</button>
+      </div>`;
+    const input=div.querySelector("input");
+    div.querySelector(".save-price-row").addEventListener("click",async()=>{
+      try{
+        await rememberProductPrice(row.name,Number(input.value||0));
+        renderPrices();
+      }catch(e){ alert("No se pudo guardar el precio: "+e.message); }
+    });
+    div.querySelector(".delete-price-row").addEventListener("click",async()=>{
+      if(!confirm(`¿Eliminar el precio guardado de ${row.name}?`)) return;
+      try{
+        delete productPrices[row.key];
+        localSave();
+        if(supabaseClient){
+          const {error}=await supabaseClient.from("product_prices").delete().eq("product_key",row.key);
+          if(error) throw error;
+        }
+        renderPrices();
+      }catch(e){ alert("No se pudo eliminar: "+e.message); }
+    });
+    list.append(div);
+  });
+}
+
+on("priceSearch","input",renderPrices);
+on("priceForm","submit",async(event)=>{
+  event.preventDefault();
+  const product=normalizeProductName($("priceProduct")?.value||"");
+  const value=Number($("priceValue")?.value||0);
+  if(!product || value<0) return alert("Completá producto y precio.");
+  try{
+    await rememberProductPrice(product,value);
+    if($("priceProduct")) $("priceProduct").value="";
+    if($("priceValue")) $("priceValue").value="";
+    renderPrices();
+  }catch(e){ alert("No se pudo guardar: "+e.message); }
+});
+on("refreshPrices","click",async()=>{
+  try{
+    if(supabaseClient) await reloadCloudData();
+    renderPrices();
+  }catch(e){ alert("No se pudieron actualizar los precios: "+e.message); }
+});
 
 document.querySelectorAll(".quick-nav").forEach(btn=>{
   btn.addEventListener("click",()=>{

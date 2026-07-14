@@ -1,0 +1,12 @@
+VERSIÓN 22
+
+Novedades:
+- Intérprete de pedidos de WhatsApp mejorado.
+- Reconoce prefijos copiados de WhatsApp con fecha y remitente.
+- Reconoce abreviaturas: 40k, 10 kg, 5 c, 1/2 g, piezas, cajas, maples.
+- Permite varios clientes en un solo texto.
+- Nueva sección Precios.
+- Agregar, modificar, buscar y eliminar últimos precios sugeridos.
+- Los precios se sincronizan con Supabase usando la tabla product_prices.
+
+No requiere ejecutar SQL nuevo.

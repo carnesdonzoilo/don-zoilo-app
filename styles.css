@@ -409,3 +409,20 @@ dialog::backdrop{background:#0009}
   .home-stats{grid-template-columns:repeat(2,1fr)}
   .quick-grid{grid-template-columns:repeat(2,1fr)}
 }
+
+.price-form{display:grid;grid-template-columns:2fr 1fr auto;gap:12px;align-items:end;margin:14px 0}
+.price-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0}
+.price-tools input{max-width:420px}
+.price-list{display:flex;flex-direction:column;gap:9px}
+.price-row{display:grid;grid-template-columns:minmax(160px,1fr) 150px auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:13px;padding:11px;background:#fff}
+.price-name{font-weight:800;text-transform:capitalize}
+.price-row input{text-align:right}
+.price-actions{display:flex;gap:7px}
+.price-empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}
+.import-detected{display:flex;gap:8px;align-items:center;margin-top:9px;padding:9px 11px;border-radius:11px;background:#eef8f2;border:1px solid #b6ddc5}
+@media(max-width:700px){
+  .price-form{grid-template-columns:1fr 1fr}
+  .price-form button{grid-column:1/-1}
+  .price-row{grid-template-columns:1fr 120px}
+  .price-actions{grid-column:1/-1;justify-content:flex-end}
+}
