@@ -146,14 +146,14 @@ dialog::backdrop{background:#0009}
 .sheet-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
 .print-sheet{background:white;color:#000;width:210mm;height:297mm;margin:12px auto;padding:6mm;box-shadow:0 4px 20px #0002;overflow:hidden}
 .sheet-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #000;padding-bottom:2.5mm;margin-bottom:3mm;height:16mm}
-.sheet-title{font-size:18pt;font-weight:900;letter-spacing:.3px}
+.sheet-title{font-size:17pt;font-weight:900;letter-spacing:.3px}
 .sheet-subtitle{font-size:8pt;font-weight:800}
 .sheet-date{font-size:10pt;font-weight:900}
 .sheet-grid{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);height:259mm;border-left:1.2px solid #000;border-top:1.2px solid #000}
 .sheet-box{border-right:1.2px solid #000;border-bottom:1.2px solid #000;padding:2.5mm;position:relative;overflow:hidden;min-width:0;min-height:0}
 .sheet-number{position:absolute;top:2mm;right:2.5mm;font-size:9pt;font-weight:900}
-.sheet-client{font-size:10.8pt;font-weight:900;text-transform:uppercase;border-bottom:.8px solid #000;padding-bottom:1.2mm;margin-bottom:1.5mm;padding-right:7mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sheet-lines{font-size:8.6pt;line-height:1.2}
+.sheet-client{font-size:10pt;font-weight:900;text-transform:uppercase;border-bottom:.8px solid #000;padding-bottom:1.2mm;margin-bottom:1.5mm;padding-right:7mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet-lines{font-size:8pt;line-height:1.18}
 .sheet-line{margin-bottom:.8mm}
 .sheet-empty{color:transparent}
 @page{size:A4 portrait;margin:0}
@@ -169,7 +169,7 @@ dialog::backdrop{background:#0009}
 @media(max-width:900px){
   .print-sheet{background:white;color:#000;width:210mm;height:297mm;margin:12px auto;padding:6mm;box-shadow:0 4px 20px #0002;overflow:hidden}
   .sheet-grid{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);height:259mm;border-left:1.2px solid #000;border-top:1.2px solid #000}
-  .sheet-title{font-size:18pt;font-weight:900;letter-spacing:.3px}
+  .sheet-title{font-size:17pt;font-weight:900;letter-spacing:.3px}
 }
 
 @page{
