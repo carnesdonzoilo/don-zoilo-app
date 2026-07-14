@@ -1,0 +1,4 @@
+No requiere cambios en Supabase.
+Subir este ZIP a Netlify.
+Corrige la pérdida de foco al escribir cantidades y precios.
+Ahora se puede escribir el número completo de corrido y el total se actualiza sin redibujar el formulario.

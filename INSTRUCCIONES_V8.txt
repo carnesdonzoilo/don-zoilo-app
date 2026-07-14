@@ -1,0 +1,9 @@
+No requiere cambios nuevos en Supabase si ya ejecutaste la actualización V4.
+Subir este ZIP a Netlify.
+
+Incluye:
+- Varios clientes pegados juntos.
+- Edición de cantidad, unidad, producto y precio antes de guardar.
+- Botón Editar pedido después de guardarlo.
+- Recalcula totales.
+- Para editar un pedido entregado, primero hay que desmarcar Entregado.

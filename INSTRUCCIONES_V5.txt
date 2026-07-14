@@ -1,0 +1,5 @@
+No requiere cambios en Supabase.
+Subir este ZIP directamente a Netlify.
+Debe verse 'Versión 5'.
+Cada pedido tendrá el botón 'Eliminar pedido'.
+Si estaba entregado, revierte antes la venta y la cuenta corriente.

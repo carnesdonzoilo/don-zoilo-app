@@ -1,0 +1,9 @@
+No requiere cambios en Supabase.
+
+Subir este ZIP a Netlify.
+Debe verse Versión 17.
+
+Corrección:
+- En pantalla móvil puede verse en 2 columnas.
+- Al imprimir queda obligatoriamente en 4 columnas x 4 filas.
+- Total: 16 casilleros en una sola hoja A4 vertical.

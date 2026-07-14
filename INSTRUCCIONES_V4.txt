@@ -1,0 +1,9 @@
+1) Ejecutar supabase_update_v4.sql en Supabase SQL Editor.
+2) Subir este ZIP a Netlify.
+3) Debe verse 'Versión 4'.
+4) En Pedidos, pegar:
+HAEDO
+2 bondiolas
+5 picada
+10 kg osobuco bueno
+2 piezas mondongo

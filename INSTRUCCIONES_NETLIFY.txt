@@ -1,0 +1,3 @@
+SUBIR ESTE ZIP DIRECTAMENTE A NETLIFY.
+Al abrir la app debe decir: Control de operaciones · Versión 3
+y mostrar las pestañas: Resumen, Pedidos, Movimiento, Movimientos y Saldos.

@@ -1,0 +1,9 @@
+No requiere cambios en Supabase.
+
+Subir este ZIP a Netlify.
+Debe verse Versión 14.
+
+Corrección:
+- El navegador espera a que el remito se dibuje antes de abrir la impresión.
+- Se imprime únicamente el remito.
+- Evita la vista previa en blanco en Chrome móvil.

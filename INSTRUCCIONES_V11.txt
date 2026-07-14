@@ -1,0 +1,11 @@
+No requiere cambios en Supabase.
+
+Subir este ZIP a Netlify.
+Debe verse Versión 11.
+
+La hoja de pedidos está configurada para:
+- A4 vertical.
+- Una sola página.
+- 16 casilleros.
+- 4 casilleros por fila.
+- 4 filas.

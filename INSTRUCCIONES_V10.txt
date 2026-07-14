@@ -1,0 +1,5 @@
+1. Ejecutar supabase_update_v10.sql en Supabase SQL Editor.
+2. Subir este ZIP a Netlify.
+3. Debe verse Versión 10.
+4. La solapa Hoja pedidos genera 16 cuadros A4 e imprime/guarda PDF.
+5. Los últimos precios quedan guardados por producto y se sugieren la próxima vez.

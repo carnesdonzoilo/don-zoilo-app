@@ -1,0 +1,9 @@
+{
+  "name": "Don Zoilo Operaciones",
+  "short_name": "Don Zoilo",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f2f3f4",
+  "theme_color": "#101820",
+  "description": "Registro y control de movimientos de Carnes Don Zoilo"
+}

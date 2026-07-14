@@ -1,0 +1,11 @@
+No requiere cambios en Supabase.
+
+Subir este ZIP a Netlify.
+Debe verse Versión 16.
+
+Cambios:
+- El remito queda forzado a una sola hoja A4.
+- La hoja de pedidos se abre en una página independiente.
+- La hoja de pedidos conserva 16 casilleros: 4 columnas por 4 filas.
+- Ambos documentos se pueden imprimir o guardar como PDF.
+- Evita hojas en blanco en Android.

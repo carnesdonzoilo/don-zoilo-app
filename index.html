@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#101820" />
+  <title>Don Zoilo | Operaciones</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="brand">DON ZOILO</div>
+      <div class="subtitle">Control de operaciones · Versión 18</div>
+    </div>
+    <button id="installBtn" class="secondary hidden">Instalar app</button>
+  </header>
+
+  <main class="container">
+    <section class="status-card">
+      <div>
+        <strong id="syncLabel">Modo local</strong>
+        <span id="syncDetail">Los datos quedan guardados en este dispositivo.</span>
+      </div>
+      <button id="openConfig" class="link-btn">Configurar nube</button>
+    </section>
+
+    <nav class="tabs">
+      <button class="tab active" data-view="dashboard">Resumen</button>
+      <button class="tab" data-view="orders">Pedidos</button>
+      <button class="tab" data-view="orderSheet">Hoja pedidos</button>
+      <button class="tab" data-view="new">Movimiento</button>
+      <button class="tab" data-view="movements">Movimientos</button>
+      <button class="tab" data-view="balances">Saldos</button>
+    </nav>
+
+    <section id="dashboard" class="view active">
+      <div class="date-filter">
+        <label>Desde <input type="date" id="dateFrom"></label>
+        <label>Hasta <input type="date" id="dateTo"></label>
+        <button id="applyDates" class="secondary">Aplicar</button>
+      </div>
+
+      <div class="cards">
+        <article class="metric">
+          <span>Ventas</span>
+          <strong id="salesTotal">$ 0</strong>
+        </article>
+        <article class="metric">
+          <span>Cobros</span>
+          <strong id="collectionsTotal">$ 0</strong>
+        </article>
+        <article class="metric">
+          <span>Compras</span>
+          <strong id="purchasesTotal">$ 0</strong>
+        </article>
+        <article class="metric">
+          <span>Pagos y gastos</span>
+          <strong id="outTotal">$ 0</strong>
+        </article>
+        <article class="metric highlight">
+          <span>Resultado de caja</span>
+          <strong id="cashResult">$ 0</strong>
+        </article>
+        <article class="metric">
+          <span>Kilos vendidos</span>
+          <strong id="kgTotal">0 kg</strong>
+        </article>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Actividad reciente</h2>
+          <button id="exportCsv" class="secondary">Exportar CSV</button>
+        </div>
+        <div id="recentList" class="movement-list"></div>
+      </div>
+    </section>
+
+
+    <section id="orders" class="view">
+      
+        <div class="panel import-panel">
+          <h2>Pegar pedido de WhatsApp</h2>
+          <p class="muted small">Podés pegar varios clientes. Cada cliente va en una línea y sus productos debajo. Después podés modificar cantidades y precios.</p>
+          <textarea id="rawOrderText" rows="8" placeholder="HAEDO&#10;2 bondiolas&#10;5 picada&#10;&#10;NOI&#10;3 vacíos&#10;10 kg asado&#10;&#10;PALERMO&#10;20 kg lomo"></textarea>
+
+          <div class="import-options">
+            <label>Fecha de entrega<input type="date" id="importOrderDate" required></label>
+            <label>Forma de cobro
+              <select id="importPayment">
+                <option value="cuenta_corriente">Cuenta corriente</option>
+                <option value="efectivo">Efectivo</option>
+                <option value="transferencia">Transferencia</option>
+              </select>
+            </label>
+          </div>
+
+          <button id="parseOrderBtn" class="primary">Interpretar pedido</button>
+          <p class="muted small price-memory-note">Al reconocer un producto, la app completa el último precio guardado como sugerencia.</p>
+
+          <div id="importPreview" class="import-preview hidden">
+            <div class="preview-head">
+              <h3>Revisar antes de guardar</h3>
+              <strong id="previewClient"></strong>
+            </div>
+            <div id="previewItems"></div>
+            <button id="saveImportedOrder" class="primary">Guardar pedido completo</button>
+          </div>
+        </div>
+
+      <div class="orders-layout">
+        <form id="orderForm" class="panel form-grid">
+          <h2>Cargar pedido</h2>
+          <label>Fecha de entrega<input type="date" id="orderDate" required></label>
+          <label>Cliente<input id="orderClient" placeholder="Ej.: Haedo, Palermo, Noi" required></label>
+          <label>Producto<input id="orderProduct" placeholder="Ej.: Lomo, vacío, picada" required></label>
+          <label>Cantidad<input id="orderQty" type="number" step="0.01" min="0" required></label>
+          <label>Unidad
+            <select id="orderUnit">
+              <option value="kg">kg</option>
+              <option value="piezas">piezas</option>
+              <option value="caja">caja</option>
+              <option value="gancho">gancho</option>
+              <option value="unidad">unidad</option>
+            </select>
+          </label>
+          <label>Precio unitario<input id="orderUnitPrice" type="number" step="0.01" min="0" required></label>
+          <label>Forma de cobro
+            <select id="orderPayment">
+              <option value="cuenta_corriente">Cuenta corriente</option>
+              <option value="efectivo">Efectivo</option>
+              <option value="transferencia">Transferencia</option>
+            </select>
+          </label>
+          <label class="full">Observaciones<textarea id="orderNotes" rows="2"></textarea></label>
+          <div class="order-total full">Total estimado: <strong id="orderTotalPreview">$ 0</strong></div>
+          <button class="primary full" type="submit">Guardar pedido pendiente</button>
+        </form>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Pedidos del día</h2>
+              <p class="muted small">La cuenta corriente cambia únicamente al marcar “Entregado”.</p>
+            </div>
+            <input type="date" id="ordersFilterDate">
+          </div>
+          <div id="ordersList" class="orders-list"></div>
+        </div>
+      </div>
+    </section>
+
+
+    <section id="orderSheet" class="view">
+      <div class="panel no-print">
+        <div class="sheet-controls">
+          <label>Fecha de reparto<input type="date" id="sheetDate"></label>
+          <label>Título<input id="sheetTitle" value="PEDIDOS DON ZOILO"></label>
+          <button id="refreshSheet" class="secondary">Actualizar hoja</button>
+          <button id="printSheet" class="primary">Imprimir / Guardar PDF</button>
+        </div>
+        <p class="muted small">Se incluyen los clientes con pedidos de la fecha elegida, ordenados por recorrido. Los casilleros restantes quedan numerados y vacíos.</p>
+      </div>
+
+      <div id="printableSheet" class="print-sheet">
+        <div class="sheet-header">
+          <div>
+            <div id="printSheetTitle" class="sheet-title">PEDIDOS DON ZOILO</div>
+            <div class="sheet-subtitle">HOJA DE REPARTO</div>
+          </div>
+          <div id="printSheetDate" class="sheet-date"></div>
+        </div>
+        <div id="sheetGrid" class="sheet-grid"></div>
+      </div>
+    </section>
+
+    <section id="new" class="view">
+      <form id="movementForm" class="panel form-grid">
+        <h2>Registrar movimiento</h2>
+
+        <label>
+          Fecha
+          <input type="date" id="movementDate" required />
+        </label>
+
+        <label>
+          Tipo
+          <select id="movementType" required>
+            <option value="venta">Venta</option>
+            <option value="cobro">Cobro</option>
+            <option value="compra">Compra</option>
+            <option value="pago">Pago a proveedor</option>
+            <option value="gasto">Gasto</option>
+            <option value="ajuste">Ajuste</option>
+          </select>
+        </label>
+
+        <label>
+          Cliente / proveedor
+          <input id="party" placeholder="Ej.: Haedo, Palermo, Chicago" />
+        </label>
+
+        <label>
+          Producto / concepto
+          <input id="concept" placeholder="Ej.: Lomo, combustible, cobranza" required />
+        </label>
+
+        <label>
+          Kilos
+          <input id="kg" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" />
+        </label>
+
+        <label>
+          Importe
+          <input id="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0" required />
+        </label>
+
+        <label>
+          Medio
+          <select id="paymentMethod">
+            <option value="efectivo">Efectivo</option>
+            <option value="transferencia">Transferencia</option>
+            <option value="cuenta_corriente">Cuenta corriente</option>
+            <option value="otro">Otro</option>
+          </select>
+        </label>
+
+        <label>
+          Estado
+          <select id="status">
+            <option value="confirmado">Confirmado</option>
+            <option value="pendiente">Pendiente</option>
+          </select>
+        </label>
+
+        <label class="full">
+          Observaciones
+          <textarea id="notes" rows="3" placeholder="Detalle opcional"></textarea>
+        </label>
+
+        <button type="submit" class="primary full">Guardar movimiento</button>
+      </form>
+    </section>
+
+    <section id="movements" class="view">
+      <div class="panel">
+        <div class="filters">
+          <input id="searchText" placeholder="Buscar cliente, proveedor o concepto" />
+          <select id="filterType">
+            <option value="">Todos los tipos</option>
+            <option value="venta">Ventas</option>
+            <option value="cobro">Cobros</option>
+            <option value="compra">Compras</option>
+            <option value="pago">Pagos</option>
+            <option value="gasto">Gastos</option>
+            <option value="ajuste">Ajustes</option>
+          </select>
+        </div>
+        <div id="allList" class="movement-list"></div>
+      </div>
+    </section>
+
+    <section id="balances" class="view">
+      <div class="panel">
+        <h2>Saldos por cliente / proveedor</h2>
+        <p class="muted">Ventas menos cobros para clientes. Compras menos pagos para proveedores.</p>
+        <div id="balanceList"></div>
+      </div>
+    </section>
+  
+    <section id="remitoView" class="view">
+      <div class="panel no-print remito-toolbar">
+        <button id="backFromRemito" class="secondary">← Volver a pedidos</button>
+        <button id="printRemito" class="primary">Abrir remito imprimible</button>
+      </div>
+
+      <div id="printableRemito" class="remito-sheet">
+        <div class="remito-header">
+          <div class="remito-brand-block">
+            <div class="remito-logo">DON ZOILO</div>
+            <div class="remito-tagline">CARNES · CALIDAD · SERVICIO</div>
+          </div>
+          <div class="remito-title-block">
+            <div class="remito-title">REMITO</div>
+            <div class="remito-number" id="remitoNumber">N.º —</div>
+          </div>
+        </div>
+
+        <div class="remito-info-grid">
+          <div><span>Fecha</span><strong id="remitoDate"></strong></div>
+          <div><span>Cliente</span><strong id="remitoClient"></strong></div>
+          <div><span>Condición</span><strong id="remitoPayment"></strong></div>
+          <div><span>Estado</span><strong id="remitoStatus"></strong></div>
+        </div>
+
+        <table class="remito-table">
+          <thead>
+            <tr>
+              <th>Cantidad</th>
+              <th>Unidad</th>
+              <th>Descripción</th>
+              <th>Precio unitario</th>
+              <th>Importe</th>
+            </tr>
+          </thead>
+          <tbody id="remitoItems"></tbody>
+        </table>
+
+        <div class="remito-total-row">
+          <span>TOTAL</span>
+          <strong id="remitoTotal">$ 0</strong>
+        </div>
+
+        <div class="remito-notes">
+          <span>Observaciones</span>
+          <div id="remitoNotes"></div>
+        </div>
+
+        <div class="remito-signatures">
+          <div>
+            <div class="signature-line"></div>
+            <span>Entregó</span>
+          </div>
+          <div>
+            <div class="signature-line"></div>
+            <span>Recibió conforme</span>
+          </div>
+          <div>
+            <div class="signature-line"></div>
+            <span>Aclaración / DNI</span>
+          </div>
+        </div>
+
+        <div class="remito-footer">
+          <strong>DON ZOILO</strong>
+          <span>Remito interno no válido como factura</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <dialog id="configDialog">
+    <form method="dialog" class="dialog-card">
+      <h2>Sincronización online</h2>
+      <p>Para usar el mismo link desde varios teléfonos, cargá los datos de tu proyecto Supabase.</p>
+      <label>URL del proyecto
+        <input id="supabaseUrl" placeholder="https://xxxx.supabase.co" />
+      </label>
+      <label>Clave pública anon
+        <input id="supabaseKey" placeholder="eyJ..." />
+      </label>
+      <div class="dialog-actions">
+        <button value="cancel" class="secondary">Cancelar</button>
+        <button id="saveConfig" value="default" class="primary">Guardar</button>
+      </div>
+      <p class="muted small">La clave pública puede usarse en una app web. No cargues una service_role key.</p>
+    </form>
+  </dialog>
+
+  <template id="emptyTemplate">
+    <div class="empty">Todavía no hay movimientos.</div>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</body>
+</html>

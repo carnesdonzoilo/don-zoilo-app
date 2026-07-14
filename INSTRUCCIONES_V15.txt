@@ -1,0 +1,13 @@
+No requiere cambios en Supabase.
+
+Subir este ZIP a Netlify.
+Debe verse Versión 15.
+
+Cambio principal:
+- El remito se abre en una página independiente.
+- Esa página contiene únicamente el remito.
+- Tiene botones Imprimir / Guardar PDF y Cerrar.
+- Evita la vista previa en blanco de Chrome/Android.
+
+Si Chrome bloquea la ventana:
+- Permitir ventanas emergentes para el sitio de Don Zoilo.

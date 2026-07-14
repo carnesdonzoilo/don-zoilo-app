@@ -1,0 +1,22 @@
+No requiere cambios en Supabase.
+
+Subir este ZIP a Netlify.
+Debe verse Versión 12.
+
+Cada pedido tendrá el botón:
+🧾 Generar remito
+
+El remito incluye:
+- Encabezado Don Zoilo
+- Número interno
+- Fecha
+- Cliente
+- Condición de pago
+- Estado
+- Detalle de productos
+- Cantidades
+- Precios
+- Total
+- Observaciones
+- Firmas
+- Botón Imprimir / Guardar PDF

@@ -1,0 +1,10 @@
+No requiere cambios en Supabase.
+
+Subir este ZIP a Netlify.
+Debe verse Versión 18.
+
+El remito imprime:
+- ORIGINAL arriba.
+- COPIA abajo.
+- Ambos dentro de una sola hoja A4.
+- Línea punteada central para cortar.
