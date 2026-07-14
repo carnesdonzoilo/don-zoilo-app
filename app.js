@@ -659,6 +659,15 @@ function cleanWhatsAppLine(raw){
   return line;
 }
 
+function normalizeProductKey(text){
+  return String(text||"")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g," ")
+    .trim();
+}
+
 function normalizeProductName(text){
   return String(text||"")
     .replace(/\bozobuco\b/gi,"osobuco")
@@ -1425,9 +1434,18 @@ const PRICE_CATALOG={"Vacunos": [["Asado banderita", 19000], ["Asado completo", 
 
 function catalogPrice(name,defaultPrice){
   const key=normalizeProductKey(name);
-  return Object.prototype.hasOwnProperty.call(productPrices,key)
-    ? Number(productPrices[key]||0)
-    : Number(defaultPrice||0);
+  const direct=Object.prototype.hasOwnProperty.call(productPrices,key)
+    ? productPrices[key]
+    : undefined;
+
+  if(direct !== undefined) return Number(direct||0);
+
+  const matchedKey=Object.keys(productPrices).find(existingKey =>
+    normalizeProductKey(existingKey) === key
+  );
+  if(matchedKey) return Number(productPrices[matchedKey]||0);
+
+  return Number(defaultPrice||0);
 }
 
 function renderPricePrintSheet(){

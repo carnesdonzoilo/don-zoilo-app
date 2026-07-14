@@ -1,0 +1,14 @@
+VERSIÓN 25 – CORRECCIÓN LISTA DE PRECIOS
+
+Correcciones:
+- Se agrega la función normalizeProductKey faltante.
+- Vista previa A4 vuelve a funcionar.
+- Imprimir / Guardar PDF vuelve a funcionar.
+- La lista toma los precios editados aunque el nombre tenga mayúsculas, tildes o espacios distintos.
+- No requiere cambios en Supabase.
+
+Instalación:
+1. Descomprimir el ZIP.
+2. Subir todos los archivos a la raíz del repositorio GitHub.
+3. Commit: Versión 25 corrección impresión.
+4. Esperar a que Vercel publique.
