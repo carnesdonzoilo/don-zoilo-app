@@ -1,0 +1,8 @@
+VERSIÓN 24 – CORRECCIÓN IMPRESIÓN DE PRECIOS
+
+- Corrige el botón Imprimir / Guardar PDF en Android.
+- Abre la lista A4 en una pestaña independiente.
+- Nuevo botón Vista previa A4.
+- Si Android no abre automáticamente la impresión:
+  menú de Chrome ⋮ → Compartir → Imprimir → Guardar como PDF.
+- No requiere cambios en Supabase.
