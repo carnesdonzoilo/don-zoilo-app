@@ -537,7 +537,7 @@ function renderBalances(){
   });
 }
 
-function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderPrices(); }
+function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderPrices(); renderPricePrintSheet(); }
 
 function exportCSV(){
   const cols=["date","type","party","concept","kg","amount","payment_method","status","notes"];
@@ -1420,6 +1420,57 @@ $("printSheet").addEventListener("click",()=>{
 
 
 
+
+const PRICE_CATALOG={"Vacunos": [["Asado banderita", 19000], ["Asado completo", 17500], ["Asado costillar marcado", 17000], ["Asado premium 10 costillas", 24500], ["Bife ancho x taco", 16500], ["Bife ancho", 17500], ["Bife angosto", 18500], ["Bife con lomo 10 costillas", 17800], ["Bife de chorizo envasado", 22500], ["Bife de chorizo", 24000], ["Bife T-bone", 24000], ["Bola de lomo envasada", 15500], ["Colita de cuadril envasada", 18500], ["Cuadrada envasada", 15500], ["Cuadril envasado", 18000], ["Entraña", 26000], ["Lomo con cordón", 26000], ["Matambre envasado", 16000], ["Nalga con tapa envasada", 16000], ["Nalga feteada envasada", 18000], ["Nalga sin tapa envasada", 17500], ["Nalga sin tapa fresca", 20500], ["Ojo de bife envasado", 24500], ["Ojo de bife", 26500], ["Osobuco pata corta", 12500], ["Paleta envasada", 14000], ["Paleta", 16000], ["Peceto envasado", 18500], ["Picada especial", 13500], ["Picada oferta", 9500], ["Picaña", 17000], ["Roastbeef envasado", 14000], ["Roastbeef", 15500], ["Tapa asado envasada", 13500], ["Tapa de asado", 17500], ["Tapa de bife (marucha)", 14000], ["Tapa de nalga", 17000], ["Vacío envasado", 19000], ["Vacío", 20500]], "Pollos": [["Cajón de pollo", 75000], ["Pata y muslo", 4900], ["Churrasquito de pollo", 8800], ["Suprema fresca", 9500], ["Suprema x 15 kg congelada", 7900]], "Cerdo": [["Bondiola x caja", 8000], ["Bondiola", 8800], ["Carré deshuesado", 10000], ["Carré", 8200], ["Churrasquito de cerdo", 12500], ["Jamón", 6500], ["Lechón", 15000], ["Matambrito", 14500], ["Paleta de cerdo", 5500], ["Pechito con manta", 8200], ["Ribs Paladini", 12000], ["Solomillo", 10500]], "Achuras": [["Chinchulín", 5500], ["Lengua", 9500], ["Molleja", 26000], ["Mondongo", 8500], ["Rabo", 8500], ["Riñón", 5500]], "Embutidos": [["Chorizo colorado", 12500], ["Chorizo puro cerdo con morrón", 9500], ["Chorizo puro cerdo", 7500], ["Chorizo vacuno", 6500], ["Longaniza", 6500], ["Morcilla", 6500], ["Panceta", 22500], ["Salchicha copetín", 9800], ["Salchicha parrillera", 12500], ["Salchicha viena", 9500]], "Granja": [["Chivito", 16500], ["Cordero", 15500], ["Cochinillo", 17500], ["Pata de cordero", 14500]], "Preparados": [["Hamburguesas de carne", 13500], ["Milanesas de carne", 13500], ["Milanesas de pollo", 9500], ["Hamburguesas de pollo", 13500]]};
+
+function catalogPrice(name,defaultPrice){
+  const key=normalizeProductKey(name);
+  return Object.prototype.hasOwnProperty.call(productPrices,key)
+    ? Number(productPrices[key]||0)
+    : Number(defaultPrice||0);
+}
+
+function renderPricePrintSheet(){
+  const grid=$("priceSheetGrid");
+  if(!grid) return;
+  grid.innerHTML="";
+  Object.entries(PRICE_CATALOG).forEach(([category,items])=>{
+    const section=document.createElement("section");
+    section.className="price-category";
+    section.innerHTML=`<h2>${escapeHtml(category.toUpperCase())}</h2><div class="price-category-list"></div>`;
+    const list=section.querySelector(".price-category-list");
+    items.forEach(([name,defaultPrice])=>{
+      const row=document.createElement("div");
+      row.className="price-sheet-row";
+      row.innerHTML=`<span class="product">${escapeHtml(name)}</span><span class="price">${money(catalogPrice(name,defaultPrice))}</span>`;
+      list.append(row);
+    });
+    grid.append(section);
+  });
+  if($("priceSheetTitle")) $("priceSheetTitle").textContent=($("pricePrintTitle")?.value||"LISTA DE PRECIOS").toUpperCase();
+  if($("priceSheetPhone")) $("priceSheetPhone").textContent=$("pricePrintPhone")?.value||"11 3039 0331";
+  const date=$("pricePrintDate")?.value;
+  if($("priceSheetDate")) $("priceSheetDate").textContent=date
+    ? `VIGENTE A PARTIR DEL ${new Date(date+"T12:00:00").toLocaleDateString("es-AR")}`
+    : "";
+}
+
+async function loadBaseCatalogPrices(){
+  let saved=0;
+  for(const items of Object.values(PRICE_CATALOG)){
+    for(const [name,value] of items){
+      const key=normalizeProductKey(name);
+      if(!Object.prototype.hasOwnProperty.call(productPrices,key)){
+        await rememberProductPrice(name,value);
+        saved++;
+      }
+    }
+  }
+  renderPrices();
+  renderPricePrintSheet();
+  alert(saved ? `Se cargaron ${saved} precios base.` : "El catálogo base ya estaba cargado.");
+}
+
 function priceEntries(){
   return Object.entries(productPrices)
     .map(([key,value])=>({key,name:key.replace(/\s+/g," "),value:Number(value||0)}))
@@ -1471,6 +1522,25 @@ function renderPrices(){
     list.append(div);
   });
 }
+
+
+on("loadCatalogPrices","click",async()=>{
+  const btn=$("loadCatalogPrices");
+  if(btn) btn.disabled=true;
+  try{ await loadBaseCatalogPrices(); }
+  catch(e){ alert("No se pudo cargar el catálogo: "+e.message); }
+  finally{ if(btn) btn.disabled=false; }
+});
+on("printPriceList","click",()=>{
+  renderPricePrintSheet();
+  document.body.classList.add("price-list-printing");
+  window.print();
+  setTimeout(()=>document.body.classList.remove("price-list-printing"),500);
+});
+on("pricePrintTitle","input",renderPricePrintSheet);
+on("pricePrintPhone","input",renderPricePrintSheet);
+on("pricePrintDate","change",renderPricePrintSheet);
+window.addEventListener("afterprint",()=>document.body.classList.remove("price-list-printing"));
 
 on("priceSearch","input",renderPrices);
 on("priceForm","submit",async(event)=>{
@@ -1537,6 +1607,7 @@ $("installBtn").addEventListener("click",async()=>{
   if($("dateFrom")) $("dateFrom").value=monthStart();
   if($("dateTo")) $("dateTo").value=todayISO();
   if($("homeSelectedDate")) $("homeSelectedDate").value=dateWithOffset(1);
+  if($("pricePrintDate")) $("pricePrintDate").value=todayISO();
   localLoad();
   await initCloud();
   renderAll();

@@ -1,0 +1,10 @@
+VERSIÓN 23 – LISTA DE PRECIOS A4
+
+- Botón Imprimir lista A4 dentro de Precios.
+- Rubros: Vacunos, Pollos, Cerdo, Achuras, Embutidos, Granja y Preparados.
+- Preparados: Hamburguesas de carne, Milanesas de carne, Milanesas de pollo y Hamburguesas de pollo.
+- Botón Cargar catálogo base.
+- Los precios editados reemplazan los valores base al imprimir.
+- Título, vigencia y WhatsApp editables.
+- Diseño A4 vertical en tres columnas.
+- No requiere cambios en Supabase.

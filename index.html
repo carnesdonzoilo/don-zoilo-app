@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 22</div>
+      <div class="subtitle">Control de operaciones · Versión 23</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -399,7 +399,11 @@
             <h2>Lista de precios</h2>
             <p class="muted small">Estos valores se usan como sugerencia al cargar pedidos. Modificarlos no cambia pedidos ya guardados.</p>
           </div>
+          <div class="price-header-actions">
+          <button type="button" id="loadCatalogPrices" class="secondary">Cargar catálogo base</button>
           <button type="button" id="refreshPrices" class="secondary">↻ Actualizar</button>
+          <button type="button" id="printPriceList" class="primary">🖨️ Imprimir lista A4</button>
+        </div>
         </div>
 
         <form id="priceForm" class="price-form">
@@ -417,6 +421,44 @@
           <span id="priceCount" class="muted small"></span>
         </div>
         <div id="priceList" class="price-list"></div>
+
+        <div class="price-print-settings">
+          <label>Título
+            <input id="pricePrintTitle" value="LISTA DE PRECIOS">
+          </label>
+          <label>Vigencia
+            <input id="pricePrintDate" type="date">
+          </label>
+          <label>WhatsApp
+            <input id="pricePrintPhone" value="11 3039 0331">
+          </label>
+        </div>
+
+        <div id="pricePrintSheet" class="price-print-sheet">
+          <header class="price-print-header">
+            <div class="price-brand">
+              <div class="price-brand-name">DON ZOILO</div>
+              <div class="price-brand-sub">CARNES · CALIDAD · SERVICIO</div>
+            </div>
+            <div class="price-print-title-wrap">
+              <h1 id="priceSheetTitle">LISTA DE PRECIOS</h1>
+              <div>CORTES SELECCIONADOS</div>
+            </div>
+            <div class="price-contact">
+              <strong>PEDIDOS POR WHATSAPP</strong>
+              <span id="priceSheetPhone">11 3039 0331</span>
+              <small>ENTREGAS EN CABA Y GBA OESTE</small>
+            </div>
+          </header>
+
+          <div id="priceSheetGrid" class="price-sheet-grid"></div>
+
+          <footer class="price-print-footer">
+            <strong>LOS PRECIOS INCLUYEN I.V.A. · SUJETOS A VARIACIÓN SIN PREVIO AVISO</strong>
+            <span id="priceSheetDate"></span>
+            <small>CARNES DON ZOILO · CASTELAR, BUENOS AIRES · WWW.CARNESDONZOILO.COM.AR</small>
+          </footer>
+        </div>
       </div>
     </section>
 
