@@ -1,0 +1,11 @@
+Versión 19
+
+Mejoras en Hoja de pedidos:
+- Fecha grande integrada en el título.
+- Clientes en mayúsculas y más legibles.
+- Productos con letra ligeramente más grande.
+- Mantiene 16 casilleros, 4 x 4, en una sola A4.
+- Conserva numeración en casilleros vacíos.
+- Botón Copiar pedidos para pegar en WhatsApp.
+
+No requiere cambios en Supabase.

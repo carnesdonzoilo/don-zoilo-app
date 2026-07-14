@@ -963,11 +963,39 @@ function routeIndex(name){
   return idx===-1?999:idx;
 }
 
+
+function sheetDateLong(dateStr){
+  if(!dateStr) return "";
+  const d=new Date(`${dateStr}T12:00:00`);
+  const days=["DOMINGO","LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO"];
+  return `${days[d.getDay()]} ${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+}
+
+function ordersAsText(date){
+  const byClient=new Map();
+  orders.filter(o=>!date||o.delivery_date===date).forEach(o=>{
+    const client=String(o.client||"SIN NOMBRE").trim().toUpperCase();
+    if(!byClient.has(client)) byClient.set(client,[]);
+    byClient.get(client).push(o);
+  });
+
+  return [...byClient.entries()]
+    .sort((a,b)=>routeIndex(a[0])-routeIndex(b[0]) || a[0].localeCompare(b[0]))
+    .map(([client,items])=>{
+      const lines=items.map(item=>{
+        const qty=Number(item.quantity||0).toLocaleString("es-AR");
+        return `${qty} ${item.unit||"kg"} ${item.product}`;
+      });
+      return `${client}\n${lines.join("\n")}`;
+    })
+    .join("\n\n");
+}
+
 function buildOrderSheet(){
   const date=$("sheetDate").value;
   const title=$("sheetTitle").value.trim()||"PEDIDOS DON ZOILO";
-  $("printSheetTitle").textContent=title;
-  $("printSheetDate").textContent=date?fmtDate(date):"";
+  $("printSheetTitle").textContent=date?`${title} – ${sheetDateLong(date)}`:title;
+  $("printSheetDate").textContent="";
 
   const byClient=new Map();
   orders.filter(o=>!date||o.delivery_date===date).forEach(o=>{
@@ -1008,6 +1036,27 @@ function buildOrderSheet(){
 $("sheetDate").addEventListener("change",buildOrderSheet);
 $("sheetTitle").addEventListener("input",buildOrderSheet);
 $("refreshSheet").addEventListener("click",buildOrderSheet);
+
+$("copyOrders").addEventListener("click",async()=>{
+  const text=ordersAsText($("sheetDate").value);
+  if(!text){
+    alert("No hay pedidos para copiar en la fecha elegida.");
+    return;
+  }
+  try{
+    await navigator.clipboard.writeText(text);
+    alert("Pedidos copiados. Ya podés pegarlos en WhatsApp.");
+  }catch(e){
+    const area=document.createElement("textarea");
+    area.value=text;
+    document.body.append(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+    alert("Pedidos copiados. Ya podés pegarlos en WhatsApp.");
+  }
+});
+
 $("printSheet").addEventListener("click",()=>{
   buildOrderSheet();
 
@@ -1076,7 +1125,7 @@ $("printSheet").addEventListener("click",()=>{
         padding-bottom:2.5mm;
         margin-bottom:3mm;
       }
-      .title{font-size:17pt;font-weight:900;letter-spacing:.3px}
+      .title{font-size:18pt;font-weight:900;letter-spacing:.2px}
       .subtitle{font-size:8pt;font-weight:800}
       .date{font-size:10pt;font-weight:900}
       .grid{
@@ -1099,7 +1148,7 @@ $("printSheet").addEventListener("click",()=>{
       }
       .num{position:absolute;top:2mm;right:2.5mm;font-size:8pt;font-weight:900}
       .client{
-        font-size:9.5pt;
+        font-size:10.2pt;
         font-weight:900;
         text-transform:uppercase;
         border-bottom:.8px solid #000;
@@ -1110,7 +1159,7 @@ $("printSheet").addEventListener("click",()=>{
         overflow:hidden;
         text-overflow:ellipsis;
       }
-      .lines{font-size:7.7pt;line-height:1.15}
+      .lines{font-size:8.3pt;line-height:1.18}
       .line{margin-bottom:.7mm}
       .empty{color:transparent}
       @page{size:A4 portrait;margin:0}
@@ -1162,10 +1211,10 @@ $("printSheet").addEventListener("click",()=>{
     <main class="sheet">
       <div class="header">
         <div>
-          <div class="title">${escapeHtml(title)}</div>
+          <div class="title">${escapeHtml(date?`${title} – ${sheetDateLong(date)}`:title)}</div>
           <div class="subtitle">HOJA DE REPARTO</div>
         </div>
-        <div class="date">${date?fmtDate(date):""}</div>
+        <div class="date"></div>
       </div>
       <div class="grid">${boxHtml}</div>
     </main>
