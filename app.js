@@ -263,6 +263,165 @@ async function saveEditedOrderGroup(items, card){
   }
 }
 
+
+function batchKeyForOrder(order){
+  return order.batch_id||order.id;
+}
+
+function batchItemsByKey(batchKey){
+  return orders.filter(o=>batchKeyForOrder(o)===batchKey);
+}
+
+function updateSelectedRemitosUi(){
+  const count=selectedRemitoBatches.size;
+  if($("selectedRemitosCount")){
+    $("selectedRemitosCount").textContent=`${count} remito${count===1?"":"s"} seleccionado${count===1?"":"s"}`;
+  }
+  if($("printSelectedRemitos")) $("printSelectedRemitos").disabled=count===0;
+
+  const visibleChecks=[...document.querySelectorAll(".remito-select")];
+  if($("selectAllRemitos") && visibleChecks.length){
+    $("selectAllRemitos").checked=visibleChecks.every(check=>check.checked);
+    $("selectAllRemitos").indeterminate=!$("selectAllRemitos").checked && visibleChecks.some(check=>check.checked);
+  }
+}
+
+async function signedReceiptForBatch(batchKey){
+  if(signedReceiptCache.has(batchKey)) return signedReceiptCache.get(batchKey);
+  if(!supabaseClient) return null;
+  const {data,error}=await supabaseClient
+    .from("signed_receipts")
+    .select("*")
+    .eq("batch_id",batchKey)
+    .order("created_at",{ascending:false})
+    .limit(1)
+    .maybeSingle();
+  if(error) throw error;
+  signedReceiptCache.set(batchKey,data||null);
+  return data||null;
+}
+
+async function uploadSignedReceipt(batchKey,items,file){
+  if(!supabaseClient) throw new Error("Primero activá la sincronización online.");
+  if(!file) return;
+
+  const first=items[0];
+  const safeClient=String(first.client||"cliente")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-zA-Z0-9]+/g,"-")
+    .replace(/^-|-$/g,"")
+    .toLowerCase();
+  const ext=(file.name.split(".").pop()||"jpg").toLowerCase();
+  const path=`${first.delivery_date}/${safeClient}-${batchKey}-${Date.now()}.${ext}`;
+
+  const {error:uploadError}=await supabaseClient.storage
+    .from("signed-remitos")
+    .upload(path,file,{cacheControl:"3600",upsert:false,contentType:file.type||"image/jpeg"});
+  if(uploadError) throw uploadError;
+
+  const {data:publicData}=supabaseClient.storage.from("signed-remitos").getPublicUrl(path);
+  const publicUrl=publicData?.publicUrl;
+  if(!publicUrl) throw new Error("No se pudo obtener la dirección de la imagen.");
+
+  const record={
+    id:uid(),
+    batch_id:batchKey,
+    client:first.client,
+    delivery_date:first.delivery_date,
+    storage_path:path,
+    public_url:publicUrl,
+    created_at:new Date().toISOString()
+  };
+
+  const {data,error}=await supabaseClient.from("signed_receipts").insert(record).select().single();
+  if(error) throw error;
+  signedReceiptCache.set(batchKey,data);
+  return data;
+}
+
+async function showSignedReceipt(batchKey,items){
+  try{
+    const receipt=await signedReceiptForBatch(batchKey);
+    if(!receipt) return alert("Este pedido todavía no tiene una foto firmada.");
+    if($("signedReceiptImage")) $("signedReceiptImage").src=receipt.public_url;
+    if($("signedReceiptMeta")){
+      $("signedReceiptMeta").textContent=`${items[0]?.client||""} · ${fmtDate(items[0]?.delivery_date)} · ${remitoSequence(items)}`;
+    }
+    const dialog=$("signedReceiptDialog");
+    if(typeof dialog?.showModal==="function") dialog.showModal();
+    else dialog?.setAttribute("open","");
+  }catch(e){
+    alert("No se pudo abrir el remito firmado: "+e.message);
+  }
+}
+
+function remitoHtmlForItems(items){
+  const first=items[0];
+  const total=items.reduce((sum,item)=>sum+Number(item.total||0),0);
+  const notes=[...new Set(items.map(i=>i.notes).filter(Boolean))].join(" · ") || "—";
+  const remitoNo=remitoSequence(items);
+  const rows=items.map(item=>`
+    <tr>
+      <td>${Number(item.quantity||0).toLocaleString("es-AR")}</td>
+      <td>${escapeHtml(item.unit||"kg")}</td>
+      <td>${escapeHtml(item.product||"")}</td>
+      <td>${money(item.unit_price||0)}</td>
+      <td>${money(item.total||0)}</td>
+    </tr>`).join("");
+
+  const copy=(label)=>`
+    <section class="ticket">
+      <div class="header">
+        <div><div class="logo">DON ZOILO</div><div class="tag">CARNES · CALIDAD · SERVICIO</div></div>
+        <div class="title"><div class="copy">${label}</div><h1>REMITO</h1><div class="number">N.º ${remitoNo}</div></div>
+      </div>
+      <div class="info">
+        <div><span>Fecha</span><strong>${fmtDate(first.delivery_date)}</strong></div>
+        <div><span>Cliente</span><strong>${escapeHtml(first.client||"")}</strong></div>
+        <div><span>Condición</span><strong>${escapeHtml((first.payment_method||"").replace("_"," "))}</strong></div>
+        <div><span>Estado</span><strong>${items.every(i=>i.delivered)?"ENTREGADO":"PENDIENTE"}</strong></div>
+      </div>
+      <table><thead><tr><th>Cant.</th><th>Unidad</th><th>Descripción</th><th>P. unit.</th><th>Importe</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="bottom"><div class="notes"><span>Observaciones</span><div>${escapeHtml(notes)}</div></div><div class="total"><span>TOTAL</span><strong>${money(total)}</strong></div></div>
+      <div class="signatures">
+        <div><div class="line"></div><span>Entregó</span></div>
+        <div><div class="line"></div><span>Recibió conforme</span></div>
+        <div><div class="line"></div><span>Aclaración / DNI</span></div>
+      </div>
+    </section>`;
+
+  return `<main class="sheet">${copy("ORIGINAL")}<div class="cut">CORTAR AQUÍ</div>${copy("COPIA")}</main>`;
+}
+
+function printSelectedRemitos(){
+  const batches=[...selectedRemitoBatches]
+    .map(key=>batchItemsByKey(key))
+    .filter(items=>items.length);
+  if(!batches.length) return alert("Seleccioná al menos un pedido.");
+
+  const pages=batches.map(items=>`<div class="bulk-remito-page">${remitoHtmlForItems(items)}</div>`).join("");
+  const popup=window.open("","_blank");
+  if(!popup) return alert("El navegador bloqueó la impresión. Habilitá ventanas emergentes.");
+
+  popup.document.open();
+  popup.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Remitos seleccionados</title>
+  <style>
+  *{box-sizing:border-box}body{margin:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111}
+  .actions{position:sticky;top:0;z-index:10;background:#101820;padding:10px;text-align:center}
+  .actions button{border:0;border-radius:9px;padding:11px 18px;font-weight:800;background:#b38a3e}
+  .bulk-remito-page{page-break-after:always;break-after:page}.bulk-remito-page:last-child{page-break-after:auto;break-after:auto}
+  .sheet{width:210mm;height:297mm;margin:0 auto;background:#fff;padding:6mm;overflow:hidden}
+  .ticket{height:137.5mm;border:1.2px solid #111;padding:5mm;overflow:hidden}.cut{height:10mm;display:flex;align-items:center;gap:4mm;color:#555;font-size:8pt}.cut:before,.cut:after{content:"";flex:1;border-top:1px dashed #777}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}.logo{font-size:18pt;font-weight:900}.tag{font-size:6.5pt;letter-spacing:1.3px}.title{text-align:right}.copy{font-size:7pt;font-weight:900}.title h1{margin:1mm 0 0;font-size:16pt}.number{font-size:8pt;font-weight:800}
+  .info{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #111;margin-bottom:3mm}.info>div{padding:2mm;border-right:1px solid #111;min-height:10mm}.info>div:last-child{border-right:0}.info span{display:block;font-size:6pt;font-weight:800;color:#555}.info strong{font-size:8pt}
+  table{width:100%;border-collapse:collapse;margin-bottom:2.5mm}th,td{border:1px solid #111;padding:1.4mm}th{font-size:6pt;background:#f1f1f1}td{font-size:7.2pt}th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}th:nth-child(2),td:nth-child(2){width:17mm}th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
+  .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm}.notes{border:1px solid #111;min-height:16mm;padding:2mm}.notes span{font-size:6pt;font-weight:900}.notes div{font-size:7pt}.total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:9pt}.total strong{font-size:12pt}.signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}.signatures>div{text-align:center}.line{border-top:1px solid #111}.signatures span{font-size:6.5pt}
+  @page{size:A4 portrait;margin:0}@media print{.actions{display:none}.sheet{margin:0}}
+  </style></head><body><div class="actions"><button onclick="window.print()">Imprimir ${batches.length} remitos</button></div>${pages}</body></html>`);
+  popup.document.close();
+  popup.focus();
+}
+
 function renderOrders(){
   const date=$("ordersFilterDate")?.value;
   const filtered=orders.filter(o=>!date||o.delivery_date===date);
@@ -290,6 +449,10 @@ function renderOrders(){
     card.className="order-group"+(allDelivered?" delivered":"");
 
     card.innerHTML=`
+      <div class="order-select-row">
+        <input type="checkbox" class="remito-select" data-batch="${escapeHtml(batchId)}" ${selectedRemitoBatches.has(batchId)?"checked":""}>
+        <span>Seleccionar para impresión masiva</span>
+      </div>
       <div class="order-group-head">
         <div>
           <div class="order-client">${escapeHtml(first.client)}</div>
@@ -316,6 +479,13 @@ function renderOrders(){
         <button type="button" class="edit-order-btn">✏️ Editar pedido</button>
         <button type="button" class="delete-order-btn">🗑 Eliminar pedido</button>
       </div>
+      <div class="signed-tools">
+        <label class="upload-signed-btn">
+          📷 Cargar remito firmado
+          <input type="file" accept="image/*" capture="environment" class="signed-file-input">
+        </label>
+        <button type="button" class="view-signed-btn">👁️ Ver copia firmada</button>
+      </div>
 
       <div class="edit-group hidden">
         <div class="edit-client-row">
@@ -338,6 +508,34 @@ function renderOrders(){
           <button type="button" class="save-edit-btn">Guardar cambios</button>
         </div>
       </div>`;
+
+
+    const selectRemito=card.querySelector(".remito-select");
+    selectRemito.addEventListener("change",()=>{
+      if(selectRemito.checked) selectedRemitoBatches.add(batchId);
+      else selectedRemitoBatches.delete(batchId);
+      updateSelectedRemitosUi();
+    });
+
+    const signedInput=card.querySelector(".signed-file-input");
+    signedInput.addEventListener("change",async()=>{
+      const file=signedInput.files?.[0];
+      if(!file) return;
+      const label=card.querySelector(".upload-signed-btn");
+      const original=label.childNodes[0]?.textContent||"";
+      try{
+        label.childNodes[0].textContent=" Subiendo... ";
+        await uploadSignedReceipt(batchId,items,file);
+        alert("Remito firmado guardado correctamente.");
+      }catch(e){
+        alert("No se pudo guardar la foto: "+e.message);
+      }finally{
+        label.childNodes[0].textContent=original||" 📷 Cargar remito firmado ";
+        signedInput.value="";
+      }
+    });
+
+    card.querySelector(".view-signed-btn").addEventListener("click",()=>showSignedReceipt(batchId,items));
 
     const check=card.querySelector('input[type="checkbox"]');
     check.addEventListener("change",async()=>{
@@ -373,6 +571,7 @@ function renderOrders(){
 
     box.append(card);
   });
+  updateSelectedRemitosUi();
 }
 
 
@@ -496,8 +695,47 @@ function renderDashboard(){
   $("kgTotal").textContent=list.filter(m=>m.type==="venta").reduce((a,m)=>a+Number(m.kg||0),0).toLocaleString("es-AR")+" kg";
 
   const box=$("recentList"); box.innerHTML="";
-  if(!list.length) box.append($("emptyTemplate").content.cloneNode(true));
-  list.slice(0,8).forEach(m=>box.append(movementCard(m)));
+  if(!list.length){
+    box.append($("emptyTemplate").content.cloneNode(true));
+  }else{
+    const orderById=new Map(orders.map(o=>[o.id,o]));
+    const groups=new Map();
+
+    list.forEach(m=>{
+      if(m.type==="venta" && m.source_order_id){
+        const order=orderById.get(m.source_order_id);
+        const key=order?.batch_id||m.source_order_id;
+        if(!groups.has(`sale-${key}`)){
+          groups.set(`sale-${key}`,{
+            ...m,
+            id:`sale-${key}`,
+            amount:0,
+            kg:0,
+            concept:"Remito completo",
+            _products:[],
+            _created:m.created_at
+          });
+        }
+        const g=groups.get(`sale-${key}`);
+        g.amount+=Number(m.amount||0);
+        g.kg+=Number(m.kg||0);
+        if(order?.product) g._products.push(order.product);
+        if(String(m.created_at||"")>String(g._created||"")) g._created=m.created_at;
+      }else{
+        groups.set(`movement-${m.id}`,m);
+      }
+    });
+
+    [...groups.values()]
+      .sort((a,b)=>String(b._created||b.created_at||b.date).localeCompare(String(a._created||a.created_at||a.date)))
+      .slice(0,8)
+      .forEach(m=>{
+        if(m._products?.length){
+          m={...m,concept:`Remito: ${[...new Set(m._products)].join(", ")}`};
+        }
+        box.append(movementCard(m));
+      });
+  }
 }
 
 function renderMovements(){
@@ -958,6 +1196,8 @@ $("orderForm").addEventListener("submit",async e=>{
 
 
 let currentRemitoItems=[];
+const selectedRemitoBatches=new Set();
+const signedReceiptCache=new Map();
 
 function remitoSequence(items){
   const raw=(items?.[0]?.batch_id || items?.[0]?.id || "").replace(/[^a-zA-Z0-9]/g,"");
@@ -1654,7 +1894,7 @@ function buildPriceCanvas(){
   const gap=18;
   const colW=(A4_W-margin*2-gap*2)/3;
   const top=145;
-  const bottom=1650;
+  const bottom=1658;
   let col=0;
   let y=top;
 
@@ -1664,31 +1904,31 @@ function buildPriceCanvas(){
   };
 
   for(const [category,items] of Object.entries(PRICE_CATALOG)){
-    const estimated=40+items.length*24;
+    const estimated=46+items.length*30;
     if(y+estimated>bottom && col<2) moveColumn();
 
     const x=margin+col*(colW+gap);
     ctx.fillStyle="#0c2748";
-    ctx.fillRect(x,y,colW,34);
+    ctx.fillRect(x,y,colW,39);
     ctx.fillStyle="#fff";
-    canvasText(ctx,category.toUpperCase(),x+colW/2,y+7,colW-12,"18px Arial","bold","center");
-    y+=40;
+    canvasText(ctx,category.toUpperCase(),x+colW/2,y+8,colW-12,"20px Arial","bold","center");
+    y+=47;
 
     for(const [name,defaultPrice] of items){
-      if(y+24>bottom && col<2){
+      if(y+30>bottom && col<2){
         moveColumn();
       }
       const xx=margin+col*(colW+gap);
       ctx.fillStyle="#111";
-      canvasText(ctx,name.toUpperCase(),xx+5,y,colW-120,"13px Arial","bold");
-      canvasText(ctx,moneyPlain(catalogPrice(name,defaultPrice)),xx+colW-5,y,112,"14px Arial","bold","right");
+      canvasText(ctx,name.toUpperCase(),xx+5,y,colW-125,"16px Arial","bold");
+      canvasText(ctx,moneyPlain(catalogPrice(name,defaultPrice)),xx+colW-5,y,120,"17px Arial","bold","right");
       ctx.strokeStyle="#bbb";
       ctx.lineWidth=1;
       ctx.beginPath();
-      ctx.moveTo(xx+5,y+20);
-      ctx.lineTo(xx+colW-5,y+20);
+      ctx.moveTo(xx+5,y+25);
+      ctx.lineTo(xx+colW-5,y+25);
       ctx.stroke();
-      y+=24;
+      y+=30;
     }
     y+=10;
   }
@@ -2073,6 +2313,24 @@ document.querySelectorAll(".home-date-btn").forEach(btn=>{
   });
 });
 on("homeSelectedDate","change",renderHomePanel);
+
+
+on("selectAllRemitos","change",()=>{
+  const checked=$("selectAllRemitos")?.checked||false;
+  document.querySelectorAll(".remito-select").forEach(input=>{
+    input.checked=checked;
+    const batch=input.dataset.batch;
+    if(checked) selectedRemitoBatches.add(batch);
+    else selectedRemitoBatches.delete(batch);
+  });
+  updateSelectedRemitosUi();
+});
+on("printSelectedRemitos","click",printSelectedRemitos);
+on("closeSignedReceipt","click",()=>{
+  const dialog=$("signedReceiptDialog");
+  if(typeof dialog?.close==="function") dialog.close();
+  else dialog?.removeAttribute("open");
+});
 
 on("refreshOrders","click",async()=>{
   const btn=$("refreshOrders");

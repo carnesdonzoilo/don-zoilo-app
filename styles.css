@@ -467,3 +467,32 @@ dialog::backdrop{background:#0009}
 .print-device-note{display:block;flex-basis:100%;color:var(--muted);margin-top:4px}
 
 .thermal-help{font-size:.78rem;color:var(--muted);margin-top:5px}
+
+.orders-bulk-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px 13px;margin:8px 0 12px}
+.bulk-select-all{display:flex;align-items:center;gap:7px;font-weight:800}
+.bulk-select-all input,.remito-select{width:20px;height:20px}
+.order-select-row{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.order-select-row span{font-size:.82rem;font-weight:800;color:var(--muted)}
+.signed-tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.upload-signed-btn,.view-signed-btn{border:0;border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer}
+.upload-signed-btn{background:#eef2f5;color:#24303a}
+.view-signed-btn{background:#eaf6ee;color:#21623a}
+.signed-file-input{display:none}
+.signed-dialog-card{width:min(94vw,800px);max-width:800px}
+.signed-dialog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.signed-receipt-image{display:block;max-width:100%;max-height:75vh;margin:12px auto 0;border-radius:10px;border:1px solid var(--line);object-fit:contain}
+.bulk-remito-page{page-break-after:always;break-after:page}
+.bulk-remito-page:last-child{page-break-after:auto;break-after:auto}
+@media(max-width:650px){
+  .orders-bulk-toolbar{align-items:stretch}
+  .orders-bulk-toolbar button{width:100%}
+}
+
+/* V28: lista A4 más aprovechada y legible */
+.price-sheet-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important;columns:auto!important;align-items:start}
+.price-category{margin:0!important}
+.price-category h2{font-size:12px!important;padding:7px 8px!important}
+.price-category-list{padding:6px 8px!important}
+.price-sheet-row{font-size:9.5px!important;line-height:1.45!important;padding:3px 0!important;min-height:22px}
+.price-print-header{margin-bottom:14px!important}
+.price-print-footer{margin-top:12px!important}

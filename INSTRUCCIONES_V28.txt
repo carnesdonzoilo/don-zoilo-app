@@ -1,0 +1,21 @@
+VERSIÓN 28
+
+Cambios:
+1. Impresión masiva de remitos:
+   - Seleccionar pedidos.
+   - Seleccionar todos.
+   - Imprimir remitos seleccionados juntos.
+
+2. Remito firmado:
+   - Sacar foto o elegir imagen.
+   - Guardar copia digital en Supabase.
+   - Abrir luego desde celular o tablet.
+   - Requiere ejecutar supabase_update_v28.sql una sola vez.
+
+3. Lista de precios:
+   - Usa más altura de la hoja A4.
+   - Productos y precios más grandes.
+
+4. Actividad reciente:
+   - Agrupa todos los productos del mismo pedido/remito.
+   - Muestra una sola venta y el total completo del remito.

@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 27</div>
+      <div class="subtitle">Control de operaciones · Versión 28</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -195,6 +195,14 @@
               <p class="muted small">La cuenta corriente cambia únicamente al marcar “Entregado”.</p>
             </div>
             <input type="date" id="ordersFilterDate">
+          </div>
+          <div class="orders-bulk-toolbar">
+            <label class="bulk-select-all">
+              <input type="checkbox" id="selectAllRemitos">
+              Seleccionar todos
+            </label>
+            <span id="selectedRemitosCount" class="muted small">0 remitos seleccionados</span>
+            <button type="button" id="printSelectedRemitos" class="primary">🖨️ Imprimir seleccionados</button>
           </div>
           <div class="orders-refresh-row"><button type="button" id="refreshOrders" class="secondary">↻ Actualizar pedidos</button></div>
           <div id="ordersList" class="orders-list"></div>
@@ -468,6 +476,19 @@
     </section>
 
   </main>
+
+  <dialog id="signedReceiptDialog">
+    <div class="dialog-card signed-dialog-card">
+      <div class="signed-dialog-head">
+        <div>
+          <h2>Remito firmado</h2>
+          <p id="signedReceiptMeta" class="muted small"></p>
+        </div>
+        <button type="button" id="closeSignedReceipt" class="secondary">Cerrar</button>
+      </div>
+      <img id="signedReceiptImage" class="signed-receipt-image" alt="Remito firmado">
+    </div>
+  </dialog>
 
   <dialog id="configDialog">
     <form method="dialog" class="dialog-card">
