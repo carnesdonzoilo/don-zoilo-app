@@ -601,7 +601,7 @@ function renderExpenseCategories(){
     btn.textContent=category;
     btn.addEventListener("click",()=>{
       selectedExpenseCategory=category;
-      $("expenseCategory").value=category;
+      if($("expenseCategory")) $("expenseCategory").value=category;
       renderExpenseCategories();
       $("expenseAmount")?.focus();
     });
@@ -2719,6 +2719,11 @@ on("repairDeliveredMovements","click",async()=>{
 });
 
 on("quickExpenseForm","submit",saveQuickExpense);
+on("expenseCategory","change",()=>{
+  selectedExpenseCategory=$("expenseCategory")?.value||"";
+  renderExpenseCategories();
+});
+
 on("expenseMonth","change",renderExpenseSummary);
 
 on("selectAllRemitos","change",()=>{

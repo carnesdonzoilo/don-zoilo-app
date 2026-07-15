@@ -1,0 +1,8 @@
+VERSIÓN 29.9 – CATEGORÍA DESPLEGABLE EN GASTOS
+
+Cambios:
+- Agrega columna Categoría en la carga rápida.
+- Menú desplegable con las 18 categorías.
+- Los botones rápidos siguen funcionando.
+- Elegir desde la flecha también marca el botón correspondiente.
+- No requiere cambios en Supabase.

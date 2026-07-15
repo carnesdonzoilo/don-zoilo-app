@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 29.8</div>
+      <div class="subtitle">Control de operaciones · Versión 29.9</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -336,7 +336,29 @@
         <div class="expense-categories" id="expenseCategories"></div>
 
         <form id="quickExpenseForm" class="quick-expense-form">
-          <input type="hidden" id="expenseCategory" required>
+          <label>Categoría
+            <select id="expenseCategory" required>
+              <option value="">Elegir categoría</option>
+              <option value="CASA">CASA</option>
+              <option value="LEO">LEO</option>
+              <option value="ROMI">ROMI</option>
+              <option value="SERVICIOS">SERVICIOS</option>
+              <option value="VACACIONES">VACACIONES</option>
+              <option value="TARJETAS">TARJETAS</option>
+              <option value="LOCAL">LOCAL</option>
+              <option value="MERMA">MERMA</option>
+              <option value="DESAYUNO">DESAYUNO</option>
+              <option value="IMPUESTOS">IMPUESTOS</option>
+              <option value="RETENCIONES">RETENCIONES</option>
+              <option value="NAFTA">NAFTA</option>
+              <option value="PEAJE">PEAJE</option>
+              <option value="PROPINA">PROPINA</option>
+              <option value="REPARTO">REPARTO</option>
+              <option value="ATENCIÓN">ATENCIÓN</option>
+              <option value="SUELDOS">SUELDOS</option>
+              <option value="KANGOO">KANGOO</option>
+            </select>
+          </label>
 
           <label>Importe
             <input id="expenseAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Ej.: 30000" required>
