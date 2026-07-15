@@ -1,0 +1,13 @@
+VERSIÓN 29.6 – REPARAR MOVIMIENTOS FALTANTES
+
+- Busca remitos marcados como entregados.
+- Si no tienen movimiento de venta, crea uno automáticamente.
+- Solo crea un movimiento por remito.
+- Agrega botón Reparar entregas faltantes en Movimientos.
+- También repara al tocar Actualizar pedidos.
+- No requiere cambios en Supabase.
+
+Uso:
+1. Entrar en Movimientos.
+2. Tocar Reparar entregas faltantes.
+3. Revisar Movimientos y Saldos.

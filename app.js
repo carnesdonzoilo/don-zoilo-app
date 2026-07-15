@@ -515,6 +515,70 @@ async function confirmBatchDelivery(){
   }
 }
 
+
+function deliveredOrderBatches(){
+  const grouped=new Map();
+  orders.forEach(order=>{
+    if(!order.delivered) return;
+    const key=order.batch_id||order.id;
+    if(!grouped.has(key)) grouped.set(key,[]);
+    grouped.get(key).push(order);
+  });
+  return grouped;
+}
+
+function movementMatchesBatch(movement,batchKey,items){
+  if(movement.id===deliveryMovementId(batchKey)) return true;
+  if(movement.source_order_id===batchKey) return true;
+  return items.some(item=>movement.source_order_id===item.id);
+}
+
+async function reconcileDeliveredOrders(){
+  const batches=deliveredOrderBatches();
+  let created=0;
+
+  for(const [batchKey,items] of batches){
+    const exists=movements.some(m=>m.type==="venta" && movementMatchesBatch(m,batchKey,items));
+    if(exists) continue;
+
+    const deliveredAt=items.find(i=>i.delivered_at)?.delivered_at || new Date().toISOString();
+    const movement={
+      id:deliveryMovementId(batchKey),
+      date:items[0].delivery_date||todayISO(),
+      type:"venta",
+      party:items[0].client||"",
+      concept:`Remito ${remitoSequence(items)}`,
+      kg:orderBatchKg(items),
+      amount:orderBatchTotal(items),
+      payment_method:items[0].payment_method||"cuenta_corriente",
+      status:"confirmado",
+      notes:"Movimiento reconstruido automáticamente desde pedido entregado.",
+      source_order_id:batchKey,
+      created_at:deliveredAt
+    };
+
+    try{
+      if(supabaseClient){
+        const {error}=await supabaseClient.from("movements").insert(movement);
+        if(error && error.code!=="23505") throw error;
+      }
+      if(!movements.some(m=>m.id===movement.id)) movements.push(movement);
+      created++;
+    }catch(error){
+      console.error("No se pudo reconstruir el movimiento",batchKey,error);
+    }
+  }
+
+  if(created){
+    movements.sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)));
+    localSave();
+    renderDashboard();
+    renderMovements();
+    renderBalances();
+  }
+  return created;
+}
+
 function renderOrders(){
   const date=$("ordersFilterDate")?.value;
   const filtered=orders.filter(o=>!date||o.delivery_date===date);
@@ -2476,6 +2540,22 @@ on("cancelDeliveryConfirm","click",()=>{
 });
 on("confirmDeliveryBtn","click",confirmBatchDelivery);
 
+
+on("repairDeliveredMovements","click",async()=>{
+  const btn=$("repairDeliveredMovements");
+  if(btn) btn.disabled=true;
+  try{
+    const created=await reconcileDeliveredOrders();
+    alert(created
+      ? `Se recuperaron ${created} movimiento${created===1?"":"s"} faltante${created===1?"":"s"}.`
+      : "No había movimientos faltantes.");
+  }catch(e){
+    alert("No se pudieron reparar los movimientos: "+e.message);
+  }finally{
+    if(btn) btn.disabled=false;
+  }
+});
+
 on("selectAllRemitos","change",()=>{
   const checked=$("selectAllRemitos")?.checked||false;
   document.querySelectorAll(".remito-select").forEach(input=>{
@@ -2505,6 +2585,7 @@ on("refreshOrders","click",async()=>{
   }finally{
     if(btn) btn.disabled=false;
   }
+  await reconcileDeliveredOrders();
 });
 
 window.addEventListener("beforeinstallprompt",(e)=>{
