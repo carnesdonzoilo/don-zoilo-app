@@ -1,0 +1,12 @@
+VERSIÓN 29.3 – LISTA A4 EN UNA SOLA HOJA
+
+Correcciones:
+- Distribución fija en tres columnas equilibradas.
+- Vacunos se divide automáticamente y continúa en la columna siguiente.
+- Los rubros chicos ya no pasan a una segunda página.
+- Texto y precios más grandes.
+- Vista previa e impresión normal usan el mismo diseño.
+- GD-88H/FxPrint usa la misma distribución.
+- Seleccionar tamaño de papel A4 en Android, no Carta.
+
+No requiere cambios en Supabase.

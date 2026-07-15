@@ -588,3 +588,91 @@ dialog::backdrop{background:#0009}
     min-height:285mm!important;
   }
 }
+
+/* V29.3 - distribución fija en una sola A4 */
+.price-print-sheet{
+  width:198mm!important;
+  height:285mm!important;
+  min-height:285mm!important;
+  max-height:285mm!important;
+  overflow:hidden!important;
+}
+.price-print-header{
+  height:25mm!important;
+  margin:0 0 2.5mm!important;
+  padding:0 0 2mm!important;
+}
+.price-sheet-grid{
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:2.2mm!important;
+  height:242mm!important;
+  min-height:242mm!important;
+  align-items:stretch!important;
+}
+.price-column{
+  display:flex!important;
+  flex-direction:column!important;
+  gap:1.6mm!important;
+  min-width:0!important;
+  height:100%!important;
+}
+.price-category{
+  display:block!important;
+  flex:0 0 auto!important;
+  border:1px solid #aeb6bf!important;
+  break-inside:avoid!important;
+  overflow:hidden!important;
+}
+.price-category h2{
+  font-size:10.5px!important;
+  line-height:1.1!important;
+  padding:4px 5px!important;
+  margin:0!important;
+}
+.price-category-list{
+  padding:3px 5px!important;
+}
+.price-sheet-row{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto!important;
+  gap:3px!important;
+  align-items:center!important;
+  font-size:9.5px!important;
+  line-height:1.12!important;
+  min-height:19px!important;
+  padding:2px 0!important;
+}
+.price-sheet-row .product{
+  font-size:9.5px!important;
+  font-weight:800!important;
+  white-space:normal!important;
+}
+.price-sheet-row .price{
+  font-size:10px!important;
+  font-weight:900!important;
+}
+.price-print-footer{
+  height:11mm!important;
+  margin:2mm 0 0!important;
+  padding-top:1.5mm!important;
+  gap:1px!important;
+}
+.price-print-footer strong{font-size:7.7px!important}
+.price-print-footer span,.price-print-footer small{font-size:6.8px!important}
+.price-print-sheet.density-medium .price-sheet-row{
+  font-size:8.8px!important;
+  min-height:18px!important;
+}
+@page{size:A4 portrait;margin:5mm!important}
+@media print{
+  html,body{width:210mm!important;height:297mm!important;overflow:hidden!important}
+  body.price-list-printing #pricePrintSheet,
+  .price-print-sheet{
+    width:200mm!important;
+    height:287mm!important;
+    min-height:287mm!important;
+    max-height:287mm!important;
+    overflow:hidden!important;
+  }
+}

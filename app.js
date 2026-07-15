@@ -1769,28 +1769,80 @@ function catalogPrice(name,defaultPrice){
   return Number(defaultPrice||0);
 }
 
+
+function buildBalancedPriceColumns(){
+  const columns=[[],[],[]];
+  const maxUnits=30.5;
+  let col=0;
+  let used=0;
+
+  for(const [category,items] of Object.entries(PRICE_CATALOG)){
+    let offset=0;
+    let continuation=false;
+
+    while(offset<items.length && col<3){
+      const headerUnits=1.35;
+      let capacity=Math.max(1,Math.floor(maxUnits-used-headerUnits));
+
+      if(capacity<=0){
+        col++;
+        used=0;
+        continue;
+      }
+
+      const take=Math.min(capacity,items.length-offset);
+      columns[col].push({
+        category: continuation ? `${category} · CONT.` : category,
+        items: items.slice(offset,offset+take)
+      });
+
+      used+=headerUnits+take;
+      offset+=take;
+      continuation=true;
+
+      if(offset<items.length || used>=maxUnits-0.5){
+        col++;
+        used=0;
+      }
+    }
+  }
+
+  return columns;
+}
+
 function renderPricePrintSheet(){
   const sheet=$("pricePrintSheet");
   const density=$("priceDensity")?.value||"large";
-  if(sheet){
-    sheet.classList.toggle("density-medium",density==="medium");
-  }
+  if(sheet) sheet.classList.toggle("density-medium",density==="medium");
+
   const grid=$("priceSheetGrid");
   if(!grid) return;
   grid.innerHTML="";
-  Object.entries(PRICE_CATALOG).forEach(([category,items])=>{
-    const section=document.createElement("section");
-    section.className="price-category";
-    section.innerHTML=`<h2>${escapeHtml(category.toUpperCase())}</h2><div class="price-category-list"></div>`;
-    const list=section.querySelector(".price-category-list");
-    items.forEach(([name,defaultPrice])=>{
-      const row=document.createElement("div");
-      row.className="price-sheet-row";
-      row.innerHTML=`<span class="product">${escapeHtml(name)}</span><span class="price">${money(catalogPrice(name,defaultPrice))}</span>`;
-      list.append(row);
+
+  const columns=buildBalancedPriceColumns();
+  columns.forEach(chunks=>{
+    const column=document.createElement("div");
+    column.className="price-column";
+
+    chunks.forEach(({category,items})=>{
+      const section=document.createElement("section");
+      section.className="price-category";
+      section.innerHTML=`<h2>${escapeHtml(category.toUpperCase())}</h2><div class="price-category-list"></div>`;
+      const list=section.querySelector(".price-category-list");
+
+      items.forEach(([name,defaultPrice])=>{
+        const row=document.createElement("div");
+        row.className="price-sheet-row";
+        row.innerHTML=`<span class="product">${escapeHtml(name)}</span><span class="price">${money(catalogPrice(name,defaultPrice))}</span>`;
+        list.append(row);
+      });
+
+      column.append(section);
     });
-    grid.append(section);
+
+    grid.append(column);
   });
+
   if($("priceSheetTitle")) $("priceSheetTitle").textContent=($("pricePrintTitle")?.value||"LISTA DE PRECIOS").toUpperCase();
   if($("priceSheetPhone")) $("priceSheetPhone").textContent=$("pricePrintPhone")?.value||"11 3039 0331";
   const date=$("pricePrintDate")?.value;
@@ -1976,63 +2028,54 @@ function buildPriceCanvas(){
   ctx.fillStyle="#0c2748";
   canvasText(ctx,"ENTREGAS EN CABA Y GBA OESTE",A4_W-55,100,300,"13px Arial","bold","right");
 
-  const margin=45;
-  const gap=18;
+  const margin=42;
+  const gap=14;
   const colW=(A4_W-margin*2-gap*2)/3;
   const top=145;
-  const bottom=1695;
-  let col=0;
-  let y=top;
+  const columns=buildBalancedPriceColumns();
 
-  const moveColumn=()=>{
-    col++;
-    y=top;
-  };
-
-  for(const [category,items] of Object.entries(PRICE_CATALOG)){
-    const estimated=44+items.length*34;
-    if(y+estimated>bottom && col<2) moveColumn();
-
+  columns.forEach((chunks,col)=>{
     const x=margin+col*(colW+gap);
-    ctx.fillStyle="#0c2748";
-    ctx.fillRect(x,y,colW,42);
-    ctx.fillStyle="#fff";
-    canvasText(ctx,category.toUpperCase(),x+colW/2,y+9,colW-12,"22px Arial","bold","center");
-    y+=50;
+    let y=top;
 
-    for(const [name,defaultPrice] of items){
-      if(y+34>bottom && col<2){
-        moveColumn();
-      }
-      const xx=margin+col*(colW+gap);
-      ctx.fillStyle="#111";
-      canvasText(ctx,name.toUpperCase(),xx+5,y,colW-128,"18px Arial","bold");
-      canvasText(ctx,moneyPlain(catalogPrice(name,defaultPrice)),xx+colW-5,y,124,"19px Arial","bold","right");
-      ctx.strokeStyle="#bbb";
-      ctx.lineWidth=1;
-      ctx.beginPath();
-      ctx.moveTo(xx+5,y+28);
-      ctx.lineTo(xx+colW-5,y+28);
-      ctx.stroke();
-      y+=34;
-    }
-    y+=10;
-  }
+    chunks.forEach(({category,items})=>{
+      ctx.fillStyle="#0c2748";
+      ctx.fillRect(x,y,colW,34);
+      ctx.fillStyle="#fff";
+      canvasText(ctx,category.toUpperCase(),x+colW/2,y+7,colW-10,"18px Arial","bold","center");
+      y+=38;
+
+      items.forEach(([name,defaultPrice])=>{
+        ctx.fillStyle="#111";
+        canvasText(ctx,name.toUpperCase(),x+5,y,colW-118,"15px Arial","bold");
+        canvasText(ctx,moneyPlain(catalogPrice(name,defaultPrice)),x+colW-5,y,112,"16px Arial","bold","right");
+        ctx.strokeStyle="#c2c7cc";
+        ctx.lineWidth=1;
+        ctx.beginPath();
+        ctx.moveTo(x+5,y+22);
+        ctx.lineTo(x+colW-5,y+22);
+        ctx.stroke();
+        y+=25;
+      });
+
+      y+=8;
+    });
+  });
 
   ctx.strokeStyle="#0c2748";
-  ctx.lineWidth=5;
+  ctx.lineWidth=4;
   ctx.beginPath();
-  ctx.moveTo(45,1660);
-  ctx.lineTo(A4_W-45,1660);
+  ctx.moveTo(42,1680);
+  ctx.lineTo(A4_W-42,1680);
   ctx.stroke();
 
   ctx.fillStyle="#0c2748";
-  canvasText(ctx,"LOS PRECIOS INCLUYEN I.V.A. · SUJETOS A VARIACIÓN SIN PREVIO AVISO",A4_W/2,1670,A4_W-90,"15px Arial","bold","center");
+  canvasText(ctx,"LOS PRECIOS INCLUYEN I.V.A. · SUJETOS A VARIACIÓN SIN PREVIO AVISO",A4_W/2,1688,A4_W-84,"14px Arial","bold","center");
   const date=$("pricePrintDate")?.value;
   if(date){
-    canvasText(ctx,`VIGENTE A PARTIR DEL ${new Date(date+"T12:00:00").toLocaleDateString("es-AR")}`,A4_W/2,1696,A4_W-90,"13px Arial","normal","center");
+    canvasText(ctx,`VIGENTE A PARTIR DEL ${new Date(date+"T12:00:00").toLocaleDateString("es-AR")}`,A4_W/2,1710,A4_W-84,"12px Arial","normal","center");
   }
-  canvasText(ctx,"CARNES DON ZOILO · CASTELAR · WWW.CARNESDONZOILO.COM.AR",A4_W/2,1720,A4_W-90,"12px Arial","normal","center");
+  canvasText(ctx,"CARNES DON ZOILO · CASTELAR · WWW.CARNESDONZOILO.COM.AR",A4_W/2,1728,A4_W-84,"11px Arial","normal","center");
   return canvas;
 }
 
@@ -2232,7 +2275,7 @@ function openSystemPrintDialog(printableHtml, title="Don Zoilo"){
       body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}
       .print-toolbar{position:sticky;top:0;z-index:20;padding:10px 12px;background:#101820;color:#fff;text-align:center;font-size:14px}
       .print-content{padding:7mm}
-      @page{size:A4 portrait;margin:6mm}
+      @page{size:A4 portrait;margin:5mm}
       @media print{
         .print-toolbar{display:none!important}
         .print-content{padding:0}
@@ -2264,7 +2307,7 @@ function buildPricePrintDocument(autoPrint=false){
 
   const printableCss=`
     *{box-sizing:border-box}
-    body{margin:0;padding:7mm;font-family:Arial,sans-serif;color:#111;background:#fff}
+    html,body{width:210mm;height:297mm;overflow:hidden} body{margin:0;padding:5mm;font-family:Arial,sans-serif;color:#111;background:#fff}
     .price-print-sheet{display:block;width:196mm;min-height:283mm;margin:0 auto}
     .price-print-header{display:grid;grid-template-columns:1fr 1.6fr 1fr;align-items:center;gap:12px;border-bottom:3px solid #0c2748;padding-bottom:9px;margin-bottom:10px}
     .price-brand-name{font-family:Georgia,serif;font-size:24px;font-weight:900;letter-spacing:1px;color:#0c2748}
@@ -2287,11 +2330,24 @@ function buildPricePrintDocument(autoPrint=false){
     .price-print-footer{margin-top:8px;border-top:3px solid #0c2748;text-align:center;display:flex;flex-direction:column;gap:3px;padding-top:5px;color:#0c2748}
     .price-print-footer strong{font-size:8px}
     .price-print-footer span,.price-print-footer small{font-size:7px}
+
+    .price-print-sheet{width:200mm;height:287mm;min-height:287mm;max-height:287mm;overflow:hidden}
+    .price-print-header{height:25mm;margin:0 0 2.5mm;padding:0 0 2mm}
+    .price-sheet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2.2mm;height:242mm;min-height:242mm;align-items:stretch}
+    .price-column{display:flex;flex-direction:column;gap:1.6mm;min-width:0;height:100%}
+    .price-category{display:block;flex:0 0 auto;border:1px solid #aeb6bf;margin:0;break-inside:avoid;overflow:hidden}
+    .price-category h2{font-size:10.5px;line-height:1.1;margin:0;padding:4px 5px;text-align:center;background:#0c2748;color:#fff}
+    .price-category-list{padding:3px 5px}
+    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px;align-items:center;font-size:9.5px;line-height:1.12;min-height:19px;padding:2px 0;border-bottom:1px dotted #a8adb3}
+    .price-sheet-row .product{font-size:9.5px;font-weight:800;white-space:normal}
+    .price-sheet-row .price{font-size:10px;font-weight:900;white-space:nowrap}
+    .price-print-footer{height:11mm;margin:2mm 0 0;padding-top:1.5mm;gap:1px}
+
     .print-help{display:none}
     @page{size:A4 portrait;margin:6mm}
     @media screen{
       body{background:#e9ecef}
-      .price-print-sheet{background:#fff;padding:7mm;box-shadow:0 5px 24px rgba(0,0,0,.18)}
+      .price-print-sheet{background:#fff;padding:0;box-shadow:0 5px 24px rgba(0,0,0,.18)}
       .print-help{display:block;position:sticky;top:0;margin:-7mm -7mm 7mm;padding:12px;background:#101820;color:#fff;text-align:center;font-size:14px}
     }
     @media print{
