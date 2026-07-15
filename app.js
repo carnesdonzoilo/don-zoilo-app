@@ -467,6 +467,11 @@ async function confirmBatchDelivery(){
 
     items.forEach(i=>{ i.delivered=true; i.delivered_at=deliveredAt; });
 
+    // Reflect the delivered state immediately.
+    localSave();
+    renderAll();
+    buildOrderSheet();
+
     const movementId=deliveryMovementId(batchKey);
     const exists=movements.some(m=>m.id===movementId);
     if(!exists){
@@ -482,20 +487,23 @@ async function confirmBatchDelivery(){
         status:"confirmado",
         notes:`Entrega confirmada ${new Date(deliveredAt).toLocaleString("es-AR")}`,
         source_order_id:batchKey,
-        batch_id:batchKey,
         created_at:deliveredAt
       };
 
-      if(supabaseClient){
-        const {error}=await supabaseClient.from("movements").insert(movement);
-        if(error && error.code!=="23505") throw error;
+      try{
+        if(supabaseClient){
+          const {error}=await supabaseClient.from("movements").insert(movement);
+          if(error && error.code!=="23505") throw error;
+        }
+        if(!movements.some(m=>m.id===movementId)) movements.unshift(movement);
+        localSave();
+        renderDashboard();
+        renderMovements();
+      }catch(movementError){
+        console.error("No se pudo registrar la actividad de entrega:",movementError);
+        showDeliveryToast("Pedido entregado. La actividad se reintentará al actualizar.");
       }
-      if(!movements.some(m=>m.id===movementId)) movements.unshift(movement);
     }
-
-    localSave();
-    renderAll();
-    buildOrderSheet();
     const d=$("deliveryConfirmDialog");
     if(typeof d.close==="function") d.close(); else d.removeAttribute("open");
     pendingDeliveryBatch=null;
@@ -543,7 +551,7 @@ function renderOrders(){
           <div class="order-client">${escapeHtml(first.client)}</div>
           <div class="order-info">${fmtDate(first.delivery_date)} · ${escapeHtml((first.payment_method||"").replace("_"," "))}</div>
         </div>
-        <label class="delivery-check"><input type="checkbox" ${allDelivered?"checked":""}>Entregado</label>
+        <label class="delivery-check"><input type="checkbox" class="delivery-checkbox" ${allDelivered?"checked":""} ${allDelivered?"disabled":""}>Entregado</label>
       </div>
 
       <div class="group-items">
@@ -622,15 +630,17 @@ function renderOrders(){
 
     card.querySelector(".view-signed-btn").addEventListener("click",()=>showSignedReceipt(batchId,items));
 
-    const check=card.querySelector('input[type="checkbox"]');
-    check.checked=items.every(i=>i.delivered);
-    check.disabled=items.every(i=>i.delivered);
-    check.addEventListener("change",()=>{
-      if(check.checked){
-        openDeliveryConfirmation(batchId,items);
-        check.checked=false;
-      }
-    });
+    const check=card.querySelector(".delivery-checkbox");
+    if(check){
+      check.checked=allDelivered;
+      check.disabled=allDelivered;
+      check.addEventListener("change",()=>{
+        if(check.checked){
+          openDeliveryConfirmation(batchId,items);
+          check.checked=false;
+        }
+      });
+    }
 
     card.querySelector(".generate-remito-btn").addEventListener("click",()=>openRemito(items));
 

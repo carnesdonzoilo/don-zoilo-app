@@ -676,3 +676,25 @@ dialog::backdrop{background:#0009}
     overflow:hidden!important;
   }
 }
+
+.delivery-checkbox:disabled{opacity:1;accent-color:#159447}
+.order-group.delivered{
+  background:#f0faf3!important;
+  border:2px solid #70bd8b!important;
+}
+.order-group.delivered .group-total{
+  background:#e1f4e7!important;
+}
+.order-group.delivered .order-status.done{
+  display:inline-flex!important;
+  color:#176b35!important;
+  background:#d7f0df!important;
+  border-radius:999px!important;
+  padding:6px 10px!important;
+  font-weight:900!important;
+  text-transform:uppercase!important;
+}
+.order-group.delivered .delivery-check{
+  color:#176b35!important;
+  font-weight:900!important;
+}

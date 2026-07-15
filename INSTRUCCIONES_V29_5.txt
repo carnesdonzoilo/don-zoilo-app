@@ -1,0 +1,17 @@
+VERSIÓN 29.5 – CORRECCIÓN VISUAL Y CASILLERO ENTREGADO
+
+Correcciones:
+- El código ahora usa el casillero Entregado correcto.
+- Ya no confunde Entregado con Seleccionar para impresión masiva.
+- Al confirmar, la tarjeta cambia inmediatamente a verde.
+- Muestra Entregado y contabilizado.
+- El casillero Entregado queda marcado y deshabilitado.
+- Si falla únicamente Actividad reciente, la entrega igual queda guardada y visible.
+- No requiere cambios en Supabase.
+
+Prueba:
+1. Elegir un pedido pendiente.
+2. Marcar Entregado.
+3. Confirmar.
+4. La tarjeta debe quedar verde y mostrar Entregado y contabilizado.
+5. El casillero de impresión masiva debe seguir independiente.

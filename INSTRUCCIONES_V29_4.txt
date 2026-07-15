@@ -1,0 +1,16 @@
+VERSIÓN 29.4 – CORRECCIÓN ENTREGA
+
+Problema corregido:
+- Supabase rechazaba la entrega porque la tabla movements no tiene columna batch_id.
+
+Solución:
+- El movimiento del remito usa source_order_id, columna ya existente.
+- No requiere ejecutar SQL.
+- Conserva confirmación, tarjeta verde y una venta por remito.
+
+Prueba:
+1. Marcar un pedido pendiente como Entregado.
+2. Confirmar.
+3. Debe cerrar la ventana y mostrar Pedido entregado correctamente.
+4. El pedido debe quedar verde.
+5. Actividad reciente debe mostrar una sola venta por el total del remito.
