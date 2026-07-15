@@ -1,0 +1,15 @@
+VERSIÓN 30 – CUENTAS CORRIENTES Y COBRANZAS
+
+Funciones:
+- Nueva pestaña Cuentas corrientes.
+- Saldo anterior por cliente.
+- Fecha y detalle opcional del saldo anterior.
+- Cobranza rápida.
+- Detalle opcional y referencia/cheque.
+- Medios de pago: efectivo, transferencia, cheque y tarjeta.
+- Cobrar saldo total.
+- Historial completo por cliente.
+- Total vendido, cobrado, saldo anterior y saldo actual.
+- Imprimir estado de cuenta A4.
+- Actualiza Saldos y Dashboard.
+- No requiere cambios en Supabase.

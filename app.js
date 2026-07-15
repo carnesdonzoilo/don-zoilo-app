@@ -135,6 +135,8 @@ async function removeMovement(id){
   movements = movements.filter(m => m.id !== id);
   localSave();
   if($("expenseDate")) $("expenseDate").value=todayISO();
+if($("openingDate")) $("openingDate").value=todayISO();
+if($("collectionDate")) $("collectionDate").value=todayISO();
 if($("expenseMonth")) $("expenseMonth").value=todayISO().slice(0,7);
 renderAll();
 }
@@ -1046,7 +1048,7 @@ function renderHomePanel(){
   const billing=selected.reduce((sum,o)=>sum+Number(o.total||0),0);
 
   const receivable=movements.filter(m=>m.status!=="pendiente").reduce((sum,m)=>{
-    if(m.type==="venta") return sum+Number(m.amount||0);
+    if(m.type==="venta" || isOpeningBalanceMovement(m)) return sum+Number(m.amount||0);
     if(m.type==="cobro") return sum-Number(m.amount||0);
     return sum;
   },0);
@@ -1162,13 +1164,249 @@ function renderMovements(){
   list.forEach(m=>box.append(movementCard(m)));
 }
 
+
+function isOpeningBalanceMovement(m){
+  return m.type==="ajuste" && String(m.notes||"").includes("SALDO_INICIAL");
+}
+
+function clientNames(){
+  const names=new Set();
+  movements.forEach(m=>{
+    if(["venta","cobro","ajuste"].includes(m.type) && m.party?.trim()) names.add(m.party.trim());
+  });
+  orders.forEach(o=>{ if(o.client?.trim()) names.add(o.client.trim()); });
+  return [...names].sort((a,b)=>a.localeCompare(b,"es"));
+}
+
+function accountMovementsFor(client){
+  return movements.filter(m=>
+    m.status!=="pendiente" &&
+    String(m.party||"").trim()===client &&
+    ["venta","cobro","ajuste"].includes(m.type)
+  );
+}
+
+function accountTotals(client){
+  const list=accountMovementsFor(client);
+  const opening=list.filter(isOpeningBalanceMovement).reduce((s,m)=>s+Number(m.amount||0),0);
+  const sales=list.filter(m=>m.type==="venta").reduce((s,m)=>s+Number(m.amount||0),0);
+  const collected=list.filter(m=>m.type==="cobro").reduce((s,m)=>s+Number(m.amount||0),0);
+  return {opening,sales,collected,balance:opening+sales-collected};
+}
+
+function fillClientSelects(){
+  const names=clientNames();
+  ["accountClientSelect","openingClient","collectionClient"].forEach(id=>{
+    const select=$(id);
+    if(!select) return;
+    const current=select.value;
+    select.innerHTML='<option value="">Elegir cliente</option>';
+    names.forEach(name=>{
+      const option=document.createElement("option");
+      option.value=name;
+      option.textContent=name;
+      select.append(option);
+    });
+    if(names.includes(current)) select.value=current;
+  });
+}
+
+function renderAccountHistory(client){
+  const box=$("accountHistoryList");
+  if(!box) return;
+  box.innerHTML="";
+  if(!client){
+    box.innerHTML='<div class="account-empty">Elegí un cliente para ver su cuenta corriente.</div>';
+    return;
+  }
+
+  const list=accountMovementsFor(client)
+    .slice()
+    .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)));
+
+  if(!list.length){
+    box.innerHTML='<div class="account-empty">Este cliente todavía no tiene movimientos.</div>';
+    return;
+  }
+
+  list.forEach(m=>{
+    const row=document.createElement("div");
+    const debit=m.type==="venta" || isOpeningBalanceMovement(m);
+    row.className=`account-history-row ${debit?"positive":"negative"}`;
+    const label=isOpeningBalanceMovement(m)
+      ? "Saldo anterior"
+      : m.type==="venta" ? "Venta" : "Cobranza";
+    const sign=debit?"+":"−";
+    row.innerHTML=`
+      <div>${fmtDate(m.date)}</div>
+      <div class="history-main">
+        <strong>${label} · ${escapeHtml(m.concept||"")}</strong>
+        <small>${escapeHtml(m.payment_method||"")} ${m.notes?`· ${escapeHtml(m.notes.replace("SALDO_INICIAL","").replace("|","").trim())}`:""}</small>
+      </div>
+      <div class="history-amount">${sign}${money(m.amount||0)}</div>`;
+    box.append(row);
+  });
+}
+
+function renderAccounts(){
+  fillClientSelects();
+  const client=$("accountClientSelect")?.value||"";
+  const totals=client ? accountTotals(client) : {opening:0,sales:0,collected:0,balance:0};
+  if($("accountCurrentBalance")) $("accountCurrentBalance").textContent=money(totals.balance);
+  if($("accountTotalSales")) $("accountTotalSales").textContent=money(totals.sales);
+  if($("accountTotalCollected")) $("accountTotalCollected").textContent=money(totals.collected);
+  if($("accountOpeningBalance")) $("accountOpeningBalance").textContent=money(totals.opening);
+  renderAccountHistory(client);
+}
+
+async function saveOpeningBalance(event){
+  event.preventDefault();
+  const client=$("openingClient")?.value||"";
+  const amount=Number($("openingAmount")?.value||0);
+  const date=$("openingDate")?.value||todayISO();
+  const detail=String($("openingDetail")?.value||"").trim();
+
+  if(!client) return alert("Elegí un cliente.");
+  if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
+
+  const movement={
+    id:uid(),
+    date,
+    type:"ajuste",
+    party:client,
+    concept:"Saldo anterior",
+    kg:0,
+    amount,
+    payment_method:"cuenta_corriente",
+    status:"confirmado",
+    notes:`SALDO_INICIAL${detail?` | ${detail}`:""}`,
+    source_order_id:null,
+    created_at:new Date().toISOString()
+  };
+
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").insert(movement);
+      if(error) throw error;
+    }
+    movements.unshift(movement);
+    localSave();
+    $("accountClientSelect").value=client;
+    renderAll();
+    $("openingAmount").value="";
+    $("openingDetail").value="";
+    showDeliveryToast("Saldo anterior guardado.");
+  }catch(error){
+    alert("No se pudo guardar el saldo anterior: "+error.message);
+  }
+}
+
+async function saveCollection(event){
+  event.preventDefault();
+  const client=$("collectionClient")?.value||"";
+  const amount=Number($("collectionAmount")?.value||0);
+  const date=$("collectionDate")?.value||todayISO();
+  const method=$("collectionMethod")?.value||"efectivo";
+  const detail=String($("collectionDetail")?.value||"").trim();
+  const reference=String($("collectionReference")?.value||"").trim();
+
+  if(!client) return alert("Elegí un cliente.");
+  if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
+
+  const concept=detail||"Cobranza";
+  const movement={
+    id:uid(),
+    date,
+    type:"cobro",
+    party:client,
+    concept,
+    kg:0,
+    amount,
+    payment_method:method,
+    status:"confirmado",
+    notes:reference?`REFERENCIA: ${reference}`:"",
+    source_order_id:null,
+    created_at:new Date().toISOString()
+  };
+
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").insert(movement);
+      if(error) throw error;
+    }
+    movements.unshift(movement);
+    localSave();
+    $("accountClientSelect").value=client;
+    renderAll();
+    $("collectionAmount").value="";
+    $("collectionDetail").value="";
+    $("collectionReference").value="";
+    showDeliveryToast("Cobranza guardada.");
+  }catch(error){
+    alert("No se pudo guardar la cobranza: "+error.message);
+  }
+}
+
+function collectFullBalance(){
+  const client=$("accountClientSelect")?.value||"";
+  if(!client) return alert("Elegí un cliente.");
+  const balance=accountTotals(client).balance;
+  if(balance<=0) return alert("El cliente no tiene saldo pendiente.");
+  $("collectionClient").value=client;
+  $("collectionAmount").value=balance.toFixed(2);
+  document.querySelector('.tab[data-view="accounts"]')?.click();
+  $("collectionDetail").value="Cancelación total";
+  $("collectionAmount").focus();
+}
+
+function printAccountStatement(){
+  const client=$("accountClientSelect")?.value||"";
+  if(!client) return alert("Elegí un cliente.");
+  const totals=accountTotals(client);
+  const rows=accountMovementsFor(client)
+    .slice()
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)))
+    .map(m=>{
+      const debit=m.type==="venta"||isOpeningBalanceMovement(m);
+      const label=isOpeningBalanceMovement(m)?"Saldo anterior":m.type==="venta"?"Venta":"Cobranza";
+      return `<tr>
+        <td>${fmtDate(m.date)}</td>
+        <td>${escapeHtml(label)}</td>
+        <td>${escapeHtml(m.concept||"")}</td>
+        <td class="num">${debit?money(m.amount):""}</td>
+        <td class="num">${!debit?money(m.amount):""}</td>
+      </tr>`;
+    }).join("");
+
+  const popup=window.open("","_blank");
+  if(!popup) return alert("El navegador bloqueó la ventana.");
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Estado de cuenta ${escapeHtml(client)}</title>
+  <style>
+  body{font-family:Arial;padding:18mm;color:#111}h1{margin:0}.head{display:flex;justify-content:space-between;border-bottom:3px solid #111;padding-bottom:10px;margin-bottom:16px}
+  table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:7px;font-size:12px}th{background:#eee}.num{text-align:right}
+  .summary{margin-top:14px;margin-left:auto;width:320px}.summary div{display:flex;justify-content:space-between;padding:6px;border-bottom:1px solid #ccc}.summary .final{font-size:18px;font-weight:900;border-top:3px solid #111}
+  @page{size:A4 portrait;margin:10mm}@media print{body{padding:0}}
+  </style></head><body>
+  <div class="head"><div><h1>DON ZOILO</h1><div>Estado de cuenta</div></div><div><strong>${escapeHtml(client)}</strong><br>${new Date().toLocaleDateString("es-AR")}</div></div>
+  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="summary">
+    <div><span>Saldo anterior</span><strong>${money(totals.opening)}</strong></div>
+    <div><span>Ventas</span><strong>${money(totals.sales)}</strong></div>
+    <div><span>Cobranzas</span><strong>${money(totals.collected)}</strong></div>
+    <div class="final"><span>Saldo actual</span><strong>${money(totals.balance)}</strong></div>
+  </div>
+  <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script>
+  </body></html>`);
+  popup.document.close();
+}
+
 function renderBalances(){
   const map=new Map();
   movements.filter(m=>m.status!=="pendiente").forEach(m=>{
     const name=(m.party||"Sin nombre").trim();
     if(!map.has(name)) map.set(name,{client:0,supplier:0});
     const b=map.get(name);
-    if(m.type==="venta") b.client+=Number(m.amount||0);
+    if(m.type==="venta" || isOpeningBalanceMovement(m)) b.client+=Number(m.amount||0);
     if(m.type==="cobro") b.client-=Number(m.amount||0);
     if(m.type==="compra") b.supplier+=Number(m.amount||0);
     if(m.type==="pago") b.supplier-=Number(m.amount||0);
@@ -1187,7 +1425,7 @@ function renderBalances(){
   });
 }
 
-function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderPrices(); renderPricePrintSheet(); }
+function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderAccounts(); renderPrices(); renderPricePrintSheet(); }
 
 function exportCSV(){
   const cols=["date","type","party","concept","kg","amount","payment_method","status","notes"];
@@ -2820,6 +3058,14 @@ on("repairDeliveredMovements","click",async()=>{
     if(btn) btn.disabled=false;
   }
 });
+
+
+on("openingBalanceForm","submit",saveOpeningBalance);
+on("collectionForm","submit",saveCollection);
+on("accountClientSelect","change",renderAccounts);
+on("refreshAccounts","click",renderAccounts);
+on("collectFullBalance","click",collectFullBalance);
+on("printAccountStatement","click",printAccountStatement);
 
 on("quickExpenseForm","submit",saveQuickExpense);
 on("expenseCategory","change",()=>{

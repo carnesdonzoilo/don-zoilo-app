@@ -753,3 +753,35 @@ dialog::backdrop{background:#0009}
   .edit-product{grid-column:1/-1}
   .remove-edit-row{grid-column:1/-1}
 }
+
+/* V30 - Cuentas corrientes */
+.account-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(320px,.8fr);gap:16px}
+.account-side{display:grid;gap:16px;align-content:start}
+.account-client-tools{display:flex;gap:10px;align-items:end;margin:12px 0 16px}
+.account-client-tools label{display:grid;gap:5px;min-width:260px;font-weight:800}
+.account-summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.account-summary-grid article{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px}
+.account-summary-grid span{display:block;color:var(--muted);font-size:.78rem;margin-bottom:5px}
+.account-summary-grid strong{font-size:1.12rem}
+.account-actions{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px}
+.account-form{display:grid;gap:10px}
+.account-form label{display:grid;gap:5px;font-weight:800}
+.account-history-list{display:grid;gap:8px}
+.account-history-row{display:grid;grid-template-columns:110px 1fr 150px;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:11px;background:#fff}
+.account-history-row .history-main strong{display:block}
+.account-history-row .history-main small{color:var(--muted)}
+.account-history-row .history-amount{text-align:right;font-weight:900}
+.account-history-row.positive .history-amount{color:#9b2525}
+.account-history-row.negative .history-amount{color:#16723a}
+.account-empty{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}
+@media(max-width:950px){
+  .account-layout{grid-template-columns:1fr}
+  .account-summary-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:560px){
+  .account-client-tools{align-items:stretch;flex-direction:column}
+  .account-client-tools label{min-width:0}
+  .account-summary-grid{grid-template-columns:1fr 1fr}
+  .account-history-row{grid-template-columns:1fr auto}
+  .account-history-row>div:first-child{grid-column:1/-1}
+}

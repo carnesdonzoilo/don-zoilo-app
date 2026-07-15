@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 29.11</div>
+      <div class="subtitle">Control de operaciones · Versión 30</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -33,6 +33,7 @@
       <button class="tab" data-view="movements">Movimientos</button>
       <button class="tab" data-view="expenses">Gastos</button>
       <button class="tab" data-view="balances">Saldos</button>
+      <button class="tab" data-view="accounts">Cuentas corrientes</button>
       <button class="tab" data-view="prices">Precios</button>
     </nav>
 
@@ -410,7 +411,99 @@
       </div>
     </section>
   
-    <section id="remitoView" class="view">
+    
+    <section id="accounts" class="view">
+      <div class="account-layout">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Cuentas corrientes</h2>
+              <p class="muted">Saldo anterior, ventas, cobranzas e historial por cliente.</p>
+            </div>
+          </div>
+
+          <div class="account-client-tools">
+            <label>Cliente
+              <select id="accountClientSelect">
+                <option value="">Elegir cliente</option>
+              </select>
+            </label>
+            <button type="button" id="refreshAccounts" class="secondary">↻ Actualizar</button>
+          </div>
+
+          <div class="account-summary-grid">
+            <article><span>Saldo actual</span><strong id="accountCurrentBalance">$ 0</strong></article>
+            <article><span>Total vendido</span><strong id="accountTotalSales">$ 0</strong></article>
+            <article><span>Total cobrado</span><strong id="accountTotalCollected">$ 0</strong></article>
+            <article><span>Saldo anterior</span><strong id="accountOpeningBalance">$ 0</strong></article>
+          </div>
+
+          <div class="account-actions">
+            <button type="button" id="collectFullBalance" class="primary">Cobrar saldo total</button>
+            <button type="button" id="printAccountStatement" class="secondary">🖨️ Imprimir estado de cuenta</button>
+          </div>
+
+          <div id="accountHistoryList" class="account-history-list"></div>
+        </div>
+
+        <div class="account-side">
+          <div class="panel">
+            <h3>Cargar saldo anterior</h3>
+            <form id="openingBalanceForm" class="account-form">
+              <label>Cliente
+                <select id="openingClient" required>
+                  <option value="">Elegir cliente</option>
+                </select>
+              </label>
+              <label>Importe
+                <input id="openingAmount" type="number" min="0" step="0.01" inputmode="decimal" required>
+              </label>
+              <label>Fecha
+                <input id="openingDate" type="date" required>
+              </label>
+              <label>Detalle opcional
+                <input id="openingDetail" placeholder="Ej.: Saldo pendiente anterior al sistema">
+              </label>
+              <button type="submit" class="primary">Guardar saldo anterior</button>
+            </form>
+          </div>
+
+          <div class="panel">
+            <h3>Cobranza rápida</h3>
+            <form id="collectionForm" class="account-form">
+              <label>Cliente
+                <select id="collectionClient" required>
+                  <option value="">Elegir cliente</option>
+                </select>
+              </label>
+              <label>Importe
+                <input id="collectionAmount" type="number" min="0" step="0.01" inputmode="decimal" required>
+              </label>
+              <label>Fecha
+                <input id="collectionDate" type="date" required>
+              </label>
+              <label>Medio de pago
+                <select id="collectionMethod">
+                  <option value="efectivo">Efectivo</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="tarjeta">Tarjeta</option>
+                </select>
+              </label>
+              <label>Detalle opcional
+                <input id="collectionDetail" placeholder="Ej.: Pago parcial, cheque Nación, transferencia remito 145">
+              </label>
+              <label>Referencia / cheque
+                <input id="collectionReference" placeholder="Opcional">
+              </label>
+              <button type="submit" class="primary">Guardar cobranza</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+<section id="remitoView" class="view">
       <div class="panel no-print remito-toolbar">
         <button id="backFromRemito" class="secondary">← Volver a pedidos</button>
         <button id="printRemito" class="secondary">🖨️ Imprimir normal</button>
