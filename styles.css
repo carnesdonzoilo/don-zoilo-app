@@ -463,3 +463,5 @@ dialog::backdrop{background:#0009}
     width:196mm;min-height:283mm;margin:0;padding:0;color:#111;background:#fff
   }
 }
+
+.print-device-note{display:block;flex-basis:100%;color:var(--muted);margin-top:4px}

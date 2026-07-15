@@ -1,0 +1,8 @@
+VERSIÓN 26 – IMPRESIÓN UNIVERSAL
+
+- Un solo botón Imprimir.
+- Android abre el selector del sistema.
+- Elegí FxPrint/GD-88H o una impresora normal.
+- No hace falta guardar el PDF primero.
+- Lista de precios A4 usa el nuevo flujo.
+- No requiere cambios en Supabase.

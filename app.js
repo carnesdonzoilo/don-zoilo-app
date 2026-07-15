@@ -1549,6 +1549,45 @@ on("loadCatalogPrices","click",async()=>{
   catch(e){ alert("No se pudo cargar el catálogo: "+e.message); }
   finally{ if(btn) btn.disabled=false; }
 });
+
+function openSystemPrintDialog(printableHtml, title="Don Zoilo"){
+  const popup=window.open("","_blank");
+  if(!popup){
+    alert("El navegador bloqueó la ventana de impresión. Habilitá las ventanas emergentes para este sitio.");
+    return;
+  }
+
+  popup.document.open();
+  popup.document.write(`<!doctype html>
+  <html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>${escapeHtml(title)}</title>
+    <style>
+      *{box-sizing:border-box}
+      body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}
+      .print-toolbar{position:sticky;top:0;z-index:20;padding:10px 12px;background:#101820;color:#fff;text-align:center;font-size:14px}
+      .print-content{padding:7mm}
+      @page{size:A4 portrait;margin:7mm}
+      @media print{
+        .print-toolbar{display:none!important}
+        .print-content{padding:0}
+      }
+    </style>
+  </head>
+  <body>
+    <div class="print-toolbar">Elegí FxPrint/GD-88H o tu impresora normal en el selector de Android.</div>
+    <div class="print-content">${printableHtml}</div>
+    <script>
+      window.addEventListener("load",()=>setTimeout(()=>window.print(),350));
+    <\/script>
+  </body>
+  </html>`);
+  popup.document.close();
+  popup.focus();
+}
+
 function buildPricePrintDocument(autoPrint=false){
   renderPricePrintSheet();
   const sheet=$("pricePrintSheet");
@@ -1627,8 +1666,14 @@ on("previewPriceList","click",()=>{
 });
 
 on("printPriceList","click",()=>{
-  try{ buildPricePrintDocument(true); }
-  catch(e){ alert("No se pudo abrir la impresión: "+e.message); }
+  try{
+    renderPricePrintSheet();
+    const sheet=$("pricePrintSheet");
+    if(!sheet) throw new Error("No se encontró la lista de precios.");
+    openSystemPrintDialog(sheet.outerHTML,"Lista de precios Don Zoilo");
+  }catch(e){
+    alert("No se pudo abrir la impresión: "+e.message);
+  }
 });
 on("pricePrintTitle","input",renderPricePrintSheet);
 on("pricePrintPhone","input",renderPricePrintSheet);
@@ -1706,3 +1751,12 @@ $("installBtn").addEventListener("click",async()=>{
   renderAll();
   buildOrderSheet();
 })();
+
+function printRemitoFromElement(elementOrId, title="Remito Don Zoilo"){
+  const el=typeof elementOrId==="string" ? $(elementOrId) : elementOrId;
+  if(!el){
+    alert("No se encontró el remito para imprimir.");
+    return;
+  }
+  openSystemPrintDialog(el.outerHTML,title);
+}
