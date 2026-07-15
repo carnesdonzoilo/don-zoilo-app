@@ -422,6 +422,91 @@ function printSelectedRemitos(){
   popup.focus();
 }
 
+
+function showDeliveryToast(message){
+  document.querySelector(".delivery-toast")?.remove();
+  const toast=document.createElement("div");
+  toast.className="delivery-toast";
+  toast.textContent=message;
+  document.body.append(toast);
+  setTimeout(()=>toast.remove(),3000);
+}
+
+function deliveryMovementId(batchKey){ return `delivery-${batchKey}`; }
+function orderBatchTotal(items){ return items.reduce((s,i)=>s+Number(i.total||0),0); }
+function orderBatchKg(items){ return items.reduce((s,i)=>s+(((i.unit||"kg")==="kg")?Number(i.quantity||0):0),0); }
+
+function openDeliveryConfirmation(batchKey,items){
+  if(items.every(i=>i.delivered)) return alert("Este pedido ya fue entregado.");
+  pendingDeliveryBatch={batchKey,items};
+  $("deliveryConfirmClient").textContent=items[0].client||"";
+  $("deliveryConfirmNumber").textContent=`N.º ${remitoSequence(items)}`;
+  $("deliveryConfirmTotal").textContent=money(orderBatchTotal(items));
+  $("deliveryConfirmDate").textContent=fmtDate(items[0].delivery_date);
+  const d=$("deliveryConfirmDialog");
+  if(typeof d.showModal==="function") d.showModal(); else d.setAttribute("open","");
+}
+
+async function confirmBatchDelivery(){
+  if(!pendingDeliveryBatch) return;
+  const {batchKey,items}=pendingDeliveryBatch;
+  if(items.every(i=>i.delivered)) return alert("Este pedido ya fue entregado.");
+
+  const btn=$("confirmDeliveryBtn");
+  btn.disabled=true;
+  try{
+    const deliveredAt=new Date().toISOString();
+    const ids=items.map(i=>i.id);
+
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("orders")
+        .update({delivered:true,delivered_at:deliveredAt})
+        .in("id",ids);
+      if(error) throw error;
+    }
+
+    items.forEach(i=>{ i.delivered=true; i.delivered_at=deliveredAt; });
+
+    const movementId=deliveryMovementId(batchKey);
+    const exists=movements.some(m=>m.id===movementId);
+    if(!exists){
+      const movement={
+        id:movementId,
+        date:items[0].delivery_date||todayISO(),
+        type:"venta",
+        party:items[0].client||"",
+        concept:`Remito ${remitoSequence(items)}`,
+        kg:orderBatchKg(items),
+        amount:orderBatchTotal(items),
+        payment_method:items[0].payment_method||"cuenta_corriente",
+        status:"confirmado",
+        notes:`Entrega confirmada ${new Date(deliveredAt).toLocaleString("es-AR")}`,
+        source_order_id:batchKey,
+        batch_id:batchKey,
+        created_at:deliveredAt
+      };
+
+      if(supabaseClient){
+        const {error}=await supabaseClient.from("movements").insert(movement);
+        if(error && error.code!=="23505") throw error;
+      }
+      if(!movements.some(m=>m.id===movementId)) movements.unshift(movement);
+    }
+
+    localSave();
+    renderAll();
+    buildOrderSheet();
+    const d=$("deliveryConfirmDialog");
+    if(typeof d.close==="function") d.close(); else d.removeAttribute("open");
+    pendingDeliveryBatch=null;
+    showDeliveryToast("Pedido entregado correctamente.");
+  }catch(e){
+    alert("No se pudo confirmar la entrega: "+e.message);
+  }finally{
+    btn.disabled=false;
+  }
+}
+
 function renderOrders(){
   const date=$("ordersFilterDate")?.value;
   const filtered=orders.filter(o=>!date||o.delivery_date===date);
@@ -453,7 +538,7 @@ function renderOrders(){
         <input type="checkbox" class="remito-select" data-batch="${escapeHtml(batchId)}" ${selectedRemitoBatches.has(batchId)?"checked":""}>
         <span>Seleccionar para impresión masiva</span>
       </div>
-      <div class="order-group-head">
+      <div class="order-group-head"><div>${items.every(i=>i.delivered)?`<span class="delivered-stamp">✅ ENTREGADO</span><div class="delivery-time">${items[0].delivered_at?new Date(items[0].delivered_at).toLocaleString("es-AR"):""}</div>`:""}</div>
         <div>
           <div class="order-client">${escapeHtml(first.client)}</div>
           <div class="order-info">${fmtDate(first.delivery_date)} · ${escapeHtml((first.payment_method||"").replace("_"," "))}</div>
@@ -538,18 +623,13 @@ function renderOrders(){
     card.querySelector(".view-signed-btn").addEventListener("click",()=>showSignedReceipt(batchId,items));
 
     const check=card.querySelector('input[type="checkbox"]');
-    check.addEventListener("change",async()=>{
-      check.disabled=true;
-      const target=check.checked;
-      try{
-        for(const item of items){
-          if(Boolean(item.delivered)!==target) await toggleDelivered(item,target);
-        }
-        renderAll();
-      }catch(e){
-        check.checked=!target;
-        alert("No se pudo actualizar: "+e.message);
-      }finally{check.disabled=false}
+    check.checked=items.every(i=>i.delivered);
+    check.disabled=items.every(i=>i.delivered);
+    check.addEventListener("change",()=>{
+      if(check.checked){
+        openDeliveryConfirmation(batchId,items);
+        check.checked=false;
+      }
     });
 
     card.querySelector(".generate-remito-btn").addEventListener("click",()=>openRemito(items));
@@ -1198,6 +1278,7 @@ $("orderForm").addEventListener("submit",async e=>{
 let currentRemitoItems=[];
 const selectedRemitoBatches=new Set();
 const signedReceiptCache=new Map();
+let pendingDeliveryBatch=null;
 
 function remitoSequence(items){
   const raw=(items?.[0]?.batch_id || items?.[0]?.id || "").replace(/[^a-zA-Z0-9]/g,"");
@@ -2314,6 +2395,14 @@ document.querySelectorAll(".home-date-btn").forEach(btn=>{
 });
 on("homeSelectedDate","change",renderHomePanel);
 
+
+
+on("cancelDeliveryConfirm","click",()=>{
+  pendingDeliveryBatch=null;
+  const d=$("deliveryConfirmDialog");
+  if(typeof d.close==="function") d.close(); else d.removeAttribute("open");
+});
+on("confirmDeliveryBtn","click",confirmBatchDelivery);
 
 on("selectAllRemitos","change",()=>{
   const checked=$("selectAllRemitos")?.checked||false;

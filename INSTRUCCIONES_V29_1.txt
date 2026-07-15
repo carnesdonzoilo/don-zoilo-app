@@ -1,0 +1,11 @@
+VERSIÓN 29.1 – ENTREGAS
+
+- Confirmación antes de entregar.
+- Actualiza todos los productos del pedido en Supabase.
+- Guarda fecha y hora.
+- Tarjeta verde.
+- Deshabilita Entregado luego de confirmar.
+- Registra una sola venta por remito.
+- Evita duplicados.
+
+No requiere cambios en Supabase.

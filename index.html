@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 28</div>
+      <div class="subtitle">Control de operaciones · Versión 29.1</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -487,6 +487,23 @@
         <button type="button" id="closeSignedReceipt" class="secondary">Cerrar</button>
       </div>
       <img id="signedReceiptImage" class="signed-receipt-image" alt="Remito firmado">
+    </div>
+  </dialog>
+
+  <dialog id="deliveryConfirmDialog">
+    <div class="dialog-card delivery-confirm-card">
+      <h2>Confirmar entrega</h2>
+      <div class="delivery-summary">
+        <div><span>Cliente</span><strong id="deliveryConfirmClient">—</strong></div>
+        <div><span>Remito</span><strong id="deliveryConfirmNumber">—</strong></div>
+        <div><span>Total</span><strong id="deliveryConfirmTotal">$ 0</strong></div>
+        <div><span>Fecha</span><strong id="deliveryConfirmDate">—</strong></div>
+      </div>
+      <p class="delivery-warning">¿Confirmás que este pedido fue entregado?</p>
+      <div class="dialog-actions">
+        <button type="button" id="cancelDeliveryConfirm" class="secondary">Cancelar</button>
+        <button type="button" id="confirmDeliveryBtn" class="primary">✅ Confirmar entrega</button>
+      </div>
     </div>
   </dialog>
 
