@@ -681,7 +681,16 @@ function renderExpenseSummary(){
   $("expenseMonthTotal").textContent=money(total);
 }
 
+
+function ensureTodayExpenseDate(){
+  const field=$("expenseDate");
+  if(!field) return;
+  const today=todayISO();
+  if(!field.value) field.value=today;
+}
+
 function renderExpenses(){
+  ensureTodayExpenseDate();
   renderExpenseCategories();
   renderExpenseRecent();
   renderExpenseSummary();
@@ -727,6 +736,7 @@ async function saveQuickExpense(event){
 
     $("expenseAmount").value="";
     $("expenseDetail").value="";
+    if($("expenseDate")) $("expenseDate").value=todayISO();
     $("expenseAmount").focus();
     showDeliveryToast(`Gasto ${category} guardado.`);
   }catch(error){
@@ -2789,3 +2799,7 @@ function printRemitoFromElement(elementOrId, title="Remito Don Zoilo"){
   }
   openSystemPrintDialog(el.outerHTML,title);
 }
+
+on("expenseDate","focus",()=>{
+  if(!$("expenseDate").value) $("expenseDate").value=todayISO();
+});

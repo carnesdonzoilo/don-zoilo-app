@@ -1,0 +1,8 @@
+VERSIÓN 29.10 – FECHA ACTUAL EN GASTOS
+
+Cambios:
+- La fecha del módulo Gastos se completa automáticamente con hoy.
+- Al volver a abrir la pestaña Gastos, vuelve a sugerir la fecha actual.
+- Después de guardar un gasto, mantiene la fecha de hoy.
+- La fecha puede modificarse manualmente para cargar gastos anteriores.
+- No requiere cambios en Supabase.
