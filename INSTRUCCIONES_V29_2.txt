@@ -1,0 +1,19 @@
+VERSIÓN 29.2 – IMPRESIÓN Y LISTA DE PRECIOS
+
+Cambios:
+- Lista de precios ocupa casi toda la hoja A4.
+- Letras y precios más grandes.
+- Menos espacio en blanco.
+- Diseño en tres columnas estables.
+- Selector de tamaño Grande/Mediano.
+- Impresión A4 ajustada a una sola hoja.
+- Mantiene botón GD-88H / FxPrint.
+
+No requiere cambios en Supabase.
+
+Prueba:
+1. Entrar en Precios.
+2. Elegir tamaño Grande.
+3. Abrir Vista previa A4.
+4. Tocar Imprimir A4.
+5. Confirmar que salga una sola hoja.

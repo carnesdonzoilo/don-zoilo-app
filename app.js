@@ -1770,6 +1770,11 @@ function catalogPrice(name,defaultPrice){
 }
 
 function renderPricePrintSheet(){
+  const sheet=$("pricePrintSheet");
+  const density=$("priceDensity")?.value||"large";
+  if(sheet){
+    sheet.classList.toggle("density-medium",density==="medium");
+  }
   const grid=$("priceSheetGrid");
   if(!grid) return;
   grid.innerHTML="";
@@ -1975,7 +1980,7 @@ function buildPriceCanvas(){
   const gap=18;
   const colW=(A4_W-margin*2-gap*2)/3;
   const top=145;
-  const bottom=1658;
+  const bottom=1695;
   let col=0;
   let y=top;
 
@@ -1985,31 +1990,31 @@ function buildPriceCanvas(){
   };
 
   for(const [category,items] of Object.entries(PRICE_CATALOG)){
-    const estimated=46+items.length*30;
+    const estimated=44+items.length*34;
     if(y+estimated>bottom && col<2) moveColumn();
 
     const x=margin+col*(colW+gap);
     ctx.fillStyle="#0c2748";
-    ctx.fillRect(x,y,colW,39);
+    ctx.fillRect(x,y,colW,42);
     ctx.fillStyle="#fff";
-    canvasText(ctx,category.toUpperCase(),x+colW/2,y+8,colW-12,"20px Arial","bold","center");
-    y+=47;
+    canvasText(ctx,category.toUpperCase(),x+colW/2,y+9,colW-12,"22px Arial","bold","center");
+    y+=50;
 
     for(const [name,defaultPrice] of items){
-      if(y+30>bottom && col<2){
+      if(y+34>bottom && col<2){
         moveColumn();
       }
       const xx=margin+col*(colW+gap);
       ctx.fillStyle="#111";
-      canvasText(ctx,name.toUpperCase(),xx+5,y,colW-125,"16px Arial","bold");
-      canvasText(ctx,moneyPlain(catalogPrice(name,defaultPrice)),xx+colW-5,y,120,"17px Arial","bold","right");
+      canvasText(ctx,name.toUpperCase(),xx+5,y,colW-128,"18px Arial","bold");
+      canvasText(ctx,moneyPlain(catalogPrice(name,defaultPrice)),xx+colW-5,y,124,"19px Arial","bold","right");
       ctx.strokeStyle="#bbb";
       ctx.lineWidth=1;
       ctx.beginPath();
-      ctx.moveTo(xx+5,y+25);
-      ctx.lineTo(xx+colW-5,y+25);
+      ctx.moveTo(xx+5,y+28);
+      ctx.lineTo(xx+colW-5,y+28);
       ctx.stroke();
-      y+=30;
+      y+=34;
     }
     y+=10;
   }
@@ -2227,7 +2232,7 @@ function openSystemPrintDialog(printableHtml, title="Don Zoilo"){
       body{margin:0;background:#fff;color:#111;font-family:Arial,sans-serif}
       .print-toolbar{position:sticky;top:0;z-index:20;padding:10px 12px;background:#101820;color:#fff;text-align:center;font-size:14px}
       .print-content{padding:7mm}
-      @page{size:A4 portrait;margin:7mm}
+      @page{size:A4 portrait;margin:6mm}
       @media print{
         .print-toolbar{display:none!important}
         .print-content{padding:0}
@@ -2271,19 +2276,19 @@ function buildPricePrintDocument(autoPrint=false){
     .price-contact strong{font-size:8px;color:#b5232a}
     .price-contact span{font-size:17px;font-weight:900;color:#b5232a}
     .price-contact small{font-size:7px;color:#0c2748;font-weight:800}
-    .price-sheet-grid{columns:3;column-gap:10px}
-    .price-category{break-inside:avoid;border:1px solid #bfc5cc;margin:0 0 8px;background:#fff}
-    .price-category h2{font-size:10px;line-height:1.2;margin:0;padding:5px 7px;text-align:center;background:#0c2748;color:#fff;letter-spacing:.5px}
-    .price-category-list{padding:4px 6px}
-    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:end;font-size:7px;line-height:1.35;padding:1.2px 0;border-bottom:1px dotted #a8adb3}
+    .price-sheet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;align-items:stretch;min-height:238mm}
+    .price-category{display:flex;flex-direction:column;break-inside:avoid;border:1px solid #bfc5cc;margin:0;background:#fff}
+    .price-category h2{font-size:12px;line-height:1.2;margin:0;padding:6px 7px;text-align:center;background:#0c2748;color:#fff;letter-spacing:.5px}
+    .price-category-list{padding:5px 7px;flex:1}
+    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:end;font-size:10px;line-height:1.25;min-height:24px;padding:3px 0;border-bottom:1px dotted #a8adb3}
     .price-sheet-row:last-child{border-bottom:0}
     .price-sheet-row .product{font-weight:700;text-transform:uppercase;overflow:hidden}
-    .price-sheet-row .price{font-weight:900;white-space:nowrap}
+    .price-sheet-row .price{font-size:10.5px;font-weight:900;white-space:nowrap}
     .price-print-footer{margin-top:8px;border-top:3px solid #0c2748;text-align:center;display:flex;flex-direction:column;gap:3px;padding-top:5px;color:#0c2748}
     .price-print-footer strong{font-size:8px}
     .price-print-footer span,.price-print-footer small{font-size:7px}
     .print-help{display:none}
-    @page{size:A4 portrait;margin:7mm}
+    @page{size:A4 portrait;margin:6mm}
     @media screen{
       body{background:#e9ecef}
       .price-print-sheet{background:#fff;padding:7mm;box-shadow:0 5px 24px rgba(0,0,0,.18)}
@@ -2358,6 +2363,7 @@ on("printPriceList","click",()=>{
 on("pricePrintTitle","input",renderPricePrintSheet);
 on("pricePrintPhone","input",renderPricePrintSheet);
 on("pricePrintDate","change",renderPricePrintSheet);
+on("priceDensity","change",renderPricePrintSheet);
 window.addEventListener("afterprint",()=>document.body.classList.remove("price-list-printing"));
 
 on("priceSearch","input",renderPrices);

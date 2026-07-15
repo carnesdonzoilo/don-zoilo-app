@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 29.1</div>
+      <div class="subtitle">Control de operaciones · Versión 29.2</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -218,8 +218,8 @@
           <label>Título<input id="sheetTitle" value="PEDIDOS DON ZOILO"></label>
           <button id="refreshSheet" class="secondary">Actualizar hoja</button>
           <button id="copyOrders" class="secondary">Copiar pedidos</button>
-          <button id="printSheet" class="secondary">🖨️ Imprimir normal</button>
-          <button id="thermalSheet" class="primary">📱 GD-88H / FxPrint</button>
+          <button id="printSheet" class="secondary">🖨️ Imprimir A4</button>
+          <button id="thermalSheet" class="primary">📱 Imprimir GD-88H</button>
         </div>
         <p class="muted small">Se incluyen los clientes con pedidos de la fecha elegida, ordenados por recorrido. Los casilleros restantes quedan numerados y vacíos.</p>
       </div>
@@ -436,6 +436,12 @@
         <div id="priceList" class="price-list"></div>
 
         <div class="price-print-settings">
+          <label>Tamaño de texto
+            <select id="priceDensity">
+              <option value="large" selected>Grande</option>
+              <option value="medium">Mediano</option>
+            </select>
+          </label>
           <label>Título
             <input id="pricePrintTitle" value="LISTA DE PRECIOS">
           </label>

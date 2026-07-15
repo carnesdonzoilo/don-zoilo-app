@@ -510,3 +510,81 @@ dialog::backdrop{background:#0009}
 .delivered-stamp{display:inline-flex;align-items:center;gap:6px;border-radius:999px;background:#dff3e6;color:#1d6a39;padding:5px 9px;font-size:.78rem;font-weight:900}
 .delivery-time{font-size:.75rem;color:#2e6d44;margin-top:4px}
 .delivery-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:9999;background:#173b27;color:#fff;padding:12px 16px;border-radius:12px;box-shadow:0 8px 25px #0003;font-weight:800}
+
+/* V29.2 - lista de precios A4 aprovechando toda la hoja */
+.price-print-sheet{
+  width:196mm;
+  min-height:283mm;
+  margin:0 auto;
+  background:#fff;
+}
+.price-print-header{
+  display:grid!important;
+  grid-template-columns:1fr 1.55fr 1fr!important;
+  gap:8px!important;
+  align-items:center!important;
+  padding-bottom:6px!important;
+  margin-bottom:8px!important;
+}
+.price-brand-name{font-size:22px!important}
+.price-brand-sub{font-size:7px!important}
+.price-print-title-wrap h1{font-size:25px!important}
+.price-print-title-wrap div{font-size:10px!important;letter-spacing:2px!important}
+.price-contact{padding:5px!important}
+.price-contact span{font-size:16px!important}
+.price-sheet-grid{
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:7px!important;
+  align-items:stretch!important;
+  min-height:238mm!important;
+  columns:auto!important;
+}
+.price-category{
+  display:flex!important;
+  flex-direction:column!important;
+  break-inside:avoid!important;
+  margin:0!important;
+  min-height:0!important;
+}
+.price-category h2{
+  font-size:12px!important;
+  padding:6px 7px!important;
+  flex:0 0 auto!important;
+}
+.price-category-list{
+  padding:5px 7px!important;
+  flex:1 1 auto!important;
+}
+.price-sheet-row{
+  grid-template-columns:minmax(0,1fr) auto!important;
+  font-size:10px!important;
+  line-height:1.25!important;
+  min-height:24px!important;
+  padding:3px 0!important;
+}
+.price-sheet-row .product{padding-right:4px!important}
+.price-sheet-row .price{font-size:10.5px!important;font-weight:900!important}
+.price-print-footer{
+  margin-top:7px!important;
+  padding-top:4px!important;
+}
+.price-print-footer strong{font-size:8.5px!important}
+.price-print-footer span,.price-print-footer small{font-size:7.5px!important}
+
+.price-print-sheet.density-medium .price-sheet-row{
+  font-size:8.8px!important;
+  min-height:21px!important;
+  padding:2px 0!important;
+}
+.price-print-sheet.density-medium .price-sheet-row .price{font-size:9.2px!important}
+.price-print-sheet.density-medium .price-category h2{font-size:11px!important}
+.price-print-sheet.density-medium .price-sheet-grid{gap:6px!important}
+
+@page{size:A4 portrait;margin:6mm}
+@media print{
+  body.price-list-printing #pricePrintSheet{
+    width:198mm!important;
+    min-height:285mm!important;
+  }
+}
