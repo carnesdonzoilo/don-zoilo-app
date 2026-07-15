@@ -729,3 +729,27 @@ dialog::backdrop{background:#0009}
 @media(max-width:520px){
   .quick-expense-form{grid-template-columns:1fr!important}
 }
+
+/* V29.11 - agregar y eliminar productos al editar remitos */
+.edit-items-list{display:grid;gap:8px;margin:10px 0}
+.edit-item-row{
+  display:grid!important;
+  grid-template-columns:95px 110px minmax(170px,1fr) 130px auto!important;
+  gap:8px!important;
+  align-items:center!important;
+}
+.remove-edit-row{
+  border:0;
+  background:#f7e7e7;
+  color:#8f2525;
+  border-radius:9px;
+  padding:10px 12px;
+  font-weight:900;
+  cursor:pointer;
+}
+.add-edit-row{margin:4px 0 12px}
+@media(max-width:750px){
+  .edit-item-row{grid-template-columns:1fr 1fr!important}
+  .edit-product{grid-column:1/-1}
+  .remove-edit-row{grid-column:1/-1}
+}

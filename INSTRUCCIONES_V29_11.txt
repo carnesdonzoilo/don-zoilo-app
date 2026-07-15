@@ -1,0 +1,19 @@
+VERSIÓN 29.11 – AGREGAR Y SACAR PRODUCTOS EN REMITOS
+
+Cambios:
+- Editar pedido permite agregar productos.
+- Cada producto tiene botón Eliminar.
+- Se pueden cambiar cantidad, unidad, producto y precio.
+- Guarda productos nuevos en el mismo remito.
+- Elimina de Supabase los productos quitados.
+- Recalcula los totales.
+- Actualiza hoja de pedidos y remitos.
+- No requiere cambios en Supabase.
+
+Prueba:
+1. Abrir un pedido pendiente.
+2. Tocar Editar pedido.
+3. Agregar producto.
+4. Eliminar otro.
+5. Guardar.
+6. Revisar pedido y remito.

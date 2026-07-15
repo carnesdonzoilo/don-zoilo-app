@@ -239,27 +239,86 @@ async function saveEditedOrderGroup(items, card){
   const client=card.querySelector(".edit-client").value.trim();
   const payment=card.querySelector(".edit-payment").value;
   const rows=[...card.querySelectorAll(".edit-item-row")];
+  const batchId=items[0]?.batch_id||items[0]?.id;
+
+  const edited=rows.map(row=>{
+    const quantity=Number(row.querySelector(".edit-quantity").value||0);
+    const unit=row.querySelector(".edit-unit").value;
+    const product=row.querySelector(".edit-product").value.trim();
+    const unit_price=Number(row.querySelector(".edit-price").value||0);
+    return {
+      id:row.dataset.orderId||null,
+      quantity,
+      unit,
+      product,
+      unit_price,
+      total:quantity*unit_price
+    };
+  }).filter(row=>row.product && row.quantity>0);
+
+  if(!edited.length){
+    alert("El remito debe tener al menos un producto.");
+    return;
+  }
+
+  const keptIds=new Set(edited.filter(row=>row.id).map(row=>row.id));
+  const deletedItems=items.filter(item=>!keptIds.has(item.id));
+  const first=items[0];
+  const now=new Date().toISOString();
 
   try{
-    for(let i=0;i<items.length;i++){
-      const controls=rows[i].querySelectorAll("input,select");
-      const quantity=Number(controls[0].value||0);
-      const unit=controls[1].value;
-      const product=controls[2].value.trim();
-      const unit_price=Number(controls[3].value||0);
-      const changes={client,payment_method:payment,quantity,unit,product,unit_price,total:quantity*unit_price};
-      await rememberProductPrice(product,unit_price);
+    if(supabaseClient && deletedItems.length){
+      const {error}=await supabaseClient
+        .from("orders")
+        .delete()
+        .in("id",deletedItems.map(item=>item.id));
+      if(error) throw error;
+    }
+
+    const savedRows=[];
+    for(const row of edited){
+      const existing=row.id ? items.find(item=>item.id===row.id) : null;
+      const record={
+        id:row.id||uid(),
+        batch_id:batchId,
+        delivery_date:first.delivery_date,
+        client,
+        product:row.product,
+        quantity:row.quantity,
+        unit:row.unit,
+        unit_price:row.unit_price,
+        total:row.total,
+        payment_method:payment,
+        notes:first.notes||"",
+        delivered:false,
+        delivered_at:null,
+        created_at:existing?.created_at||now
+      };
+
+      await rememberProductPrice(record.product,record.unit_price);
 
       if(supabaseClient){
-        const {data,error}=await supabaseClient.from("orders").update(changes).eq("id",items[i].id).select().single();
+        const {data,error}=await supabaseClient
+          .from("orders")
+          .upsert(record,{onConflict:"id"})
+          .select()
+          .single();
         if(error) throw error;
-        orders=orders.map(o=>o.id===items[i].id?data:o);
+        savedRows.push(data);
       }else{
-        orders=orders.map(o=>o.id===items[i].id?{...o,...changes}:o);
+        savedRows.push(record);
       }
     }
+
+    const originalIds=new Set(items.map(item=>item.id));
+    orders=orders.filter(order=>!originalIds.has(order.id));
+    orders.push(...savedRows);
+    orders.sort((a,b)=>String(b.created_at||b.delivery_date).localeCompare(String(a.created_at||a.delivery_date)));
+
     localSave();
     renderAll();
+    buildOrderSheet();
+    showDeliveryToast("Remito actualizado correctamente.");
   }catch(e){
     alert("No se pudo modificar el pedido: "+e.message);
   }
@@ -818,13 +877,17 @@ function renderOrders(){
             </select>
           </label>
         </div>
-        ${items.map(o=>`
-          <div class="edit-item-row">
-            <input type="number" step="0.01" min="0" value="${Number(o.quantity||0)}">
-            <select>${["kg","piezas","caja","gancho","unidad"].map(u=>`<option value="${u}" ${u===(o.unit||"kg")?"selected":""}>${u}</option>`).join("")}</select>
-            <input value="${escapeHtml(o.product)}">
-            <input type="number" step="0.01" min="0" value="${Number(o.unit_price||0)}">
-          </div>`).join("")}
+        <div class="edit-items-list">
+          ${items.map(o=>`
+            <div class="edit-item-row" data-order-id="${escapeHtml(o.id)}">
+              <input class="edit-quantity" type="number" step="0.01" min="0" value="${Number(o.quantity||0)}" placeholder="Cantidad">
+              <select class="edit-unit">${["kg","piezas","caja","gancho","unidad"].map(u=>`<option value="${u}" ${u===(o.unit||"kg")?"selected":""}>${u}</option>`).join("")}</select>
+              <input class="edit-product" value="${escapeHtml(o.product)}" placeholder="Producto">
+              <input class="edit-price" type="number" step="0.01" min="0" value="${Number(o.unit_price||0)}" placeholder="Precio">
+              <button type="button" class="remove-edit-row">Eliminar</button>
+            </div>`).join("")}
+        </div>
+        <button type="button" class="add-edit-row secondary">＋ Agregar producto</button>
         <div class="group-footer">
           <button type="button" class="cancel-edit-btn">Cancelar</button>
           <button type="button" class="save-edit-btn">Guardar cambios</button>
@@ -874,6 +937,36 @@ function renderOrders(){
     card.querySelector(".generate-remito-btn").addEventListener("click",()=>openRemito(items));
 
     const editArea=card.querySelector(".edit-group");
+    const editItemsList=card.querySelector(".edit-items-list");
+
+    function bindRemoveButtons(){
+      card.querySelectorAll(".remove-edit-row").forEach(button=>{
+        button.onclick=()=>{
+          const rows=card.querySelectorAll(".edit-item-row");
+          if(rows.length<=1) return alert("El remito debe conservar al menos un producto.");
+          button.closest(".edit-item-row").remove();
+        };
+      });
+    }
+
+    function addEmptyEditRow(){
+      const row=document.createElement("div");
+      row.className="edit-item-row";
+      row.dataset.orderId="";
+      row.innerHTML=`
+        <input class="edit-quantity" type="number" step="0.01" min="0" value="1" placeholder="Cantidad">
+        <select class="edit-unit">${["kg","piezas","caja","gancho","unidad"].map(u=>`<option value="${u}">${u}</option>`).join("")}</select>
+        <input class="edit-product" value="" placeholder="Producto">
+        <input class="edit-price" type="number" step="0.01" min="0" value="0" placeholder="Precio">
+        <button type="button" class="remove-edit-row">Eliminar</button>`;
+      editItemsList.append(row);
+      bindRemoveButtons();
+      row.querySelector(".edit-product").focus();
+    }
+
+    bindRemoveButtons();
+    card.querySelector(".add-edit-row").addEventListener("click",addEmptyEditRow);
+
     card.querySelector(".edit-order-btn").addEventListener("click",()=>{
       if(allDelivered) return alert("Primero desmarcá Entregado para modificar el pedido.");
       editArea.classList.toggle("hidden");
