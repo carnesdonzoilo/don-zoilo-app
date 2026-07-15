@@ -1,0 +1,14 @@
+VERSIÓN 27 – GD-88H / FXPRINT
+
+Impresión normal:
+- Usa el cuadro estándar de Android.
+- Lista de precios conserva el formato A4 en una sola página.
+
+Impresión GD-88H:
+- Genera una imagen PNG A4.
+- Abre el menú Compartir de Android.
+- Elegir FxPrint para imprimir con la GD-88H.
+- Disponible en lista de precios, hoja de pedidos y remitos.
+- Si el teléfono no admite compartir archivos, descarga el PNG para abrirlo con FxPrint.
+
+No requiere cambios en Supabase.

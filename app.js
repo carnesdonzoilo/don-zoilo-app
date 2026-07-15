@@ -1550,6 +1550,343 @@ on("loadCatalogPrices","click",async()=>{
   finally{ if(btn) btn.disabled=false; }
 });
 
+
+const A4_W=1240;
+const A4_H=1754;
+
+function moneyPlain(value){
+  return `$ ${Number(value||0).toLocaleString("es-AR",{maximumFractionDigits:0})}`;
+}
+
+function canvasText(ctx,text,x,y,maxWidth,font="22px Arial",weight="normal",align="left"){
+  ctx.font=`${weight} ${font}`;
+  ctx.textAlign=align;
+  ctx.textBaseline="top";
+  ctx.fillText(String(text??""),x,y,maxWidth);
+}
+
+function wrapCanvasText(ctx,text,maxWidth){
+  const words=String(text||"").split(/\s+/);
+  const lines=[];
+  let line="";
+  for(const word of words){
+    const test=line?`${line} ${word}`:word;
+    if(ctx.measureText(test).width>maxWidth && line){
+      lines.push(line);
+      line=word;
+    }else{
+      line=test;
+    }
+  }
+  if(line) lines.push(line);
+  return lines;
+}
+
+function canvasToBlob(canvas){
+  return new Promise((resolve,reject)=>{
+    canvas.toBlob(blob=>blob?resolve(blob):reject(new Error("No se pudo generar la imagen.")),"image/png",1);
+  });
+}
+
+async function shareCanvasWithFxPrint(canvas,filename,title){
+  const blob=await canvasToBlob(canvas);
+  const file=new File([blob],filename,{type:"image/png"});
+
+  if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+    await navigator.share({
+      title,
+      text:"Abrir con FxPrint para imprimir en la GD-88H.",
+      files:[file]
+    });
+    return;
+  }
+
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+  alert("Se descargó la imagen A4. Abrila desde Descargas y elegí Compartir → FxPrint.");
+}
+
+function drawHeaderBrand(ctx,title,subtitle=""){
+  ctx.fillStyle="#0c2748";
+  canvasText(ctx,"DON ZOILO",55,36,350,"42px Georgia","bold");
+  ctx.fillStyle="#111";
+  canvasText(ctx,"CARNES · CALIDAD · SERVICIO",58,88,340,"15px Arial","bold");
+
+  ctx.fillStyle="#0c2748";
+  canvasText(ctx,title,A4_W/2,35,540,"42px Arial","bold","center");
+  if(subtitle){
+    ctx.fillStyle="#b5232a";
+    canvasText(ctx,subtitle,A4_W/2,88,540,"18px Arial","bold","center");
+  }
+
+  ctx.strokeStyle="#0c2748";
+  ctx.lineWidth=5;
+  ctx.beginPath();
+  ctx.moveTo(45,125);
+  ctx.lineTo(A4_W-45,125);
+  ctx.stroke();
+}
+
+function buildPriceCanvas(){
+  const canvas=document.createElement("canvas");
+  canvas.width=A4_W;
+  canvas.height=A4_H;
+  const ctx=canvas.getContext("2d");
+  ctx.fillStyle="#fff";
+  ctx.fillRect(0,0,A4_W,A4_H);
+
+  drawHeaderBrand(ctx,($("pricePrintTitle")?.value||"LISTA DE PRECIOS").toUpperCase(),"CORTES SELECCIONADOS");
+
+  const phone=$("pricePrintPhone")?.value||"11 3039 0331";
+  ctx.fillStyle="#b5232a";
+  canvasText(ctx,"PEDIDOS POR WHATSAPP",A4_W-55,36,300,"16px Arial","bold","right");
+  canvasText(ctx,phone,A4_W-55,62,300,"28px Arial","bold","right");
+  ctx.fillStyle="#0c2748";
+  canvasText(ctx,"ENTREGAS EN CABA Y GBA OESTE",A4_W-55,100,300,"13px Arial","bold","right");
+
+  const margin=45;
+  const gap=18;
+  const colW=(A4_W-margin*2-gap*2)/3;
+  const top=145;
+  const bottom=1650;
+  let col=0;
+  let y=top;
+
+  const moveColumn=()=>{
+    col++;
+    y=top;
+  };
+
+  for(const [category,items] of Object.entries(PRICE_CATALOG)){
+    const estimated=40+items.length*24;
+    if(y+estimated>bottom && col<2) moveColumn();
+
+    const x=margin+col*(colW+gap);
+    ctx.fillStyle="#0c2748";
+    ctx.fillRect(x,y,colW,34);
+    ctx.fillStyle="#fff";
+    canvasText(ctx,category.toUpperCase(),x+colW/2,y+7,colW-12,"18px Arial","bold","center");
+    y+=40;
+
+    for(const [name,defaultPrice] of items){
+      if(y+24>bottom && col<2){
+        moveColumn();
+      }
+      const xx=margin+col*(colW+gap);
+      ctx.fillStyle="#111";
+      canvasText(ctx,name.toUpperCase(),xx+5,y,colW-120,"13px Arial","bold");
+      canvasText(ctx,moneyPlain(catalogPrice(name,defaultPrice)),xx+colW-5,y,112,"14px Arial","bold","right");
+      ctx.strokeStyle="#bbb";
+      ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.moveTo(xx+5,y+20);
+      ctx.lineTo(xx+colW-5,y+20);
+      ctx.stroke();
+      y+=24;
+    }
+    y+=10;
+  }
+
+  ctx.strokeStyle="#0c2748";
+  ctx.lineWidth=5;
+  ctx.beginPath();
+  ctx.moveTo(45,1660);
+  ctx.lineTo(A4_W-45,1660);
+  ctx.stroke();
+
+  ctx.fillStyle="#0c2748";
+  canvasText(ctx,"LOS PRECIOS INCLUYEN I.V.A. · SUJETOS A VARIACIÓN SIN PREVIO AVISO",A4_W/2,1670,A4_W-90,"15px Arial","bold","center");
+  const date=$("pricePrintDate")?.value;
+  if(date){
+    canvasText(ctx,`VIGENTE A PARTIR DEL ${new Date(date+"T12:00:00").toLocaleDateString("es-AR")}`,A4_W/2,1696,A4_W-90,"13px Arial","normal","center");
+  }
+  canvasText(ctx,"CARNES DON ZOILO · CASTELAR · WWW.CARNESDONZOILO.COM.AR",A4_W/2,1720,A4_W-90,"12px Arial","normal","center");
+  return canvas;
+}
+
+function getOrdersForDate(date){
+  const byClient=new Map();
+  orders.filter(o=>!date||o.delivery_date===date).forEach(o=>{
+    const key=String(o.client||"SIN NOMBRE").trim().toUpperCase();
+    if(!byClient.has(key)) byClient.set(key,[]);
+    byClient.get(key).push(o);
+  });
+  const clients=[...byClient.entries()].sort((a,b)=>{
+    const ai=routeIndex(a[0]),bi=routeIndex(b[0]);
+    return ai-bi||a[0].localeCompare(b[0]);
+  });
+  while(clients.length<16) clients.push(["",[]]);
+  return clients.slice(0,16);
+}
+
+function buildOrderSheetCanvas(){
+  const canvas=document.createElement("canvas");
+  canvas.width=A4_W;
+  canvas.height=A4_H;
+  const ctx=canvas.getContext("2d");
+  ctx.fillStyle="#fff";
+  ctx.fillRect(0,0,A4_W,A4_H);
+
+  const date=$("sheetDate")?.value||"";
+  const title=($("sheetTitle")?.value||"PEDIDOS DON ZOILO").toUpperCase();
+  drawHeaderBrand(ctx,title,date?sheetDateLong(date):"HOJA DE REPARTO");
+
+  const clients=getOrdersForDate(date);
+  const margin=40;
+  const top=145;
+  const gridW=A4_W-margin*2;
+  const gridH=1545;
+  const boxW=gridW/4;
+  const boxH=gridH/4;
+
+  ctx.strokeStyle="#111";
+  ctx.lineWidth=2;
+
+  clients.forEach(([client,items],i)=>{
+    const col=i%4;
+    const row=Math.floor(i/4);
+    const x=margin+col*boxW;
+    const y=top+row*boxH;
+    ctx.strokeRect(x,y,boxW,boxH);
+
+    ctx.fillStyle="#111";
+    canvasText(ctx,String(i+1),x+boxW-12,y+8,40,"15px Arial","bold","right");
+    canvasText(ctx,client,x+10,y+12,boxW-45,"19px Arial","bold");
+
+    ctx.beginPath();
+    ctx.moveTo(x+8,y+42);
+    ctx.lineTo(x+boxW-8,y+42);
+    ctx.stroke();
+
+    let yy=y+50;
+    for(const item of items){
+      ctx.font="15px Arial";
+      const line=`${Number(item.quantity||0).toLocaleString("es-AR")} ${item.unit||"kg"} ${item.product}`;
+      const wrapped=wrapCanvasText(ctx,line,boxW-20);
+      for(const part of wrapped.slice(0,2)){
+        canvasText(ctx,part,x+10,yy,boxW-20,"15px Arial","normal");
+        yy+=19;
+      }
+      yy+=2;
+      if(yy>y+boxH-20) break;
+    }
+  });
+  return canvas;
+}
+
+function buildRemitoCanvas(){
+  if(!currentRemitoItems?.length) throw new Error("No hay remito seleccionado.");
+
+  const canvas=document.createElement("canvas");
+  canvas.width=A4_W;
+  canvas.height=A4_H;
+  const ctx=canvas.getContext("2d");
+  ctx.fillStyle="#fff";
+  ctx.fillRect(0,0,A4_W,A4_H);
+
+  const first=currentRemitoItems[0];
+  const total=currentRemitoItems.reduce((sum,item)=>sum+Number(item.total||0),0);
+  const remitoNo=remitoSequence(currentRemitoItems);
+
+  const drawCopy=(top,label)=>{
+    const left=45, right=A4_W-45, h=800;
+    ctx.strokeStyle="#111";
+    ctx.lineWidth=2;
+    ctx.strokeRect(left,top,right-left,h);
+
+    ctx.fillStyle="#0c2748";
+    canvasText(ctx,"DON ZOILO",left+20,top+20,340,"34px Georgia","bold");
+    ctx.fillStyle="#111";
+    canvasText(ctx,"CARNES · CALIDAD · SERVICIO",left+22,top+62,330,"13px Arial","bold");
+
+    ctx.fillStyle="#b5232a";
+    canvasText(ctx,label,right-20,top+18,200,"16px Arial","bold","right");
+    ctx.fillStyle="#0c2748";
+    canvasText(ctx,"REMITO",right-20,top+42,220,"30px Arial","bold","right");
+    ctx.fillStyle="#111";
+    canvasText(ctx,`N.º ${remitoNo}`,right-20,top+80,220,"15px Arial","bold","right");
+
+    const infoY=top+115;
+    const infoW=(right-left-40)/4;
+    const labels=[
+      ["Fecha",fmtDate(first.delivery_date)],
+      ["Cliente",first.client||""],
+      ["Condición",(first.payment_method||"").replace("_"," ")],
+      ["Estado",currentRemitoItems.every(i=>i.delivered)?"ENTREGADO":"PENDIENTE"]
+    ];
+    labels.forEach(([lab,val],i)=>{
+      const x=left+20+i*infoW;
+      ctx.strokeRect(x,infoY,infoW,58);
+      canvasText(ctx,lab.toUpperCase(),x+7,infoY+6,infoW-14,"11px Arial","bold");
+      canvasText(ctx,val,x+7,infoY+27,infoW-14,"14px Arial","bold");
+    });
+
+    const tableY=infoY+75;
+    const cols=[90,100,480,190,190];
+    let x=left+20;
+    ctx.fillStyle="#eee";
+    ctx.fillRect(x,tableY,right-left-40,34);
+    ctx.fillStyle="#111";
+    const heads=["CANT.","UNIDAD","DESCRIPCIÓN","P. UNIT.","IMPORTE"];
+    heads.forEach((head,i)=>{
+      ctx.strokeRect(x,tableY,cols[i],34);
+      canvasText(ctx,head,x+cols[i]/2,tableY+8,cols[i]-8,"12px Arial","bold","center");
+      x+=cols[i];
+    });
+
+    let yy=tableY+34;
+    const maxRows=8;
+    currentRemitoItems.slice(0,maxRows).forEach(item=>{
+      x=left+20;
+      const vals=[
+        Number(item.quantity||0).toLocaleString("es-AR"),
+        item.unit||"kg",
+        item.product||"",
+        moneyPlain(item.unit_price||0),
+        moneyPlain(item.total||0)
+      ];
+      vals.forEach((val,i)=>{
+        ctx.strokeRect(x,yy,cols[i],32);
+        canvasText(ctx,val,i>=3?x+cols[i]-7:x+7,yy+7,cols[i]-14,"13px Arial",i>=3?"bold":"normal",i>=3?"right":"left");
+        x+=cols[i];
+      });
+      yy+=32;
+    });
+
+    const totalY=top+h-135;
+    canvasText(ctx,"TOTAL",right-330,totalY,130,"19px Arial","bold");
+    canvasText(ctx,moneyPlain(total),right-20,totalY-4,200,"25px Arial","bold","right");
+
+    const sigY=top+h-55;
+    ["ENTREGÓ","RECIBIÓ CONFORME","ACLARACIÓN / DNI"].forEach((lab,i)=>{
+      const sx=left+65+i*360;
+      ctx.beginPath();
+      ctx.moveTo(sx,sigY);
+      ctx.lineTo(sx+260,sigY);
+      ctx.stroke();
+      canvasText(ctx,lab,sx+130,sigY+7,260,"11px Arial","bold","center");
+    });
+  };
+
+  drawCopy(35,"ORIGINAL");
+  ctx.setLineDash([12,10]);
+  ctx.strokeStyle="#777";
+  ctx.beginPath();
+  ctx.moveTo(45,872);
+  ctx.lineTo(A4_W-45,872);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  canvasText(ctx,"CORTAR AQUÍ",A4_W/2,857,220,"13px Arial","bold","center");
+  drawCopy(915,"COPIA");
+  return canvas;
+}
+
 function openSystemPrintDialog(printableHtml, title="Don Zoilo"){
   const popup=window.open("","_blank");
   if(!popup){
@@ -1660,20 +1997,42 @@ function buildPricePrintDocument(autoPrint=false){
   popup.focus();
 }
 
+
+on("thermalPriceList","click",async()=>{
+  try{
+    const canvas=buildPriceCanvas();
+    await shareCanvasWithFxPrint(canvas,"lista-precios-don-zoilo.png","Lista de precios Don Zoilo");
+  }catch(e){
+    if(e?.name!=="AbortError") alert("No se pudo compartir con FxPrint: "+e.message);
+  }
+});
+
+on("thermalSheet","click",async()=>{
+  try{
+    const canvas=buildOrderSheetCanvas();
+    await shareCanvasWithFxPrint(canvas,"hoja-pedidos-don-zoilo.png","Hoja de pedidos Don Zoilo");
+  }catch(e){
+    if(e?.name!=="AbortError") alert("No se pudo compartir con FxPrint: "+e.message);
+  }
+});
+
+on("thermalRemito","click",async()=>{
+  try{
+    const canvas=buildRemitoCanvas();
+    await shareCanvasWithFxPrint(canvas,"remito-don-zoilo.png","Remito Don Zoilo");
+  }catch(e){
+    if(e?.name!=="AbortError") alert("No se pudo compartir con FxPrint: "+e.message);
+  }
+});
+
 on("previewPriceList","click",()=>{
   try{ buildPricePrintDocument(false); }
   catch(e){ alert("No se pudo abrir la vista A4: "+e.message); }
 });
 
 on("printPriceList","click",()=>{
-  try{
-    renderPricePrintSheet();
-    const sheet=$("pricePrintSheet");
-    if(!sheet) throw new Error("No se encontró la lista de precios.");
-    openSystemPrintDialog(sheet.outerHTML,"Lista de precios Don Zoilo");
-  }catch(e){
-    alert("No se pudo abrir la impresión: "+e.message);
-  }
+  try{ buildPricePrintDocument(true); }
+  catch(e){ alert("No se pudo abrir la impresión: "+e.message); }
 });
 on("pricePrintTitle","input",renderPricePrintSheet);
 on("pricePrintPhone","input",renderPricePrintSheet);

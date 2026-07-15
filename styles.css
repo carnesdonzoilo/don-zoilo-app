@@ -465,3 +465,5 @@ dialog::backdrop{background:#0009}
 }
 
 .print-device-note{display:block;flex-basis:100%;color:var(--muted);margin-top:4px}
+
+.thermal-help{font-size:.78rem;color:var(--muted);margin-top:5px}
