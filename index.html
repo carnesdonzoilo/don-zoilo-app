@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 29.6</div>
+      <div class="subtitle">Control de operaciones · Versión 29.8</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -31,6 +31,7 @@
       <button class="tab" data-view="orderSheet">Hoja pedidos</button>
       <button class="tab" data-view="new">Movimiento</button>
       <button class="tab" data-view="movements">Movimientos</button>
+      <button class="tab" data-view="expenses">Gastos</button>
       <button class="tab" data-view="balances">Saldos</button>
       <button class="tab" data-view="prices">Precios</button>
     </nav>
@@ -322,7 +323,64 @@
       </div>
     </section>
 
-    <section id="balances" class="view">
+    
+    <section id="expenses" class="view">
+      <div class="card expenses-panel-card">
+        <div class="section-head">
+          <div>
+            <h2>Gastos rápidos</h2>
+            <p class="muted">Elegí el rubro, cargá el importe y guardá.</p>
+          </div>
+        </div>
+
+        <div class="expense-categories" id="expenseCategories"></div>
+
+        <form id="quickExpenseForm" class="quick-expense-form">
+          <input type="hidden" id="expenseCategory" required>
+
+          <label>Importe
+            <input id="expenseAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Ej.: 30000" required>
+          </label>
+
+          <label>Detalle opcional
+            <input id="expenseDetail" type="text" placeholder="Ej.: Nafta Kangoo, alquiler, desayuno">
+          </label>
+
+          <label>Fecha
+            <input id="expenseDate" type="date" required>
+          </label>
+
+          <label>Medio de pago
+            <select id="expensePaymentMethod">
+              <option value="efectivo">Efectivo</option>
+              <option value="transferencia">Transferencia</option>
+              <option value="tarjeta">Tarjeta</option>
+            </select>
+          </label>
+
+          <button type="submit" class="primary expense-save-btn">💾 Guardar gasto</button>
+        </form>
+
+        <div class="expense-last-card">
+          <h3>Últimos gastos</h3>
+          <div id="expenseRecentList"></div>
+        </div>
+
+        <div class="expense-summary-card">
+          <div class="expense-summary-head">
+            <h3>Resumen mensual por rubro</h3>
+            <input id="expenseMonth" type="month">
+          </div>
+          <div id="expenseSummaryList"></div>
+          <div class="expense-summary-total">
+            <span>Total del mes</span>
+            <strong id="expenseMonthTotal">$ 0</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+<section id="balances" class="view">
       <div class="panel">
         <h2>Saldos por cliente / proveedor</h2>
         <p class="muted">Ventas menos cobros para clientes. Compras menos pagos para proveedores.</p>

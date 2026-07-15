@@ -134,7 +134,9 @@ async function removeMovement(id){
   }
   movements = movements.filter(m => m.id !== id);
   localSave();
-  renderAll();
+  if($("expenseDate")) $("expenseDate").value=todayISO();
+if($("expenseMonth")) $("expenseMonth").value=todayISO().slice(0,7);
+renderAll();
 }
 
 
@@ -579,6 +581,159 @@ async function reconcileDeliveredOrders(){
   return created;
 }
 
+
+function expenseCategoryFromMovement(movement){
+  const notes=String(movement.notes||"");
+  const match=notes.match(/RUBRO:\s*([^|]+)/i);
+  if(match) return match[1].trim().toUpperCase();
+  const concept=String(movement.concept||"").toUpperCase();
+  return EXPENSE_CATEGORIES.find(category=>concept.includes(category)) || "OTROS";
+}
+
+function renderExpenseCategories(){
+  const box=$("expenseCategories");
+  if(!box) return;
+  box.innerHTML="";
+  EXPENSE_CATEGORIES.forEach(category=>{
+    const btn=document.createElement("button");
+    btn.type="button";
+    btn.className=`expense-category-btn ${selectedExpenseCategory===category?"active":""}`;
+    btn.textContent=category;
+    btn.addEventListener("click",()=>{
+      selectedExpenseCategory=category;
+      $("expenseCategory").value=category;
+      renderExpenseCategories();
+      $("expenseAmount")?.focus();
+    });
+    box.append(btn);
+  });
+}
+
+function expenseMovements(){
+  return movements.filter(m=>m.type==="gasto");
+}
+
+function renderExpenseRecent(){
+  const box=$("expenseRecentList");
+  if(!box) return;
+  box.innerHTML="";
+  const list=expenseMovements().slice()
+    .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)))
+    .slice(0,8);
+
+  if(!list.length){
+    box.innerHTML='<div class="expense-empty">Todavía no hay gastos cargados.</div>';
+    return;
+  }
+
+  list.forEach(m=>{
+    const row=document.createElement("div");
+    row.className="expense-row";
+    const category=expenseCategoryFromMovement(m);
+    row.innerHTML=`
+      <div class="expense-row-main">
+        <strong>${escapeHtml(category)} · ${escapeHtml(m.concept||"Sin detalle")}</strong>
+        <small>${fmtDate(m.date)} · ${escapeHtml((m.payment_method||"efectivo").replace("_"," "))}</small>
+      </div>
+      <strong>${money(m.amount||0)}</strong>`;
+    box.append(row);
+  });
+}
+
+function monthBounds(monthValue){
+  const value=monthValue||todayISO().slice(0,7);
+  const [year,month]=value.split("-").map(Number);
+  const first=`${year}-${String(month).padStart(2,"0")}-01`;
+  const nextMonth=month===12?`${year+1}-01-01`:`${year}-${String(month+1).padStart(2,"0")}-01`;
+  return {first,nextMonth};
+}
+
+function renderExpenseSummary(){
+  const box=$("expenseSummaryList");
+  if(!box) return;
+  box.innerHTML="";
+  const {first,nextMonth}=monthBounds($("expenseMonth")?.value);
+  const totals=new Map(EXPENSE_CATEGORIES.map(category=>[category,0]));
+  let total=0;
+
+  expenseMovements()
+    .filter(m=>m.date>=first && m.date<nextMonth)
+    .forEach(m=>{
+      const category=expenseCategoryFromMovement(m);
+      const amount=Number(m.amount||0);
+      totals.set(category,(totals.get(category)||0)+amount);
+      total+=amount;
+    });
+
+  [...totals.entries()]
+    .filter(([,amount])=>amount>0)
+    .sort((a,b)=>b[1]-a[1])
+    .forEach(([category,amount])=>{
+      const row=document.createElement("div");
+      row.className="expense-summary-row";
+      row.innerHTML=`<span>${escapeHtml(category)}</span><strong>${money(amount)}</strong>`;
+      box.append(row);
+    });
+
+  if(!box.children.length){
+    box.innerHTML='<div class="expense-empty">No hay gastos en este mes.</div>';
+  }
+  $("expenseMonthTotal").textContent=money(total);
+}
+
+function renderExpenses(){
+  renderExpenseCategories();
+  renderExpenseRecent();
+  renderExpenseSummary();
+}
+
+async function saveQuickExpense(event){
+  event.preventDefault();
+  const category=selectedExpenseCategory||$("expenseCategory")?.value;
+  const amount=Number($("expenseAmount")?.value||0);
+  const detail=String($("expenseDetail")?.value||"").trim();
+  const date=$("expenseDate")?.value||todayISO();
+  const paymentMethod=$("expensePaymentMethod")?.value||"efectivo";
+
+  if(!category) return alert("Elegí una categoría.");
+  if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
+
+  const movement={
+    id:uid(),
+    date,
+    type:"gasto",
+    party:"",
+    concept:detail||category,
+    kg:0,
+    amount,
+    payment_method:paymentMethod,
+    status:"confirmado",
+    notes:`RUBRO: ${category}`,
+    source_order_id:null,
+    created_at:new Date().toISOString()
+  };
+
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").insert(movement);
+      if(error) throw error;
+    }
+    movements.unshift(movement);
+    localSave();
+    renderDashboard();
+    renderMovements();
+    renderBalances();
+    renderExpenses();
+
+    $("expenseAmount").value="";
+    $("expenseDetail").value="";
+    $("expenseAmount").focus();
+    showDeliveryToast(`Gasto ${category} guardado.`);
+  }catch(error){
+    alert("No se pudo guardar el gasto: "+error.message);
+  }
+}
+
 function renderOrders(){
   const date=$("ordersFilterDate")?.value;
   const filtered=orders.filter(o=>!date||o.delivery_date===date);
@@ -940,7 +1095,7 @@ function exportCSV(){
   a.href=URL.createObjectURL(blob);
   a.download=`don-zoilo-movimientos-${todayISO()}.csv`;
   a.click();
-  URL.revokeObjectURL(a.href);
+  URL.revokeObjectURL(a.href);  renderExpenses();
 }
 
 document.querySelectorAll(".tab").forEach(btn=>btn.addEventListener("click",()=>{
@@ -1353,6 +1508,13 @@ let currentRemitoItems=[];
 const selectedRemitoBatches=new Set();
 const signedReceiptCache=new Map();
 let pendingDeliveryBatch=null;
+const EXPENSE_CATEGORIES=[
+  "CASA","LEO","ROMI","SERVICIOS","VACACIONES","TARJETAS",
+  "LOCAL","MERMA","DESAYUNO","IMPUESTOS","RETENCIONES",
+  "NAFTA","PEAJE","PROPINA","REPARTO","ATENCIÓN","SUELDOS","KANGOO"
+];
+let selectedExpenseCategory="";
+
 
 function remitoSequence(items){
   const raw=(items?.[0]?.batch_id || items?.[0]?.id || "").replace(/[^a-zA-Z0-9]/g,"");
@@ -2555,6 +2717,9 @@ on("repairDeliveredMovements","click",async()=>{
     if(btn) btn.disabled=false;
   }
 });
+
+on("quickExpenseForm","submit",saveQuickExpense);
+on("expenseMonth","change",renderExpenseSummary);
 
 on("selectAllRemitos","change",()=>{
   const checked=$("selectAllRemitos")?.checked||false;

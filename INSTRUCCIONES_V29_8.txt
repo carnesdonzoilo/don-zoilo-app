@@ -1,0 +1,17 @@
+VERSIÓN 29.8 – GASTOS RÁPIDOS
+
+Categorías:
+CASA, LEO, ROMI, SERVICIOS, VACACIONES, TARJETAS, LOCAL, MERMA,
+DESAYUNO, IMPUESTOS, RETENCIONES, NAFTA, PEAJE, PROPINA, REPARTO,
+ATENCIÓN, SUELDOS y KANGOO.
+
+Funciones:
+- Nueva pestaña Gastos.
+- Botones rápidos por categoría.
+- Importe, detalle, fecha y medio de pago.
+- Guarda como movimiento tipo gasto.
+- Últimos gastos.
+- Resumen mensual por categoría.
+- Total mensual.
+- Alimenta Resumen, Movimientos y Saldos.
+- No requiere cambios en Supabase.
