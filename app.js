@@ -1199,10 +1199,14 @@ function canonicalClientKey(name){
 
 function canonicalClientDisplayName(name){
   const key=canonicalClientKey(name);
-  if(key==="MORONPLAZA") return "MORON PLAZA";
-  if(key==="CLINICAHAEDO") return "CLINICA HAEDO";
-  if(key==="DUMPLING") return "DUMPLING";
-  return String(name||"").trim();
+  const preferred={
+    MORONPLAZA:"MORON PLAZA",
+    CLINICAHAEDO:"CLINICA HAEDO",
+    DUMPLING:"DUMPLING",
+    SIFON:"SIFÓN",
+    ITUZAINGO:"ITUZAINGÓ"
+  };
+  return preferred[key] || String(name||"").trim().toUpperCase();
 }
 
 function clientNames(){
@@ -1512,31 +1516,79 @@ function openBalanceDetail(client){
 }
 
 function renderBalances(){
-  if($("allClientBalancesTotal")) $("allClientBalancesTotal").textContent=money(totalClientCurrentAccounts());
+  if($("allClientBalancesTotal")){
+    $("allClientBalancesTotal").textContent=money(totalClientCurrentAccounts());
+  }
+
   const map=new Map();
-  movements.filter(m=>m.status!=="pendiente").forEach(m=>{
-    const rawName=(m.party||"Sin nombre").trim();
-    const name=["venta","cobro","ajuste"].includes(m.type)
-      ? canonicalClientDisplayName(rawName)
-      : rawName;
-    if(!map.has(name)) map.set(name,{client:0,supplier:0});
-    const b=map.get(name);
-    if(m.type==="venta" || isOpeningBalanceMovement(m)) b.client+=Number(m.amount||0);
-    if(m.type==="cobro") b.client-=Number(m.amount||0);
-    if(m.type==="compra") b.supplier+=Number(m.amount||0);
-    if(m.type==="pago") b.supplier-=Number(m.amount||0);
-  });
-  const rows=[...map.entries()]
-    .map(([name,b])=>({name, balance:b.client!==0?b.client:-b.supplier, detail:b.client!==0?"Saldo cliente":"Saldo proveedor"}))
-    .filter(x=>x.balance!==0)
-    .sort((a,b)=>Math.abs(b.balance)-Math.abs(a.balance));
-  const box=$("balanceList"); box.innerHTML="";
-  if(!rows.length) box.append($("emptyTemplate").content.cloneNode(true));
-  rows.forEach(r=>{
-    const div=document.createElement("div");
-    div.className="balance-row";
-    div.innerHTML=`<div><button type="button" class="balance-client-link" data-client="${escapeHtml(r.name)}">${escapeHtml(r.name)}</button><div class="muted small">${r.detail}</div></div><strong class="${r.balance>=0?"positive":"negative"}">${money(Math.abs(r.balance))}</strong>`;
-    box.append(div);
+
+  movements
+    .filter(m=>m.status!=="pendiente")
+    .forEach(m=>{
+      const rawName=(m.party||"Sin nombre").trim();
+      const isClientMovement=["venta","cobro","ajuste"].includes(m.type);
+
+      const key=isClientMovement
+        ? canonicalClientKey(rawName)
+        : normalizeClientName(rawName);
+
+      if(!map.has(key)){
+        map.set(key,{
+          name:isClientMovement ? canonicalClientDisplayName(rawName) : rawName,
+          client:0,
+          supplier:0
+        });
+      }
+
+      const record=map.get(key);
+      const amount=Number(m.amount||0);
+
+      if(m.type==="venta" || isOpeningBalanceMovement(m)){
+        record.client+=amount;
+      }else if(m.type==="cobro"){
+        record.client-=amount;
+      }else if(m.type==="compra"){
+        record.supplier+=amount;
+      }else if(m.type==="pago"){
+        record.supplier-=amount;
+      }
+    });
+
+  const list=$("balanceList");
+  if(!list) return;
+  list.innerHTML="";
+
+  const rows=[...map.values()]
+    .filter(row=>Math.abs(row.client)>0.001 || Math.abs(row.supplier)>0.001)
+    .sort((a,b)=>{
+      const av=Math.max(a.client,a.supplier);
+      const bv=Math.max(b.client,b.supplier);
+      return bv-av;
+    });
+
+  if(!rows.length){
+    list.innerHTML='<p class="muted">Todavía no hay saldos.</p>';
+    return;
+  }
+
+  rows.forEach(row=>{
+    const item=document.createElement("div");
+    item.className="balance-row";
+
+    const isClient=Math.abs(row.client)>0.001;
+    const balance=isClient ? row.client : row.supplier;
+    const label=isClient ? "Saldo cliente" : "Saldo proveedor";
+
+    item.innerHTML=`
+      <div>
+        ${isClient
+          ? `<button type="button" class="balance-client-link" data-client="${escapeHtml(row.name)}">${escapeHtml(row.name)}</button>`
+          : `<strong>${escapeHtml(row.name)}</strong>`}
+        <small>${label}</small>
+      </div>
+      <strong>${money(balance)}</strong>`;
+
+    list.append(item);
   });
 }
 

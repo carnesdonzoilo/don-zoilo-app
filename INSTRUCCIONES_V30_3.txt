@@ -1,0 +1,17 @@
+VERSIÓN 30.3 – NORMALIZAR SALDOS DE CLIENTES
+
+Corrección:
+- SIFON y SIFÓN ahora se agrupan en una sola cuenta.
+- También ignora mayúsculas, minúsculas, tildes y espacios.
+- Mantiene los alias:
+  MORON -> MORON PLAZA
+  CLINICA -> CLINICA HAEDO
+  PRINGLES 1272 / GUATEMALA 4450 / GORRITI 56** -> DUMPLING
+- Saldos muestra un único importe correcto por cliente.
+- Cuentas Corrientes e historial usan la misma normalización.
+- No requiere cambios en Supabase.
+
+Prueba:
+1. Entrar en Saldos.
+2. Confirmar que aparezca una sola línea SIFÓN.
+3. Verificar que el saldo sea $1.423.900.
