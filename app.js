@@ -1400,7 +1400,71 @@ function printAccountStatement(){
   popup.document.close();
 }
 
+
+function totalClientCurrentAccounts(){
+  const totals=new Map();
+  movements
+    .filter(m=>m.status!=="pendiente" && ["venta","cobro","ajuste"].includes(m.type))
+    .forEach(m=>{
+      const client=String(m.party||"").trim();
+      if(!client) return;
+      const current=totals.get(client)||0;
+      const value=Number(m.amount||0);
+
+      if(m.type==="venta" || isOpeningBalanceMovement(m)){
+        totals.set(client,current+value);
+      }else if(m.type==="cobro"){
+        totals.set(client,current-value);
+      }
+    });
+
+  return [...totals.values()].reduce((sum,value)=>sum+value,0);
+}
+
+function openBalanceDetail(client){
+  const totals=accountTotals(client);
+  if($("balanceDetailClient")) $("balanceDetailClient").textContent=client;
+  if($("balanceDetailOpening")) $("balanceDetailOpening").textContent=money(totals.opening);
+  if($("balanceDetailSales")) $("balanceDetailSales").textContent=money(totals.sales);
+  if($("balanceDetailCollections")) $("balanceDetailCollections").textContent=money(totals.collected);
+  if($("balanceDetailCurrent")) $("balanceDetailCurrent").textContent=money(totals.balance);
+
+  const box=$("balanceDetailList");
+  if(box){
+    box.innerHTML="";
+    const list=accountMovementsFor(client)
+      .slice()
+      .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)));
+
+    if(!list.length){
+      box.innerHTML='<div class="account-empty">No hay movimientos para este cliente.</div>';
+    }else{
+      list.forEach(m=>{
+        const debit=m.type==="venta" || isOpeningBalanceMovement(m);
+        const label=isOpeningBalanceMovement(m)
+          ? "Saldo anterior"
+          : m.type==="venta" ? "Venta" : "Cobranza";
+        const row=document.createElement("div");
+        row.className=`balance-detail-row ${debit?"debit":"credit"}`;
+        row.innerHTML=`
+          <div class="date">${fmtDate(m.date)}</div>
+          <div>
+            <strong>${label} · ${escapeHtml(m.concept||"")}</strong>
+            <small>${escapeHtml(m.payment_method||"")} ${m.notes?`· ${escapeHtml(m.notes.replace("SALDO_INICIAL","").replace("|","").trim())}`:""}</small>
+          </div>
+          <div class="amount">${debit?"+":"−"}${money(m.amount||0)}</div>`;
+        box.append(row);
+      });
+    }
+  }
+
+  const dialog=$("balanceDetailDialog");
+  if(typeof dialog?.showModal==="function") dialog.showModal();
+  else dialog?.setAttribute("open","");
+}
+
 function renderBalances(){
+  if($("allClientBalancesTotal")) $("allClientBalancesTotal").textContent=money(totalClientCurrentAccounts());
   const map=new Map();
   movements.filter(m=>m.status!=="pendiente").forEach(m=>{
     const name=(m.party||"Sin nombre").trim();
@@ -1420,7 +1484,7 @@ function renderBalances(){
   rows.forEach(r=>{
     const div=document.createElement("div");
     div.className="balance-row";
-    div.innerHTML=`<div><strong>${escapeHtml(r.name)}</strong><div class="muted small">${r.detail}</div></div><strong class="${r.balance>=0?"positive":"negative"}">${money(Math.abs(r.balance))}</strong>`;
+    div.innerHTML=`<div><button type="button" class="balance-client-link" data-client="${escapeHtml(r.name)}">${escapeHtml(r.name)}</button><div class="muted small">${r.detail}</div></div><strong class="${r.balance>=0?"positive":"negative"}">${money(Math.abs(r.balance))}</strong>`;
     box.append(div);
   });
 }
@@ -3060,6 +3124,7 @@ on("repairDeliveredMovements","click",async()=>{
 });
 
 
+on("closeBalanceDetail","click",()=>{ const d=$("balanceDetailDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
 on("openingBalanceForm","submit",saveOpeningBalance);
 on("collectionForm","submit",saveCollection);
 on("accountClientSelect","change",renderAccounts);
@@ -3141,4 +3206,9 @@ function printRemitoFromElement(elementOrId, title="Remito Don Zoilo"){
 
 on("expenseDate","focus",()=>{
   if(!$("expenseDate").value) $("expenseDate").value=todayISO();
+});
+
+document.addEventListener("click",event=>{
+  const button=event.target.closest(".balance-client-link");
+  if(button) openBalanceDetail(button.dataset.client||button.textContent.trim());
 });

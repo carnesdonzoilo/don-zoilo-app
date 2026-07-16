@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 30</div>
+      <div class="subtitle">Control de operaciones · Versión 30.1</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -404,6 +404,10 @@
     </section>
 
 <section id="balances" class="view">
+      <div class="balances-total-card">
+        <span>Total cuentas corrientes de clientes</span>
+        <strong id="allClientBalancesTotal">$ 0</strong>
+      </div>
       <div class="panel">
         <h2>Saldos por cliente / proveedor</h2>
         <p class="muted">Ventas menos cobros para clientes. Compras menos pagos para proveedores.</p>
@@ -666,6 +670,26 @@
         <button type="button" id="closeSignedReceipt" class="secondary">Cerrar</button>
       </div>
       <img id="signedReceiptImage" class="signed-receipt-image" alt="Remito firmado">
+    </div>
+  </dialog>
+
+  
+  <dialog id="balanceDetailDialog">
+    <div class="dialog-card balance-detail-card">
+      <div class="balance-detail-head">
+        <div>
+          <h2 id="balanceDetailClient">Cuenta corriente</h2>
+          <p class="muted">Detalle de movimientos</p>
+        </div>
+        <button type="button" id="closeBalanceDetail" class="secondary">Cerrar</button>
+      </div>
+      <div class="balance-detail-summary">
+        <article><span>Saldo anterior</span><strong id="balanceDetailOpening">$ 0</strong></article>
+        <article><span>Ventas</span><strong id="balanceDetailSales">$ 0</strong></article>
+        <article><span>Cobranzas</span><strong id="balanceDetailCollections">$ 0</strong></article>
+        <article><span>Saldo actual</span><strong id="balanceDetailCurrent">$ 0</strong></article>
+      </div>
+      <div id="balanceDetailList" class="balance-detail-list"></div>
     </div>
   </dialog>
 

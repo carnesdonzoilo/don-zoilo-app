@@ -1,0 +1,15 @@
+VERSIÓN 30.1 – TOTAL Y DETALLE DE CUENTAS CORRIENTES
+
+Cambios:
+- Muestra el total general de las cuentas corrientes de todos los clientes.
+- En Saldos, el nombre del cliente ahora es clickeable.
+- Al tocar un cliente, abre el detalle completo de su cuenta corriente.
+- Muestra saldo anterior, ventas, cobranzas y saldo actual.
+- Lista todos los movimientos con fecha, detalle e importe.
+- No requiere cambios en Supabase.
+
+Prueba:
+1. Entrar en Saldos.
+2. Verificar el total general arriba.
+3. Tocar el nombre de un cliente.
+4. Revisar el detalle de movimientos.
