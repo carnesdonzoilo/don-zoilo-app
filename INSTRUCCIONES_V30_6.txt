@@ -1,0 +1,10 @@
+VERSIÓN 30.6 – PROVEEDORES
+
+- Buscador.
+- Orden por mayor deuda o alfabéticamente.
+- Listado clickeable.
+- Pagar saldo total.
+- Editar y eliminar movimientos.
+- Imprimir estado de cuenta.
+- Vencimiento opcional en compras.
+- No requiere cambios en Supabase.

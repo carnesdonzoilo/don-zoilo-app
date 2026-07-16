@@ -1720,24 +1720,124 @@ function renderSupplierHistory(name){
     box.innerHTML='<div class="supplier-empty">Este proveedor todavía no tiene movimientos.</div>';
     return;
   }
-  list.forEach(m=>{
-    const isDebt=m.type==="compra";
-    const label=isSupplierOpeningMovement(m)?"Saldo inicial":m.type==="compra"?"Compra":"Pago";
+  list.forEach(movement=>{
+    const isDebt=movement.type==="compra";
+    const label=isSupplierOpeningMovement(movement)?"Saldo inicial":movement.type==="compra"?"Compra":"Pago";
+    const dueMatch=String(movement.notes||"").match(/VENCE:\s*(\d{4}-\d{2}-\d{2})/);
+    const dueText=dueMatch?`<span class="supplier-due-date">Vence ${fmtDate(dueMatch[1])}</span>`:"";
     const row=document.createElement("div");
     row.className=`supplier-history-row ${isDebt?"debt":"payment"}`;
     row.innerHTML=`
-      <div class="date">${fmtDate(m.date)}</div>
+      <div class="date">${fmtDate(movement.date)}</div>
       <div>
-        <strong>${label} · ${escapeHtml(m.concept||"")}</strong>
-        <small>${escapeHtml(m.payment_method||"")} ${m.notes?`· ${escapeHtml(m.notes.replace("SALDO_INICIAL_PROVEEDOR","").replace("|","").trim())}`:""}</small>
+        <strong>${label} · ${escapeHtml(movement.concept||"")}${dueText}</strong>
+        <small>${escapeHtml(movement.payment_method||"")}</small>
       </div>
-      <div class="amount">${isDebt?"+":"−"}${money(m.amount||0)}</div>`;
+      <div class="amount">${isDebt?"+":"−"}${money(movement.amount||0)}</div>
+      <div class="supplier-history-actions">
+        <button type="button" class="supplier-edit-btn">Editar</button>
+        <button type="button" class="supplier-delete-btn">Eliminar</button>
+      </div>`;
+    row.querySelector(".supplier-edit-btn").addEventListener("click",()=>editSupplierMovement(movement));
+    row.querySelector(".supplier-delete-btn").addEventListener("click",()=>deleteSupplierMovement(movement));
     box.append(row);
   });
 }
 
+
+function supplierDebtRows(){
+  return supplierNames().map(name=>({name,debt:supplierTotals(name).balance}));
+}
+function renderSupplierDirectory(){
+  const box=$("supplierDirectory");
+  if(!box) return;
+  box.innerHTML="";
+  const query=normalizeClientName($("supplierSearch")?.value||"");
+  const sort=$("supplierSort")?.value||"debt_desc";
+  const rows=supplierDebtRows()
+    .filter(row=>!query||normalizeClientName(row.name).includes(query))
+    .sort((a,b)=>sort==="alpha"?a.name.localeCompare(b.name,"es"):b.debt-a.debt);
+  if(!rows.length){
+    box.innerHTML='<div class="supplier-empty">No hay proveedores para mostrar.</div>';
+    return;
+  }
+  rows.forEach(row=>{
+    const item=document.createElement("div");
+    item.className=`supplier-directory-row ${row.debt>=5000000?"high-debt":""}`;
+    item.innerHTML=`<strong>${escapeHtml(row.name)}</strong><strong>${money(row.debt)}</strong>`;
+    item.addEventListener("click",()=>{
+      $("supplierAccountSelect").value=row.name;
+      renderSuppliers();
+    });
+    box.append(item);
+  });
+}
+function payFullSupplierBalance(){
+  const supplier=$("supplierAccountSelect")?.value||"";
+  if(!supplier) return alert("Elegí un proveedor.");
+  const balance=supplierTotals(supplier).balance;
+  if(balance<=0) return alert("El proveedor no tiene saldo pendiente.");
+  $("supplierPaymentName").value=supplier;
+  $("supplierPaymentAmount").value=balance.toFixed(2);
+  $("supplierPaymentDetail").value="Cancelación total";
+  $("supplierPaymentDate").value=todayISO();
+  $("supplierPaymentAmount").focus();
+}
+async function editSupplierMovement(movement){
+  const detail=prompt("Detalle:",movement.concept||"");
+  if(detail===null) return;
+  const amountText=prompt("Importe:",String(Number(movement.amount||0)));
+  if(amountText===null) return;
+  const amount=Number(String(amountText).replace(",","."));
+  if(!(amount>0)) return alert("Importe inválido.");
+  const date=prompt("Fecha (AAAA-MM-DD):",movement.date||todayISO());
+  if(date===null) return;
+  const updated={...movement,concept:String(detail).trim()||movement.type,amount,date};
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").update(updated).eq("id",movement.id);
+      if(error) throw error;
+    }
+    const idx=movements.findIndex(m=>m.id===movement.id);
+    if(idx>=0) movements[idx]=updated;
+    localSave(); renderAll(); showDeliveryToast("Movimiento actualizado.");
+  }catch(error){ alert("No se pudo editar: "+error.message); }
+}
+async function deleteSupplierMovement(movement){
+  if(!confirm(`¿Eliminar este movimiento por ${money(movement.amount||0)}?`)) return;
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").delete().eq("id",movement.id);
+      if(error) throw error;
+    }
+    movements=movements.filter(m=>m.id!==movement.id);
+    localSave(); renderAll(); showDeliveryToast("Movimiento eliminado.");
+  }catch(error){ alert("No se pudo eliminar: "+error.message); }
+}
+function printSupplierStatement(){
+  const supplier=$("supplierAccountSelect")?.value||"";
+  if(!supplier) return alert("Elegí un proveedor.");
+  const totals=supplierTotals(supplier);
+  const rows=supplierMovementsFor(supplier).slice()
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)))
+    .map(m=>{
+      const debit=m.type==="compra";
+      const label=isSupplierOpeningMovement(m)?"Saldo inicial":m.type==="compra"?"Compra":"Pago";
+      return `<tr><td>${fmtDate(m.date)}</td><td>${escapeHtml(label)}</td><td>${escapeHtml(m.concept||"")}</td><td class="num">${debit?money(m.amount):""}</td><td class="num">${!debit?money(m.amount):""}</td></tr>`;
+    }).join("");
+  const popup=window.open("","_blank");
+  if(!popup) return alert("El navegador bloqueó la ventana.");
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(supplier)}</title>
+  <style>body{font-family:Arial;padding:18mm}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:7px;font-size:12px}th{background:#eee}.num{text-align:right}.summary{margin-top:14px;margin-left:auto;width:320px}.summary div{display:flex;justify-content:space-between;padding:6px;border-bottom:1px solid #ccc}.final{font-size:18px;font-weight:900;border-top:3px solid #111}@page{size:A4 portrait;margin:10mm}</style>
+  </head><body><h1>DON ZOILO</h1><h2>Estado de cuenta de proveedor: ${escapeHtml(supplier)}</h2>
+  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="summary"><div><span>Saldo inicial</span><strong>${money(totals.opening)}</strong></div><div><span>Compras</span><strong>${money(totals.purchases)}</strong></div><div><span>Pagos</span><strong>${money(totals.payments)}</strong></div><div class="final"><span>Saldo actual</span><strong>${money(totals.balance)}</strong></div></div>
+  <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script></body></html>`);
+  popup.document.close();
+}
 function renderSuppliers(){
   fillSupplierSelectors();
+  renderSupplierDirectory();
   const supplier=$("supplierAccountSelect")?.value||"";
   const totals=supplier?supplierTotals(supplier):{opening:0,purchases:0,payments:0,balance:0};
   if($("supplierCurrentBalance")) $("supplierCurrentBalance").textContent=money(totals.balance);
@@ -1800,7 +1900,9 @@ async function submitSupplierPurchase(event){
   if(!name.trim()) return alert("Ingresá el proveedor.");
   if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
   try{
-    await saveSupplierMovement({type:"compra",name,amount,date,detail,method:"cuenta_corriente"});
+    const dueDate=$("supplierPurchaseDueDate")?.value||"";
+    const purchaseDetail=dueDate?`${detail}${detail?" | ":""}VENCE: ${dueDate}`:detail;
+    await saveSupplierMovement({type:"compra",name,amount,date,detail:purchaseDetail,method:"cuenta_corriente"});
     $("supplierPurchaseAmount").value="";
     $("supplierPurchaseDetail").value="";
     showDeliveryToast("Compra del proveedor guardada.");
@@ -3562,6 +3664,10 @@ document.querySelectorAll("[data-expense-amount]").forEach(button=>{
 });
 
 
+on("supplierSearch","input",renderSupplierDirectory);
+on("supplierSort","change",renderSupplierDirectory);
+on("payFullSupplierBalance","click",payFullSupplierBalance);
+on("printSupplierStatement","click",printSupplierStatement);
 on("supplierOpeningForm","submit",submitSupplierOpening);
 on("supplierPurchaseForm","submit",submitSupplierPurchase);
 on("supplierPaymentForm","submit",submitSupplierPayment);

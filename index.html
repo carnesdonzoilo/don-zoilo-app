@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 30.5</div>
+      <div class="subtitle">Control de operaciones · Versión 30.6</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -538,8 +538,22 @@
                 <option value="">Elegir proveedor</option>
               </select>
             </label>
+            <label>Buscar
+              <input id="supplierSearch" type="search" placeholder="Ej.: Tito, Chicago">
+            </label>
+            <label>Orden
+              <select id="supplierSort">
+                <option value="debt_desc">Mayor deuda</option>
+                <option value="alpha">Alfabético</option>
+              </select>
+            </label>
             <button type="button" id="refreshSuppliers" class="secondary">↻ Actualizar</button>
           </div>
+          <div class="supplier-actions">
+            <button type="button" id="payFullSupplierBalance" class="primary">Pagar saldo total</button>
+            <button type="button" id="printSupplierStatement" class="secondary">🖨️ Imprimir estado de cuenta</button>
+          </div>
+          <div id="supplierDirectory" class="supplier-directory"></div>
 
           <div class="supplier-kpis">
             <article><span>Saldo actual</span><strong id="supplierCurrentBalance">$ 0</strong></article>
@@ -590,6 +604,9 @@
               </label>
               <label>Detalle opcional
                 <input id="supplierPurchaseDetail" placeholder="Ej.: Factura 123, mercadería">
+              </label>
+              <label>Vencimiento opcional
+                <input id="supplierPurchaseDueDate" type="date">
               </label>
               <button type="submit" class="primary">Guardar compra</button>
             </form>
