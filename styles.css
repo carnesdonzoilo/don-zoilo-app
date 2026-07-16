@@ -831,3 +831,16 @@ dialog::backdrop{background:#0009}
   .balance-detail-row{grid-template-columns:1fr auto}
   .balance-detail-row .date{grid-column:1/-1}
 }
+
+.balances-total-card small{display:block;color:#c7d3da;margin-top:4px;font-size:.78rem}
+.balances-total-right{text-align:right}
+.balances-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) 220px;gap:10px;margin-bottom:14px}
+.balances-toolbar label{display:grid;gap:5px;font-weight:800}
+.balance-row-high-debt{background:#fff3f3!important;border-left:5px solid #c73737!important;padding-left:10px!important}
+.balance-row-high-debt .balance-client-link,.balance-row-high-debt .balance-amount{color:#a91f1f!important}
+.balance-type-badge{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;font-size:.72rem;font-weight:900;margin-right:6px}
+.balance-type-opening{background:#dff3e6;color:#176b35}
+.balance-type-sale{background:#dfeaf8;color:#204e82}
+.balance-type-collection{background:#fff0cf;color:#8c5f00}
+.balance-type-adjustment{background:#f7dede;color:#8c2929}
+@media(max-width:600px){.balances-toolbar{grid-template-columns:1fr}.balances-total-card{align-items:flex-start}.balances-total-right{text-align:right}}

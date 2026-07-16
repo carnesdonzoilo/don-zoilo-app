@@ -1,0 +1,10 @@
+VERSIÓN 30.2 – MEJORAS CUENTAS CORRIENTES
+
+- Unifica MORON con MORON PLAZA.
+- Muestra cantidad de clientes con deuda.
+- Muestra promedio de deuda.
+- Buscador en Saldos.
+- Orden por mayor saldo o alfabéticamente.
+- Resalta saldos desde $5.000.000.
+- Colores por tipo de movimiento.
+- No requiere cambios en Supabase.

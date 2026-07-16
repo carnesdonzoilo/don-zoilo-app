@@ -1170,18 +1170,43 @@ function isOpeningBalanceMovement(m){
 }
 
 function clientNames(){
-  const names=new Set();
-  movements.forEach(m=>{
-    if(["venta","cobro","ajuste"].includes(m.type) && m.party?.trim()) names.add(m.party.trim());
-  });
-  orders.forEach(o=>{ if(o.client?.trim()) names.add(o.client.trim()); });
-  return [...names].sort((a,b)=>a.localeCompare(b,"es"));
+  const byKey=new Map();
+  const addName=name=>{
+    const clean=String(name||"").trim();
+    if(!clean) return;
+    const key=canonicalClientKey(clean);
+    const current=byKey.get(key);
+    if(!current || clean.length>current.length) byKey.set(key,clean);
+  };
+  movements.forEach(m=>{ if(["venta","cobro","ajuste"].includes(m.type)) addName(m.party); });
+  orders.forEach(o=>addName(o.client));
+  return [...byKey.values()].sort((a,b)=>a.localeCompare(b,"es"));
 }
 
+
+function normalizeClientName(name){
+  return String(name||"")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g,"")
+    .trim();
+}
+const CLIENT_ALIASES={
+  "MORON":"MORONPLAZA",
+  "MORONPLAZA":"MORONPLAZA",
+  "CLINICA":"CLINICAHAEDO",
+  "CLINICAHAEDO":"CLINICAHAEDO",
+  "VILLADELPARQUE":"VILLADELPARQUE"
+};
+function canonicalClientKey(name){
+  const normalized=normalizeClientName(name);
+  return CLIENT_ALIASES[normalized]||normalized;
+}
 function accountMovementsFor(client){
   return movements.filter(m=>
     m.status!=="pendiente" &&
-    String(m.party||"").trim()===client &&
+    canonicalClientKey(m.party)===canonicalClientKey(client) &&
     ["venta","cobro","ajuste"].includes(m.type)
   );
 }
@@ -1240,7 +1265,12 @@ function renderAccountHistory(client){
     row.innerHTML=`
       <div>${fmtDate(m.date)}</div>
       <div class="history-main">
-        <strong>${label} · ${escapeHtml(m.concept||"")}</strong>
+        <strong><span class="balance-type-badge ${
+          isOpeningBalanceMovement(m) ? "balance-type-opening" :
+          m.type==="venta" ? "balance-type-sale" :
+          m.type==="cobro" ? "balance-type-collection" :
+          "balance-type-adjustment"
+        }">${label}</span>${escapeHtml(m.concept||"")}</strong>
         <small>${escapeHtml(m.payment_method||"")} ${m.notes?`· ${escapeHtml(m.notes.replace("SALDO_INICIAL","").replace("|","").trim())}`:""}</small>
       </div>
       <div class="history-amount">${sign}${money(m.amount||0)}</div>`;
@@ -1401,24 +1431,28 @@ function printAccountStatement(){
 }
 
 
-function totalClientCurrentAccounts(){
+function clientBalanceMap(){
   const totals=new Map();
-  movements
-    .filter(m=>m.status!=="pendiente" && ["venta","cobro","ajuste"].includes(m.type))
-    .forEach(m=>{
-      const client=String(m.party||"").trim();
-      if(!client) return;
-      const current=totals.get(client)||0;
-      const value=Number(m.amount||0);
-
-      if(m.type==="venta" || isOpeningBalanceMovement(m)){
-        totals.set(client,current+value);
-      }else if(m.type==="cobro"){
-        totals.set(client,current-value);
-      }
-    });
-
-  return [...totals.values()].reduce((sum,value)=>sum+value,0);
+  movements.filter(m=>m.status!=="pendiente" && ["venta","cobro","ajuste"].includes(m.type)).forEach(m=>{
+    const raw=String(m.party||"").trim();
+    if(!raw) return;
+    const key=canonicalClientKey(raw);
+    const rec=totals.get(key)||{name:raw,balance:0};
+    if(raw.length>rec.name.length) rec.name=raw;
+    const value=Number(m.amount||0);
+    if(m.type==="venta" || isOpeningBalanceMovement(m)) rec.balance+=value;
+    else if(m.type==="cobro") rec.balance-=value;
+    totals.set(key,rec);
+  });
+  return totals;
+}
+function totalClientCurrentAccounts(){
+  return [...clientBalanceMap().values()].reduce((s,r)=>s+r.balance,0);
+}
+function clientDebtMetrics(){
+  const positive=[...clientBalanceMap().values()].filter(r=>r.balance>0);
+  const total=positive.reduce((s,r)=>s+r.balance,0);
+  return {count:positive.length,average:positive.length?total/positive.length:0};
 }
 
 function openBalanceDetail(client){
@@ -1463,8 +1497,39 @@ function openBalanceDetail(client){
   else dialog?.setAttribute("open","");
 }
 
+
+function applyBalanceFilters(){
+  const list=$("balanceList");
+  if(!list) return;
+  const query=normalizeClientName($("balanceSearch")?.value||"");
+  const sort=$("balanceSort")?.value||"debt_desc";
+  const rows=[...list.children];
+
+  rows.forEach(row=>{
+    const button=row.querySelector(".balance-client-link");
+    if(!button) return;
+    const name=button.dataset.client||button.textContent;
+    row.style.display=!query || normalizeClientName(name).includes(query) ? "" : "none";
+    const amount=Number(row.querySelector(".balance-amount")?.dataset.amount||0);
+    row.classList.toggle("balance-row-high-debt",amount>=5000000);
+  });
+
+  rows.sort((a,b)=>{
+    if(sort==="alpha"){
+      const an=a.querySelector(".balance-client-link")?.textContent||"";
+      const bn=b.querySelector(".balance-client-link")?.textContent||"";
+      return an.localeCompare(bn,"es");
+    }
+    const av=Number(a.querySelector(".balance-amount")?.dataset.amount||0);
+    const bv=Number(b.querySelector(".balance-amount")?.dataset.amount||0);
+    return bv-av;
+  }).forEach(row=>list.append(row));
+}
 function renderBalances(){
   if($("allClientBalancesTotal")) $("allClientBalancesTotal").textContent=money(totalClientCurrentAccounts());
+  const metrics=clientDebtMetrics();
+  if($("clientsWithDebt")) $("clientsWithDebt").textContent=`${metrics.count} cliente${metrics.count===1?"":"s"} con deuda`;
+  if($("averageClientDebt")) $("averageClientDebt").textContent=`Promedio: ${money(metrics.average)}`;
   const map=new Map();
   movements.filter(m=>m.status!=="pendiente").forEach(m=>{
     const name=(m.party||"Sin nombre").trim();
@@ -1486,7 +1551,7 @@ function renderBalances(){
     div.className="balance-row";
     div.innerHTML=`<div><button type="button" class="balance-client-link" data-client="${escapeHtml(r.name)}">${escapeHtml(r.name)}</button><div class="muted small">${r.detail}</div></div><strong class="${r.balance>=0?"positive":"negative"}">${money(Math.abs(r.balance))}</strong>`;
     box.append(div);
-  });
+  });  applyBalanceFilters();
 }
 
 function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderAccounts(); renderPrices(); renderPricePrintSheet(); }
@@ -3124,6 +3189,8 @@ on("repairDeliveredMovements","click",async()=>{
 });
 
 
+on("balanceSearch","input",applyBalanceFilters);
+on("balanceSort","change",applyBalanceFilters);
 on("closeBalanceDetail","click",()=>{ const d=$("balanceDetailDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
 on("openingBalanceForm","submit",saveOpeningBalance);
 on("collectionForm","submit",saveCollection);
