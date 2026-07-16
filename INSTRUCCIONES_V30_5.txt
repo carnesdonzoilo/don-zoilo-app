@@ -1,0 +1,11 @@
+VERSIÓN 30.5 – PROVEEDORES, PRIMER PASO
+
+Incluye:
+- Nueva pestaña Proveedores.
+- Carga de saldo inicial con fecha sugerida 16/07/2026.
+- Registro de compras a cuenta corriente.
+- Registro de pagos.
+- Saldo inicial, compras, pagos y saldo actual.
+- Total general de deuda con proveedores.
+- Historial por proveedor.
+- No requiere cambios en Supabase.

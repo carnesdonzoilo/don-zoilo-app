@@ -135,6 +135,9 @@ async function removeMovement(id){
   movements = movements.filter(m => m.id !== id);
   localSave();
   if($("expenseDate")) $("expenseDate").value=todayISO();
+if($("supplierOpeningDate")) $("supplierOpeningDate").value="2026-07-16";
+if($("supplierPurchaseDate")) $("supplierPurchaseDate").value=todayISO();
+if($("supplierPaymentDate")) $("supplierPaymentDate").value=todayISO();
 if($("openingDate")) $("openingDate").value=todayISO();
 if($("collectionDate")) $("collectionDate").value=todayISO();
 if($("expenseMonth")) $("expenseMonth").value=todayISO().slice(0,7);
@@ -1635,6 +1638,196 @@ function openBalanceDetail(client){
   else dialog?.setAttribute("open","");
 }
 
+
+function isSupplierOpeningMovement(m){
+  return m.type==="compra" && String(m.notes||"").includes("SALDO_INICIAL_PROVEEDOR");
+}
+
+function supplierNames(){
+  const names=new Set();
+  movements.forEach(m=>{
+    if(["compra","pago"].includes(m.type) && String(m.party||"").trim()){
+      names.add(String(m.party).trim());
+    }
+  });
+  return [...names].sort((a,b)=>a.localeCompare(b,"es"));
+}
+
+function supplierMovementsFor(name){
+  const key=normalizeClientName(name);
+  return movements.filter(m=>
+    m.status!=="pendiente" &&
+    ["compra","pago"].includes(m.type) &&
+    normalizeClientName(m.party)===key
+  );
+}
+
+function supplierTotals(name){
+  const list=supplierMovementsFor(name);
+  const opening=list.filter(isSupplierOpeningMovement).reduce((s,m)=>s+Number(m.amount||0),0);
+  const purchases=list.filter(m=>m.type==="compra" && !isSupplierOpeningMovement(m)).reduce((s,m)=>s+Number(m.amount||0),0);
+  const payments=list.filter(m=>m.type==="pago").reduce((s,m)=>s+Number(m.amount||0),0);
+  return {opening,purchases,payments,balance:opening+purchases-payments};
+}
+
+function allSuppliersDebt(){
+  const grouped=new Map();
+  movements.filter(m=>m.status!=="pendiente" && ["compra","pago"].includes(m.type)).forEach(m=>{
+    const key=normalizeClientName(m.party);
+    if(!key) return;
+    const current=grouped.get(key)||0;
+    grouped.set(key,current+(m.type==="compra"?Number(m.amount||0):-Number(m.amount||0)));
+  });
+  return [...grouped.values()].reduce((sum,value)=>sum+value,0);
+}
+
+function fillSupplierSelectors(){
+  const names=supplierNames();
+  const select=$("supplierAccountSelect");
+  if(select){
+    const current=select.value;
+    select.innerHTML='<option value="">Elegir proveedor</option>';
+    names.forEach(name=>{
+      const option=document.createElement("option");
+      option.value=name;
+      option.textContent=name;
+      select.append(option);
+    });
+    if(names.includes(current)) select.value=current;
+  }
+  const dataList=$("supplierNamesList");
+  if(dataList){
+    dataList.innerHTML="";
+    names.forEach(name=>{
+      const option=document.createElement("option");
+      option.value=name;
+      dataList.append(option);
+    });
+  }
+}
+
+function renderSupplierHistory(name){
+  const box=$("supplierHistoryList");
+  if(!box) return;
+  box.innerHTML="";
+  if(!name){
+    box.innerHTML='<div class="supplier-empty">Elegí un proveedor para ver su cuenta corriente.</div>';
+    return;
+  }
+  const list=supplierMovementsFor(name).slice()
+    .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)));
+  if(!list.length){
+    box.innerHTML='<div class="supplier-empty">Este proveedor todavía no tiene movimientos.</div>';
+    return;
+  }
+  list.forEach(m=>{
+    const isDebt=m.type==="compra";
+    const label=isSupplierOpeningMovement(m)?"Saldo inicial":m.type==="compra"?"Compra":"Pago";
+    const row=document.createElement("div");
+    row.className=`supplier-history-row ${isDebt?"debt":"payment"}`;
+    row.innerHTML=`
+      <div class="date">${fmtDate(m.date)}</div>
+      <div>
+        <strong>${label} · ${escapeHtml(m.concept||"")}</strong>
+        <small>${escapeHtml(m.payment_method||"")} ${m.notes?`· ${escapeHtml(m.notes.replace("SALDO_INICIAL_PROVEEDOR","").replace("|","").trim())}`:""}</small>
+      </div>
+      <div class="amount">${isDebt?"+":"−"}${money(m.amount||0)}</div>`;
+    box.append(row);
+  });
+}
+
+function renderSuppliers(){
+  fillSupplierSelectors();
+  const supplier=$("supplierAccountSelect")?.value||"";
+  const totals=supplier?supplierTotals(supplier):{opening:0,purchases:0,payments:0,balance:0};
+  if($("supplierCurrentBalance")) $("supplierCurrentBalance").textContent=money(totals.balance);
+  if($("supplierOpeningBalance")) $("supplierOpeningBalance").textContent=money(totals.opening);
+  if($("supplierPurchases")) $("supplierPurchases").textContent=money(totals.purchases);
+  if($("supplierPayments")) $("supplierPayments").textContent=money(totals.payments);
+  if($("allSuppliersDebt")) $("allSuppliersDebt").textContent=money(allSuppliersDebt());
+  renderSupplierHistory(supplier);
+}
+
+async function saveSupplierMovement({type,name,amount,date,detail,method,opening=false}){
+  const movement={
+    id:uid(),
+    date,
+    type,
+    party:name.trim(),
+    concept:opening?"Saldo inicial proveedor":(detail||type),
+    kg:0,
+    amount:Number(amount),
+    payment_method:method||"cuenta_corriente",
+    status:"confirmado",
+    notes:opening?`SALDO_INICIAL_PROVEEDOR | ${detail||"Saldo al cierre del 16/07/2026"}`:"",
+    source_order_id:null,
+    created_at:new Date().toISOString()
+  };
+  if(supabaseClient){
+    const {error}=await supabaseClient.from("movements").insert(movement);
+    if(error) throw error;
+  }
+  movements.unshift(movement);
+  localSave();
+  if($("supplierAccountSelect")) $("supplierAccountSelect").value=name.trim();
+  renderAll();
+}
+
+async function submitSupplierOpening(event){
+  event.preventDefault();
+  const name=$("supplierOpeningName")?.value||"";
+  const amount=Number($("supplierOpeningAmount")?.value||0);
+  const date=$("supplierOpeningDate")?.value||"2026-07-16";
+  const detail=String($("supplierOpeningDetail")?.value||"").trim();
+  if(!name.trim()) return alert("Ingresá el proveedor.");
+  if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
+  try{
+    await saveSupplierMovement({type:"compra",name,amount,date,detail,method:"cuenta_corriente",opening:true});
+    $("supplierOpeningAmount").value="";
+    $("supplierOpeningDetail").value="";
+    showDeliveryToast("Saldo inicial del proveedor guardado.");
+  }catch(error){
+    alert("No se pudo guardar el saldo inicial: "+error.message);
+  }
+}
+
+async function submitSupplierPurchase(event){
+  event.preventDefault();
+  const name=$("supplierPurchaseName")?.value||"";
+  const amount=Number($("supplierPurchaseAmount")?.value||0);
+  const date=$("supplierPurchaseDate")?.value||todayISO();
+  const detail=String($("supplierPurchaseDetail")?.value||"").trim();
+  if(!name.trim()) return alert("Ingresá el proveedor.");
+  if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
+  try{
+    await saveSupplierMovement({type:"compra",name,amount,date,detail,method:"cuenta_corriente"});
+    $("supplierPurchaseAmount").value="";
+    $("supplierPurchaseDetail").value="";
+    showDeliveryToast("Compra del proveedor guardada.");
+  }catch(error){
+    alert("No se pudo guardar la compra: "+error.message);
+  }
+}
+
+async function submitSupplierPayment(event){
+  event.preventDefault();
+  const name=$("supplierPaymentName")?.value||"";
+  const amount=Number($("supplierPaymentAmount")?.value||0);
+  const date=$("supplierPaymentDate")?.value||todayISO();
+  const detail=String($("supplierPaymentDetail")?.value||"").trim();
+  const method=$("supplierPaymentMethod")?.value||"efectivo";
+  if(!name.trim()) return alert("Ingresá el proveedor.");
+  if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
+  try{
+    await saveSupplierMovement({type:"pago",name,amount,date,detail,method});
+    $("supplierPaymentAmount").value="";
+    $("supplierPaymentDetail").value="";
+    showDeliveryToast("Pago al proveedor guardado.");
+  }catch(error){
+    alert("No se pudo guardar el pago: "+error.message);
+  }
+}
+
 function renderBalances(){
   if($("allClientBalancesTotal")){
     $("allClientBalancesTotal").textContent=money(totalClientCurrentAccounts());
@@ -1712,7 +1905,7 @@ function renderBalances(){
   });
 }
 
-function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderAccounts(); renderPrices(); renderPricePrintSheet(); }
+function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderAccounts(); renderPrices(); renderPricePrintSheet();  renderSuppliers(); }
 
 function exportCSV(){
   const cols=["date","type","party","concept","kg","amount","payment_method","status","notes"];
@@ -3368,6 +3561,12 @@ document.querySelectorAll("[data-expense-amount]").forEach(button=>{
   });
 });
 
+
+on("supplierOpeningForm","submit",submitSupplierOpening);
+on("supplierPurchaseForm","submit",submitSupplierPurchase);
+on("supplierPaymentForm","submit",submitSupplierPayment);
+on("supplierAccountSelect","change",renderSuppliers);
+on("refreshSuppliers","click",renderSuppliers);
 on("quickExpenseForm","submit",saveQuickExpense);
 on("expenseCategory","change",()=>{
   selectedExpenseCategory=$("expenseCategory")?.value||"";

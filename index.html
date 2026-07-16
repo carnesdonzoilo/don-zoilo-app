@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 30.4.1</div>
+      <div class="subtitle">Control de operaciones · Versión 30.5</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -34,6 +34,7 @@
       <button class="tab" data-view="expenses">Gastos</button>
       <button class="tab" data-view="balances">Saldos</button>
       <button class="tab" data-view="accounts">Cuentas corrientes</button>
+      <button class="tab" data-view="suppliers">Proveedores</button>
       <button class="tab" data-view="prices">Precios</button>
     </nav>
 
@@ -520,6 +521,109 @@
       </div>
     </section>
 
+
+    <section id="suppliers" class="view">
+      <div class="supplier-layout">
+        <div class="panel">
+          <div class="section-head">
+            <div>
+              <h2>Cuenta corriente de proveedores</h2>
+              <p class="muted">Saldo inicial, compras, pagos e historial.</p>
+            </div>
+          </div>
+
+          <div class="supplier-picker">
+            <label>Proveedor
+              <select id="supplierAccountSelect">
+                <option value="">Elegir proveedor</option>
+              </select>
+            </label>
+            <button type="button" id="refreshSuppliers" class="secondary">↻ Actualizar</button>
+          </div>
+
+          <div class="supplier-kpis">
+            <article><span>Saldo actual</span><strong id="supplierCurrentBalance">$ 0</strong></article>
+            <article><span>Saldo inicial</span><strong id="supplierOpeningBalance">$ 0</strong></article>
+            <article><span>Compras</span><strong id="supplierPurchases">$ 0</strong></article>
+            <article><span>Pagos</span><strong id="supplierPayments">$ 0</strong></article>
+          </div>
+
+          <div class="supplier-total-card">
+            <span>Total deuda con proveedores</span>
+            <strong id="allSuppliersDebt">$ 0</strong>
+          </div>
+
+          <div id="supplierHistoryList" class="supplier-history-list"></div>
+        </div>
+
+        <div class="supplier-side">
+          <div class="panel">
+            <h3>Cargar saldo inicial</h3>
+            <form id="supplierOpeningForm" class="supplier-form">
+              <label>Proveedor
+                <input id="supplierOpeningName" list="supplierNamesList" placeholder="Ej.: Tito, Chicago, Jorge" required>
+              </label>
+              <label>Importe
+                <input id="supplierOpeningAmount" type="number" min="0" step="0.01" inputmode="decimal" required>
+              </label>
+              <label>Fecha
+                <input id="supplierOpeningDate" type="date" required>
+              </label>
+              <label>Detalle opcional
+                <input id="supplierOpeningDetail" placeholder="Saldo al cierre del 16/07/2026">
+              </label>
+              <button type="submit" class="primary">Guardar saldo inicial</button>
+            </form>
+          </div>
+
+          <div class="panel">
+            <h3>Registrar compra</h3>
+            <form id="supplierPurchaseForm" class="supplier-form">
+              <label>Proveedor
+                <input id="supplierPurchaseName" list="supplierNamesList" placeholder="Proveedor" required>
+              </label>
+              <label>Importe
+                <input id="supplierPurchaseAmount" type="number" min="0" step="0.01" inputmode="decimal" required>
+              </label>
+              <label>Fecha
+                <input id="supplierPurchaseDate" type="date" required>
+              </label>
+              <label>Detalle opcional
+                <input id="supplierPurchaseDetail" placeholder="Ej.: Factura 123, mercadería">
+              </label>
+              <button type="submit" class="primary">Guardar compra</button>
+            </form>
+          </div>
+
+          <div class="panel">
+            <h3>Registrar pago</h3>
+            <form id="supplierPaymentForm" class="supplier-form">
+              <label>Proveedor
+                <input id="supplierPaymentName" list="supplierNamesList" placeholder="Proveedor" required>
+              </label>
+              <label>Importe
+                <input id="supplierPaymentAmount" type="number" min="0" step="0.01" inputmode="decimal" required>
+              </label>
+              <label>Fecha
+                <input id="supplierPaymentDate" type="date" required>
+              </label>
+              <label>Medio de pago
+                <select id="supplierPaymentMethod">
+                  <option value="efectivo">Efectivo</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="cheque">Cheque</option>
+                </select>
+              </label>
+              <label>Detalle opcional
+                <input id="supplierPaymentDetail" placeholder="Ej.: Pago parcial, cheque, transferencia">
+              </label>
+              <button type="submit" class="primary">Guardar pago</button>
+            </form>
+          </div>
+        </div>
+      </div>
+      <datalist id="supplierNamesList"></datalist>
+    </section>
 <section id="remitoView" class="view">
       <div class="panel no-print remito-toolbar">
         <button id="backFromRemito" class="secondary">← Volver a pedidos</button>

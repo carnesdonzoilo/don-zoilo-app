@@ -851,3 +851,25 @@ dialog::backdrop{background:#0009}
   .expense-row{grid-template-columns:1fr auto!important}
   .expense-row-actions{grid-column:1/-1}
 }
+
+.supplier-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(310px,.9fr);gap:16px}
+.supplier-side{display:grid;gap:16px;align-content:start}
+.supplier-picker{display:flex;gap:10px;align-items:end;margin:12px 0}
+.supplier-picker label{display:grid;gap:5px;min-width:260px;font-weight:800}
+.supplier-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+.supplier-kpis article{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px}
+.supplier-kpis span{display:block;color:var(--muted);font-size:.78rem;margin-bottom:5px}
+.supplier-kpis strong{font-size:1.1rem}
+.supplier-total-card{display:flex;justify-content:space-between;align-items:center;background:#0f1d25;color:#fff;border-radius:14px;padding:15px;margin-bottom:14px}
+.supplier-total-card strong{font-size:1.25rem}
+.supplier-form{display:grid;gap:10px}
+.supplier-form label{display:grid;gap:5px;font-weight:800}
+.supplier-history-list{display:grid;gap:8px}
+.supplier-history-row{display:grid;grid-template-columns:105px 1fr 140px;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}
+.supplier-history-row small{color:var(--muted)}
+.supplier-history-row .amount{text-align:right;font-weight:900}
+.supplier-history-row.debt .amount{color:#9b2525}
+.supplier-history-row.payment .amount{color:#16723a}
+.supplier-empty{padding:20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
+@media(max-width:950px){.supplier-layout{grid-template-columns:1fr}.supplier-kpis{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.supplier-picker{flex-direction:column;align-items:stretch}.supplier-picker label{min-width:0}.supplier-history-row{grid-template-columns:1fr auto}.supplier-history-row .date{grid-column:1/-1}}
