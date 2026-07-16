@@ -1,0 +1,23 @@
+VERSIÓN 30.4.1 – GASTOS MEJORADOS
+
+Incluye:
+- Fecha de hoy automática.
+- Botones de importes rápidos.
+- Mantiene la categoría después de guardar.
+- Limpia importe y detalle después de guardar.
+- Últimos 10 gastos.
+- Editar y eliminar gastos.
+- Total de hoy.
+- Total y cantidad de movimientos del mes.
+- Resumen mensual por rubro.
+- Botón para importar gastos del PDF de julio.
+- Importación idempotente: no duplica al tocar dos veces.
+- Registros preparados: 145.
+- Total preparado para importar: $7,839,023.33.
+- No requiere cambios en Supabase.
+
+Importación:
+1. Entrar en Gastos.
+2. Tocar Importar gastos de julio.
+3. Confirmar.
+4. Revisar Últimos gastos y Resumen mensual.

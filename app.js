@@ -680,7 +680,7 @@ function renderExpenseRecent(){
   box.innerHTML="";
   const list=expenseMovements().slice()
     .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)))
-    .slice(0,8);
+    .slice(0,10);
 
   if(!list.length){
     box.innerHTML='<div class="expense-empty">Todavía no hay gastos cargados.</div>';
@@ -696,9 +696,126 @@ function renderExpenseRecent(){
         <strong>${escapeHtml(category)} · ${escapeHtml(m.concept||"Sin detalle")}</strong>
         <small>${fmtDate(m.date)} · ${escapeHtml((m.payment_method||"efectivo").replace("_"," "))}</small>
       </div>
-      <strong>${money(m.amount||0)}</strong>`;
+      <strong>${money(m.amount||0)}</strong>
+      <div class="expense-row-actions">
+        <button type="button" class="expense-edit-btn">Editar</button>
+        <button type="button" class="expense-delete-btn">Eliminar</button>
+      </div>`;
+
+    row.querySelector(".expense-edit-btn").addEventListener("click",()=>editExpenseMovement(m));
+    row.querySelector(".expense-delete-btn").addEventListener("click",()=>deleteExpenseMovement(m));
     box.append(row);
   });
+}
+
+
+function expenseTotalsForDate(date){
+  return expenseMovements()
+    .filter(m=>m.date===date)
+    .reduce((sum,m)=>sum+Number(m.amount||0),0);
+}
+
+function renderExpenseKpis(){
+  const today=todayISO();
+  const month=today.slice(0,7);
+  const monthList=expenseMovements().filter(m=>String(m.date||"").startsWith(month));
+  const monthTotal=monthList.reduce((sum,m)=>sum+Number(m.amount||0),0);
+  if($("expenseTodayTotal")) $("expenseTodayTotal").textContent=money(expenseTotalsForDate(today));
+  if($("expenseCurrentMonthTotal")) $("expenseCurrentMonthTotal").textContent=money(monthTotal);
+  if($("expenseMonthCount")) $("expenseMonthCount").textContent=String(monthList.length);
+}
+
+async function editExpenseMovement(movement){
+  const currentCategory=expenseCategoryFromMovement(movement);
+  const category=prompt("Categoría:",currentCategory);
+  if(category===null) return;
+  const detail=prompt("Detalle:",movement.concept||"");
+  if(detail===null) return;
+  const amountText=prompt("Importe:",String(Number(movement.amount||0)));
+  if(amountText===null) return;
+  const amount=Number(String(amountText).replace(",","."));
+  if(!(amount>0)) return alert("Importe inválido.");
+  const date=prompt("Fecha (AAAA-MM-DD):",movement.date||todayISO());
+  if(date===null) return;
+
+  const updated={
+    ...movement,
+    date,
+    concept:String(detail).trim()||String(category).trim().toUpperCase(),
+    amount,
+    notes:`RUBRO: ${String(category).trim().toUpperCase()}`
+  };
+
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").update(updated).eq("id",movement.id);
+      if(error) throw error;
+    }
+    const idx=movements.findIndex(m=>m.id===movement.id);
+    if(idx>=0) movements[idx]=updated;
+    localSave();
+    renderAll();
+    showDeliveryToast("Gasto actualizado.");
+  }catch(error){
+    alert("No se pudo editar el gasto: "+error.message);
+  }
+}
+
+async function deleteExpenseMovement(movement){
+  if(!confirm(`¿Eliminar ${movement.concept||"este gasto"} por ${money(movement.amount||0)}?`)) return;
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").delete().eq("id",movement.id);
+      if(error) throw error;
+    }
+    movements=movements.filter(m=>m.id!==movement.id);
+    localSave();
+    renderAll();
+    showDeliveryToast("Gasto eliminado.");
+  }catch(error){
+    alert("No se pudo eliminar el gasto: "+error.message);
+  }
+}
+
+function julyExpenseId(item,index){
+  const clean=String(item.detail||"gasto")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+  return `expense-import-2026-07-${item.date}-${clean}-${index}`;
+}
+
+async function importJulyExpenses(){
+  const pending=JULY_EXPENSE_IMPORT.map((item,index)=>({
+    id:julyExpenseId(item,index),
+    date:item.date,
+    type:"gasto",
+    party:"",
+    concept:item.detail,
+    kg:0,
+    amount:Number(item.amount||0),
+    payment_method:"efectivo",
+    status:"confirmado",
+    notes:`RUBRO: ${item.category} | IMPORTADO PDF JULIO 2026`,
+    source_order_id:null,
+    created_at:`${item.date}T12:00:00.000Z`
+  })).filter(item=>item.amount>0 && !movements.some(m=>m.id===item.id));
+
+  if(!pending.length) return alert("Los gastos de julio ya están importados.");
+  if(!confirm(`Se importarán ${pending.length} gastos. ¿Continuar?`)) return;
+
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").upsert(pending,{onConflict:"id"});
+      if(error) throw error;
+    }
+    movements.push(...pending);
+    movements.sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)));
+    localSave();
+    renderAll();
+    alert(`Importación completa: ${pending.length} gastos cargados.`);
+  }catch(error){
+    alert("No se pudieron importar los gastos: "+error.message);
+  }
 }
 
 function monthBounds(monthValue){
@@ -753,6 +870,7 @@ function ensureTodayExpenseDate(){
 function renderExpenses(){
   ensureTodayExpenseDate();
   renderExpenseCategories();
+  renderExpenseKpis();
   renderExpenseRecent();
   renderExpenseSummary();
 }
@@ -797,6 +915,8 @@ async function saveQuickExpense(event){
 
     $("expenseAmount").value="";
     $("expenseDetail").value="";
+    if($("expenseCategory")) $("expenseCategory").value=category;
+    selectedExpenseCategory=category;
     if($("expenseDate")) $("expenseDate").value=todayISO();
     $("expenseAmount").focus();
     showDeliveryToast(`Gasto ${category} guardado.`);
@@ -2022,6 +2142,8 @@ const EXPENSE_CATEGORIES=[
   "NAFTA","PEAJE","PROPINA","REPARTO","ATENCIÓN","SUELDOS","KANGOO"
 ];
 let selectedExpenseCategory="";
+const JULY_EXPENSE_IMPORT=[{"date": "2026-07-01", "detail": "PROPINA", "category": "PROPINA", "amount": 22000.0}, {"date": "2026-07-01", "detail": "PEAJE", "category": "PEAJE", "amount": 3380.13}, {"date": "2026-07-01", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 21000}, {"date": "2026-07-01", "detail": "NEGRO", "category": "SUELDOS", "amount": 50000}, {"date": "2026-07-01", "detail": "ALQUILER", "category": "LOCAL", "amount": 400000}, {"date": "2026-07-01", "detail": "CARNE", "category": "CASA", "amount": 30000}, {"date": "2026-07-01", "detail": "FLOW", "category": "SERVICIOS", "amount": 90000}, {"date": "2026-07-01", "detail": "M. CREDITO", "category": "REPARTO", "amount": 165292.39}, {"date": "2026-07-01", "detail": "SPOTIFY", "category": "LEO", "amount": 4717}, {"date": "2026-07-01", "detail": "JUEGO", "category": "LEO", "amount": 40000}, {"date": "2026-07-01", "detail": "PELUQUERIA", "category": "LEO", "amount": 20000}, {"date": "2026-07-01", "detail": "REGALO GRETA", "category": "CASA", "amount": 22400}, {"date": "2026-07-01", "detail": "COMIDA", "category": "CASA", "amount": 20000}, {"date": "2026-07-01", "detail": "CENA", "category": "LEO", "amount": 23200}, {"date": "2026-07-01", "detail": "DELIVERY", "category": "CASA", "amount": 21200}, {"date": "2026-07-02", "detail": "NAFTA", "category": "NAFTA", "amount": 40000}, {"date": "2026-07-02", "detail": "PROPINA", "category": "PROPINA", "amount": 20000}, {"date": "2026-07-02", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 25000}, {"date": "2026-07-02", "detail": "NEGRO", "category": "SUELDOS", "amount": 50000}, {"date": "2026-07-02", "detail": "ROMI", "category": "ROMI", "amount": 20000}, {"date": "2026-07-02", "detail": "CARNE", "category": "CASA", "amount": 16000}, {"date": "2026-07-03", "detail": "NAFTA", "category": "NAFTA", "amount": 40000}, {"date": "2026-07-03", "detail": "PROPINA", "category": "PROPINA", "amount": 20000}, {"date": "2026-07-03", "detail": "PEAJE", "category": "PEAJE", "amount": 4175.44}, {"date": "2026-07-03", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 21000}, {"date": "2026-07-03", "detail": "NEGRO", "category": "SUELDOS", "amount": 50000}, {"date": "2026-07-03", "detail": "NOI", "category": "ATENCIÓN", "amount": 26000}, {"date": "2026-07-03", "detail": "JUEGO", "category": "LEO", "amount": 70000}, {"date": "2026-07-03", "detail": "ROMI", "category": "ROMI", "amount": 55000}, {"date": "2026-07-03", "detail": "KIOSCO", "category": "CASA", "amount": 15000}, {"date": "2026-07-03", "detail": "REGALO HERNI", "category": "CASA", "amount": 60000}, {"date": "2026-07-03", "detail": "TONER", "category": "REPARTO", "amount": 20000}, {"date": "2026-07-03", "detail": "TIENDA NUBE", "category": "REPARTO", "amount": 27333.7}, {"date": "2026-07-03", "detail": "CHAT GTP", "category": "REPARTO", "amount": 32300}, {"date": "2026-07-03", "detail": "EDENOR", "category": "LOCAL", "amount": 95533}, {"date": "2026-07-03", "detail": "EDENOR", "category": "SERVICIOS", "amount": 30000}, {"date": "2026-07-03", "detail": "CONTADORA", "category": "IMPUESTOS", "amount": 240000}, {"date": "2026-07-05", "detail": "PROPINA", "category": "PROPINA", "amount": 22000}, {"date": "2026-07-05", "detail": "PEAJE", "category": "PEAJE", "amount": 3181.29}, {"date": "2026-07-05", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 16000}, {"date": "2026-07-05", "detail": "NEGRO", "category": "SUELDOS", "amount": 50000}, {"date": "2026-07-05", "detail": "LOCRO NOI", "category": "ATENCIÓN", "amount": 65000}, {"date": "2026-07-05", "detail": "JUEGO", "category": "LEO", "amount": 30000}, {"date": "2026-07-05", "detail": "LEOFA", "category": "LEO", "amount": 60000}, {"date": "2026-07-05", "detail": "COMIDA", "category": "LEO", "amount": 28000}, {"date": "2026-07-05", "detail": "COMIDA", "category": "CASA", "amount": 28300}, {"date": "2026-07-05", "detail": "PINTOR", "category": "CASA", "amount": 180000}, {"date": "2026-07-05", "detail": "AGUA", "category": "CASA", "amount": 20000}, {"date": "2026-07-05", "detail": "CENA ARG", "category": "CASA", "amount": 55000}, {"date": "2026-07-05", "detail": "IMP. M.PAGO", "category": "IMPUESTOS", "amount": 1504.87}, {"date": "2026-07-06", "detail": "NAFTA", "category": "NAFTA", "amount": 40000}, {"date": "2026-07-06", "detail": "PROPINA", "category": "PROPINA", "amount": 20000}, {"date": "2026-07-06", "detail": "PEAJE", "category": "PEAJE", "amount": 3181.29}, {"date": "2026-07-06", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 31000}, {"date": "2026-07-06", "detail": "NEGRO", "category": "SUELDOS", "amount": 50000}, {"date": "2026-07-06", "detail": "AUTON JUN 26", "category": "IMPUESTOS", "amount": 72446.22}, {"date": "2026-07-06", "detail": "JARDIN", "category": "SERVICIOS", "amount": 250000}, {"date": "2026-07-06", "detail": "CENA", "category": "CASA", "amount": 28000}, {"date": "2026-07-06", "detail": "JUEGO", "category": "LEO", "amount": 20000}, {"date": "2026-07-06", "detail": "LOCRO ITUZ", "category": "ATENCIÓN", "amount": 32500}, {"date": "2026-07-06", "detail": "BOLSA", "category": "REPARTO", "amount": 52400}, {"date": "2026-07-06", "detail": "INTEN", "category": "ATENCIÓN", "amount": 24700}, {"date": "2026-07-06", "detail": "KIOSCO", "category": "CASA", "amount": 28700}, {"date": "2026-07-07", "detail": "NAFTA", "category": "NAFTA", "amount": 40000}, {"date": "2026-07-07", "detail": "PROPINA", "category": "PROPINA", "amount": 22000}, {"date": "2026-07-07", "detail": "PEAJE", "category": "PEAJE", "amount": 4175.44}, {"date": "2026-07-07", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 16000}, {"date": "2026-07-07", "detail": "NEGRO", "category": "SUELDOS", "amount": 50000}, {"date": "2026-07-07", "detail": "INTENDENCI GRA", "category": "ATENCIÓN", "amount": 12600}, {"date": "2026-07-07", "detail": "JUEGO", "category": "LEO", "amount": 20000}, {"date": "2026-07-07", "detail": "RET IIBB GAL", "category": "RETENCIONES", "amount": 65516.5}, {"date": "2026-07-07", "detail": "KIOSCO", "category": "LEO", "amount": 21000}, {"date": "2026-07-07", "detail": "FARMCIA", "category": "CASA", "amount": 30000}, {"date": "2026-07-07", "detail": "COMIDA", "category": "CASA", "amount": 30000}, {"date": "2026-07-07", "detail": "ROMI", "category": "ROMI", "amount": 20000}, {"date": "2026-07-08", "detail": "NAFTA", "category": "NAFTA", "amount": 40000}, {"date": "2026-07-08", "detail": "PROPINA", "category": "PROPINA", "amount": 20000}, {"date": "2026-07-08", "detail": "PEAJE", "category": "PEAJE", "amount": 3380.13}, {"date": "2026-07-08", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 16000}, {"date": "2026-07-08", "detail": "NEGRO", "category": "SUELDOS", "amount": 50000}, {"date": "2026-07-08", "detail": "MORON", "category": "ATENCIÓN", "amount": 65000}, {"date": "2026-07-08", "detail": "JUEGO", "category": "LEO", "amount": 20000}, {"date": "2026-07-08", "detail": "CARNE", "category": "CASA", "amount": 68000}, {"date": "2026-07-08", "detail": "ROMI", "category": "ROMI", "amount": 50000}, {"date": "2026-07-08", "detail": "LAVADO ACOLC", "category": "CASA", "amount": 54000}, {"date": "2026-07-08", "detail": "PUBLI FB", "category": "REPARTO", "amount": 12758.54}, {"date": "2026-07-08", "detail": "SEGURO JUL26", "category": "KANGOO", "amount": 159354.31}, {"date": "2026-07-08", "detail": "NOI", "category": "ATENCIÓN", "amount": 21250}, {"date": "2026-07-09", "detail": "NAFTA", "category": "NAFTA", "amount": 36000}, {"date": "2026-07-09", "detail": "PROPINA", "category": "PROPINA", "amount": 20000}, {"date": "2026-07-09", "detail": "PEAJE", "category": "PEAJE", "amount": 3380.13}, {"date": "2026-07-09", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 21000}, {"date": "2026-07-09", "detail": "NEGRO", "category": "SUELDOS", "amount": 50000}, {"date": "2026-07-09", "detail": "CENA", "category": "CASA", "amount": 78000}, {"date": "2026-07-09", "detail": "AJUSTE STOCK", "category": "MERMA", "amount": 117975}, {"date": "2026-07-09", "detail": "DINO GRETA", "category": "CASA", "amount": 22000}, {"date": "2026-07-09", "detail": "GAS NATURAL", "category": "SERVICIOS", "amount": 52000}, {"date": "2026-07-10", "detail": "PROPINA", "category": "PROPINA", "amount": 22000}, {"date": "2026-07-10", "detail": "PEAJE", "category": "PEAJE", "amount": 4374.28}, {"date": "2026-07-10", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 21000}, {"date": "2026-07-10", "detail": "NEGRO", "category": "SUELDOS", "amount": 50000}, {"date": "2026-07-10", "detail": "COMIDA", "category": "CASA", "amount": 59496.5}, {"date": "2026-07-10", "detail": "LEOFA", "category": "LEO", "amount": 70000}, {"date": "2026-07-10", "detail": "JUEGO", "category": "LEO", "amount": 30000}, {"date": "2026-07-11", "detail": "PROPINA", "category": "PROPINA", "amount": 22000}, {"date": "2026-07-11", "detail": "PEAJE", "category": "PEAJE", "amount": 9593.97}, {"date": "2026-07-11", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 21000}, {"date": "2026-07-11", "detail": "NEGRO", "category": "SUELDOS", "amount": 60000}, {"date": "2026-07-11", "detail": "COMIDA", "category": "CASA", "amount": 30000}, {"date": "2026-07-11", "detail": "JUEGO", "category": "LEO", "amount": 10000}, {"date": "2026-07-11", "detail": "MONC MORON", "category": "ATENCIÓN", "amount": 14430}, {"date": "2026-07-11", "detail": "NOI", "category": "ATENCIÓN", "amount": 27625}, {"date": "2026-07-11", "detail": "SIFON", "category": "ATENCIÓN", "amount": 27625}, {"date": "2026-07-13", "detail": "NAFTA", "category": "NAFTA", "amount": 40000}, {"date": "2026-07-13", "detail": "PROPINA", "category": "PROPINA", "amount": 22000}, {"date": "2026-07-13", "detail": "PEAJE", "category": "PEAJE", "amount": 4374.28}, {"date": "2026-07-13", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 12000}, {"date": "2026-07-13", "detail": "NEGRO", "category": "SUELDOS", "amount": 64000}, {"date": "2026-07-13", "detail": "CARNE", "category": "CASA", "amount": 43000}, {"date": "2026-07-13", "detail": "VISA", "category": "TARJETAS", "amount": 476140.41}, {"date": "2026-07-13", "detail": "MASTER", "category": "TARJETAS", "amount": 211942.65}, {"date": "2026-07-13", "detail": "PSICO&DESA", "category": "ROMI", "amount": 70000}, {"date": "2026-07-13", "detail": "SUPER", "category": "CASA", "amount": 61600}, {"date": "2026-07-13", "detail": "CENA", "category": "CASA", "amount": 33100}, {"date": "2026-07-14", "detail": "PROPINA", "category": "PROPINA", "amount": 22000}, {"date": "2026-07-14", "detail": "PEAJE", "category": "PEAJE", "amount": 4374.28}, {"date": "2026-07-14", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 24000}, {"date": "2026-07-14", "detail": "NEGRO", "category": "SUELDOS", "amount": 60000}, {"date": "2026-07-14", "detail": "RET IIBB GAL", "category": "RETENCIONES", "amount": 180199.25}, {"date": "2026-07-14", "detail": "REGALO GRETA", "category": "CASA", "amount": 30000}, {"date": "2026-07-14", "detail": "ROMI", "category": "ROMI", "amount": 30000}, {"date": "2026-07-14", "detail": "HOJA TERMICA", "category": "REPARTO", "amount": 24560}, {"date": "2026-07-14", "detail": "MORCILLA BAJ", "category": "MERMA", "amount": 24200}, {"date": "2026-07-14", "detail": "PERC. IIBB EXPORT", "category": "RETENCIONES", "amount": 1018671}, {"date": "2026-07-16", "detail": "NAFTA", "category": "NAFTA", "amount": 80000}, {"date": "2026-07-16", "detail": "PROPINA", "category": "PROPINA", "amount": 40000}, {"date": "2026-07-16", "detail": "PEAJE", "category": "PEAJE", "amount": 8947.33}, {"date": "2026-07-16", "detail": "DESAYUNO", "category": "DESAYUNO", "amount": 33000}, {"date": "2026-07-16", "detail": "NEGRO", "category": "SUELDOS", "amount": 50000}, {"date": "2026-07-16", "detail": "LEOFA", "category": "LEO", "amount": 70000}, {"date": "2026-07-16", "detail": "ATENCION", "category": "REPARTO", "amount": 27934}, {"date": "2026-07-16", "detail": "ROMI", "category": "ROMI", "amount": 20000}, {"date": "2026-07-16", "detail": "RACK", "category": "CASA", "amount": 50000}, {"date": "2026-07-16", "detail": "PICADA", "category": "CASA", "amount": 30000}, {"date": "2026-07-16", "detail": "CERAMICA", "category": "ROMI", "amount": 60000}];
+
 
 
 function remitoSequence(items){
@@ -3234,6 +3356,17 @@ on("accountClientSelect","change",renderAccounts);
 on("refreshAccounts","click",renderAccounts);
 on("collectFullBalance","click",collectFullBalance);
 on("printAccountStatement","click",printAccountStatement);
+
+
+on("importJulyExpenses","click",importJulyExpenses);
+document.querySelectorAll("[data-expense-amount]").forEach(button=>{
+  button.addEventListener("click",()=>{
+    const field=$("expenseAmount");
+    if(!field) return;
+    field.value=button.dataset.expenseAmount;
+    field.focus();
+  });
+});
 
 on("quickExpenseForm","submit",saveQuickExpense);
 on("expenseCategory","change",()=>{

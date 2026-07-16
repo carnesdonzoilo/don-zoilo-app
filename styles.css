@@ -831,3 +831,23 @@ dialog::backdrop{background:#0009}
   .balance-detail-row{grid-template-columns:1fr auto}
   .balance-detail-row .date{grid-column:1/-1}
 }
+
+/* V30.4.1 - Gastos diarios mejorados */
+.expense-head{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.expense-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.expense-kpis article{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px}
+.expense-kpis span{display:block;color:var(--muted);font-size:.78rem;margin-bottom:5px}
+.expense-kpis strong{font-size:1.15rem}
+.expense-quick-amounts{display:flex;gap:7px;flex-wrap:wrap;align-self:end}
+.expense-quick-amounts button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 11px;font-weight:900;cursor:pointer}
+.expense-row{grid-template-columns:minmax(0,1fr) auto auto!important}
+.expense-row-actions{display:flex;gap:5px}
+.expense-row-actions button{border:0;border-radius:8px;padding:7px 9px;font-weight:900;cursor:pointer}
+.expense-edit-btn{background:#edf2f6}
+.expense-delete-btn{background:#f8e3e3;color:#8d2020}
+@media(max-width:700px){
+  .expense-head{align-items:stretch;flex-direction:column}
+  .expense-kpis{grid-template-columns:1fr}
+  .expense-row{grid-template-columns:1fr auto!important}
+  .expense-row-actions{grid-column:1/-1}
+}
