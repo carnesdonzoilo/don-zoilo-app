@@ -1,10 +1,18 @@
-VERSIÓN 30.2 – MEJORAS CUENTAS CORRIENTES
+VERSIÓN 30.2 – UNIFICACIÓN DE CLIENTES
 
-- Unifica MORON con MORON PLAZA.
-- Muestra cantidad de clientes con deuda.
-- Muestra promedio de deuda.
-- Buscador en Saldos.
-- Orden por mayor saldo o alfabéticamente.
-- Resalta saldos desde $5.000.000.
-- Colores por tipo de movimiento.
-- No requiere cambios en Supabase.
+Cuentas unificadas:
+- MORON y MORON PLAZA -> MORON PLAZA
+- CLINICA y CLINICA HAEDO -> CLINICA HAEDO
+- PRINGLES 1272 -> DUMPLING
+- GUATEMALA 4450 -> DUMPLING
+- Todo nombre que empiece con GORRITI 56 -> DUMPLING
+
+Impacta en:
+- Saldos
+- Total general de cuentas corrientes
+- Cuenta corriente del cliente
+- Historial de ventas y cobranzas
+- Selectores de clientes
+
+Los nombres originales de los remitos permanecen iguales.
+No requiere cambios en Supabase.
