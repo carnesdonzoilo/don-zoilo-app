@@ -42,7 +42,7 @@ const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "31.0";
+const APP_VERSION = "30.9";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");

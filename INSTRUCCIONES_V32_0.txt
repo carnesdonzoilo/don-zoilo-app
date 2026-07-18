@@ -1,0 +1,43 @@
+DON ZOILO V32.0 — BACKUP SEMANAL AUTOMÁTICO
+
+QUÉ INCLUYE
+- Carpeta api/ con el archivo real weekly-backup.js.
+- vercel.json con ejecución semanal.
+- Horario: sábados 23:59 de Argentina (domingo 02:59 UTC en Vercel).
+- Respaldo JSON adjunto por correo.
+- Tablas: movements, orders, product_prices y signed_receipts.
+- Protección: si movements y orders llegan ambas vacías, cancela el envío.
+- Verificación SHA-256 incluida.
+
+IMPORTANTE AL SUBIR A GITHUB
+1. Descomprimir este ZIP.
+2. Subir TODO el contenido a la raíz del repositorio.
+3. Verificar que GitHub muestre una carpeta llamada api.
+4. Entrar en api y confirmar que está weekly-backup.js.
+5. Confirmar que vercel.json está en la raíz, al mismo nivel que index.html.
+
+VARIABLES EN VERCEL (Settings > Environment Variables)
+Obligatoria:
+- RESEND_API_KEY = la API key creada en Resend.
+
+Recomendadas:
+- CRON_SECRET = una contraseña larga y aleatoria.
+- BACKUP_TO_EMAIL = donzoilo91@gmail.com
+- BACKUP_FROM_EMAIL = Don Zoilo Backup <onboarding@resend.dev>
+
+Opcionales (la función ya tiene la URL y anon key públicas integradas):
+- SUPABASE_URL
+- SUPABASE_ANON_KEY
+
+PRIMERA PRUEBA
+- Después del deploy, debe quedar Ready.
+- La ruta /api/weekly-backup devolverá 401 si configuraste CRON_SECRET y la abrís directamente. Eso es correcto.
+- Para una prueba manual segura, se puede retirar temporalmente CRON_SECRET o llamar la ruta con Authorization Bearer desde una herramienta técnica.
+
+RESEND
+- Para pruebas, BACKUP_FROM_EMAIL puede quedar en onboarding@resend.dev si Resend permite enviar al correo asociado a la cuenta.
+- Para envío definitivo desde backup@carnesdonzoilo.com.ar, hay que verificar el dominio/subdominio en Resend agregando los DNS indicados por Resend. No modificar registros existentes de Tiendanube; solo agregar los nuevos registros de correo.
+
+SEGURIDAD
+- Esta actualización no borra ni modifica filas de Supabase.
+- La función únicamente realiza lecturas y envía un archivo por email.
