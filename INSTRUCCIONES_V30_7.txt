@@ -1,0 +1,9 @@
+DON ZOILO V30.7 — CONEXIÓN AUTOMÁTICA
+
+1. Subí todos los archivos de esta carpeta al mismo lugar donde está publicada la versión actual.
+2. Reemplazá los archivos existentes, especialmente index.html, app.js y cloud-config.js.
+3. Abrí el enlace habitual desde el celular.
+4. La app debe mostrar "Sincronización online activa" y la cantidad de movimientos y pedidos descargados.
+
+Esta versión usa la misma base de Supabase. Publicar estos archivos NO borra pedidos, movimientos ni saldos.
+La configuración pública anon ya está integrada; no hace falta iniciar sesión en GitHub o Supabase desde el celular.

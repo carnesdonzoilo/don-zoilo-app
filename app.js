@@ -51,9 +51,25 @@ function localSave(){
   localStorage.setItem(PRICES_STORAGE_KEY, JSON.stringify(productPrices));
 }
 
+function getCloudConfig(){
+  const embedded = window.DON_ZOILO_CLOUD_CONFIG || null;
+  const embeddedValid = embedded?.url?.startsWith("https://") && embedded?.key && !embedded.key.includes("PEGAR_");
+  if(embeddedValid){
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({url:embedded.url.trim(), key:embedded.key.trim()}));
+    return {url:embedded.url.trim(), key:embedded.key.trim(), source:"integrada"};
+  }
+  const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "null");
+  if(saved?.url && saved?.key) return {...saved, source:"guardada"};
+  return null;
+}
+
 async function initCloud(){
-  const cfg = JSON.parse(localStorage.getItem(CONFIG_KEY) || "null");
-  if(!cfg?.url || !cfg?.key || !window.supabase) return false;
+  const cfg = getCloudConfig();
+  if(!cfg?.url || !cfg?.key || !window.supabase){
+    if($("syncLabel")) $("syncLabel").textContent = "Sin conexión configurada";
+    if($("syncDetail")) $("syncDetail").textContent = "Falta integrar la configuración pública de Supabase.";
+    return false;
+  }
   try{
     supabaseClient = window.supabase.createClient(cfg.url, cfg.key);
     const {data, error} = await supabaseClient
@@ -77,9 +93,11 @@ async function initCloud(){
     productPrices = {};
     (priceData || []).forEach(row => productPrices[row.product_key] = Number(row.last_price || 0));
 
+    localSave();
+    const now = new Date().toLocaleString("es-AR");
     $("syncLabel").textContent = "Sincronización online activa";
-    $("syncDetail").textContent = "Los movimientos se comparten entre dispositivos.";
-    $("openConfig").textContent = "Cambiar configuración";
+    $("syncDetail").textContent = `Nube ${cfg.source}. ${movements.length} movimientos · ${orders.length} pedidos · Última sincronización: ${now}`;
+    $("openConfig").textContent = cfg.source === "integrada" ? "Ver configuración" : "Cambiar configuración";
     return true;
   }catch(err){
     console.error(err);
@@ -2062,7 +2080,7 @@ on("filterType","change",renderMovements);
 on("applyDates","click",renderDashboard);
 on("exportCsv","click",exportCSV);
 on("openConfig","click",()=>{
-  const cfg=JSON.parse(localStorage.getItem(CONFIG_KEY)||"null");
+  const cfg=getCloudConfig();
   if($("supabaseUrl")) $("supabaseUrl").value=cfg?.url||"";
   if($("supabaseKey")) $("supabaseKey").value=cfg?.key||"";
   const dialog=$("configDialog");
