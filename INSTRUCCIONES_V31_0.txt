@@ -1,0 +1,31 @@
+DON ZOILO V31.0 — RESPALDO AUTOMÁTICO SEMANAL POR CORREO
+
+Qué hace
+- Todos los sábados a las 23:59 hora de Argentina genera un respaldo JSON.
+- Incluye movements, orders, product_prices y signed_receipts.
+- Verifica que las tablas principales no estén vacías.
+- Calcula una huella SHA-256 para comprobar la integridad del archivo.
+- Envía el archivo adjunto a donzoilo91@gmail.com.
+
+IMPORTANTE: configuración única en Vercel
+1. Crear una cuenta en Resend y verificar un dominio remitente.
+2. En Vercel > Project > Settings > Environment Variables agregar:
+   - RESEND_API_KEY = clave creada en Resend
+   - BACKUP_FROM_EMAIL = por ejemplo: Don Zoilo <backup@tudominio.com>
+   - CRON_SECRET = una contraseña aleatoria de al menos 16 caracteres
+3. Opcional y recomendado para el servidor:
+   - SUPABASE_SERVICE_ROLE_KEY = clave service_role del proyecto Supabase
+   Nunca colocar esta clave en cloud-config.js ni en el navegador.
+4. Volver a desplegar el proyecto en Vercel.
+5. En Vercel > Cron Jobs debe aparecer /api/weekly-backup con horario 59 2 * * 0.
+
+Horario
+Vercel programa los cron en UTC. 02:59 del domingo UTC equivale a las 23:59 del sábado en Argentina (UTC-3).
+
+Seguridad
+- La ruta exige CRON_SECRET.
+- La actualización no borra ni modifica registros de Supabase.
+- Si las tablas principales llegan vacías, cancela el envío y registra el error.
+
+WhatsApp
+Esta versión no envía WhatsApp porque requiere una cuenta/API oficial de WhatsApp Business o un proveedor externo. El correo queda completamente preparado al cargar las variables anteriores.
