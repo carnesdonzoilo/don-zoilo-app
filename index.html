@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 30.8 · seguridad de base de datos</div>
+      <div class="subtitle">Control de operaciones · Versión 30.9 · restauración segura</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -26,6 +26,8 @@
       <div class="safety-actions">
         <button id="syncNow" class="secondary" type="button">↻ Sincronizar ahora</button>
         <button id="downloadBackup" class="secondary" type="button">⬇ Descargar respaldo</button>
+        <button id="restoreBackup" class="secondary" type="button">🛡 Restaurar respaldo</button>
+        <input id="restoreBackupFile" type="file" accept="application/json,.json" hidden />
         <button id="openConfig" class="link-btn" type="button">Ver configuración</button>
       </div>
     </section>

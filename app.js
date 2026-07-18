@@ -42,7 +42,7 @@ const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "30.8";
+const APP_VERSION = "30.9";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -104,6 +104,83 @@ function downloadSafetyBackup(){
   a.download=`Don_Zoilo_Backup_${todayISO()}_${new Date().toTimeString().slice(0,8).replaceAll(":","")}.json`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+
+
+function normalizeBackupSnapshot(raw){
+  if(!raw || typeof raw!=="object") throw new Error("El archivo no contiene un respaldo válido.");
+  const movementRows=Array.isArray(raw.movements)?raw.movements:null;
+  const orderRows=Array.isArray(raw.orders)?raw.orders:null;
+  const pricesObject=raw.productPrices && typeof raw.productPrices==="object" && !Array.isArray(raw.productPrices) ? raw.productPrices : null;
+  if(!movementRows || !orderRows || !pricesObject) throw new Error("El respaldo no incluye movimientos, pedidos y precios en el formato esperado.");
+  if(movementRows.some(row=>!row || typeof row!=="object" || !row.id)) throw new Error("Hay movimientos sin identificador. No se restauró nada.");
+  if(orderRows.some(row=>!row || typeof row!=="object" || !row.id)) throw new Error("Hay pedidos sin identificador. No se restauró nada.");
+  return {
+    ...raw,
+    movements:movementRows,
+    orders:orderRows,
+    productPrices:pricesObject,
+    counts:{movements:movementRows.length,orders:orderRows.length,prices:Object.keys(pricesObject).length}
+  };
+}
+
+async function upsertInChunks(table,rows,size=100){
+  for(let i=0;i<rows.length;i+=size){
+    const chunk=rows.slice(i,i+size);
+    if(!chunk.length) continue;
+    const {error}=await supabaseClient.from(table).upsert(chunk,{onConflict:"id"});
+    if(error) throw new Error(`${table}: ${error.message}`);
+  }
+}
+
+async function restoreSafetyBackupFile(file){
+  if(!file) return;
+  const btn=$("restoreBackup");
+  try{
+    if(btn){btn.disabled=true;btn.textContent="Verificando…";}
+    const snapshot=normalizeBackupSnapshot(JSON.parse(await file.text()));
+    const created=snapshot.created_at ? new Date(snapshot.created_at).toLocaleString("es-AR") : "fecha desconocida";
+    const detail=`${snapshot.counts.movements} movimientos, ${snapshot.counts.orders} pedidos y ${snapshot.counts.prices} precios. Respaldo: ${created}.`;
+    if(!confirm(`Se verificó el archivo. Contiene ${detail}
+
+La restauración es ADITIVA: recupera o actualiza registros por su ID y NO elimina datos actuales. ¿Continuar?`)) return;
+
+    // Copia de emergencia del estado actual antes de tocar la nube.
+    saveSafetyBackup("antes de restaurar archivo");
+
+    if(!supabaseClient){
+      const connected=await initCloud();
+      if(!connected) throw new Error("No se pudo conectar con Supabase. No se restauró nada.");
+    }
+    if(btn) btn.textContent="Restaurando…";
+
+    // Restauración aditiva: nunca ejecuta delete/truncate.
+    await upsertInChunks("movements",snapshot.movements);
+    await upsertInChunks("orders",snapshot.orders);
+    const priceRows=Object.entries(snapshot.productPrices).map(([product_key,last_price])=>({product_key,last_price:Number(last_price||0)}));
+    for(let i=0;i<priceRows.length;i+=100){
+      const chunk=priceRows.slice(i,i+100);
+      const {error}=await supabaseClient.from("product_prices").upsert(chunk,{onConflict:"product_key"});
+      if(error) throw new Error(`product_prices: ${error.message}`);
+    }
+
+    const before={movements:movements.length,orders:orders.length};
+    await reloadCloudData();
+    renderAll(); buildOrderSheet();
+    const after={movements:movements.length,orders:orders.length};
+    if(after.movements<before.movements || after.orders<before.orders){
+      throw new Error("La verificación posterior detectó una disminución inesperada. Los datos locales anteriores siguen respaldados.");
+    }
+    saveSafetyBackup("restauración verificada");
+    alert(`Restauración finalizada y verificada. Ahora hay ${after.movements} movimientos y ${after.orders} pedidos en la nube.`);
+  }catch(error){
+    console.error(error);
+    alert("No se completó la restauración. No se ejecutaron eliminaciones. "+(error.message||error));
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent="🛡 Restaurar respaldo";}
+    const input=$("restoreBackupFile"); if(input) input.value="";
+  }
 }
 
 function validateCloudPayload(movementData,orderData,priceData){
@@ -3818,6 +3895,8 @@ on("refreshOrders","click",async()=>{
 
 on("syncNow","click",synchronizeNow);
 on("downloadBackup","click",downloadSafetyBackup);
+on("restoreBackup","click",()=>$("restoreBackupFile")?.click());
+on("restoreBackupFile","change",event=>restoreSafetyBackupFile(event.target.files?.[0]));
 
 window.addEventListener("beforeinstallprompt",(e)=>{
   e.preventDefault(); deferredPrompt=e; $("installBtn").classList.remove("hidden");

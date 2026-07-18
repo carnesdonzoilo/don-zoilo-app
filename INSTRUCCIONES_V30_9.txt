@@ -1,0 +1,8 @@
+DON ZOILO V30.9 — RESTAURACIÓN SEGURA
+
+1. Publicar todos los archivos reemplazando la versión anterior.
+2. La actualización no modifica ni elimina registros de Supabase al abrirse.
+3. “Restaurar respaldo” acepta un JSON generado por “Descargar respaldo”.
+4. La restauración es aditiva: usa upsert por ID y nunca elimina registros actuales.
+5. Antes de restaurar se guarda automáticamente una copia local del estado actual.
+6. Al finalizar, la app vuelve a descargar y verifica los totales.
