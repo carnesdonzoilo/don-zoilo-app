@@ -1,0 +1,61 @@
+DON ZOILO V31.1 — BACKUP SEMANAL REAL EN VERCEL
+
+ARCHIVOS NUEVOS IMPORTANTES
+- api/weekly-backup.js: genera y envía el respaldo.
+- vercel.json: crea el Cron Job semanal en Vercel.
+
+HORARIO
+- Configuración Vercel: 59 2 * * 0 (UTC).
+- Equivale a sábado 23:59 en Argentina (UTC-3).
+
+DATOS INCLUIDOS
+- movements
+- orders
+- product_prices
+- signed_receipts
+
+VARIABLES A CREAR EN VERCEL
+Project > Settings > Environment Variables
+
+1) RESEND_API_KEY
+   Valor: la API Key creada en Resend.
+
+2) BACKUP_FROM_EMAIL
+   Valor recomendado después de verificar tu dominio:
+   Don Zoilo <backup@carnesdonzoilo.com.ar>
+
+3) CRON_SECRET
+   Valor: contraseña aleatoria larga, por ejemplo 32 caracteres.
+   No compartirla ni colocarla en app.js.
+
+4) BACKUP_TO_EMAIL
+   Valor: donzoilo91@gmail.com
+
+OPCIONALES
+5) SUPABASE_URL
+   https://jaxjbcsnqqyevplxnbfg.supabase.co
+
+6) SUPABASE_SERVICE_ROLE_KEY
+   Recomendado para el servidor si las políticas RLS impiden leer alguna tabla.
+   NUNCA poner esta clave en app.js, cloud-config.js ni HTML.
+
+DESPUES DE CREAR LAS VARIABLES
+1. Ir a Deployments.
+2. Abrir el último deployment.
+3. Elegir Redeploy.
+4. Volver a Settings > Cron Jobs.
+5. Debe aparecer /api/weekly-backup con schedule 59 2 * * 0.
+
+PRUEBA
+- Desde Vercel Cron Jobs usar Run/Trigger si aparece disponible.
+- Revisar el correo donzoilo91@gmail.com y Spam.
+- Revisar Vercel > Logs. Debe aparecer BACKUP_WEEKLY_OK.
+
+NOTA DE RESEND
+- Para enviar desde @carnesdonzoilo.com.ar hay que verificar el dominio en Resend.
+- Para una prueba inicial, onboarding@resend.dev solo puede enviar al correo asociado a la cuenta de Resend.
+
+SEGURIDAD
+- La función solo lee Supabase; no elimina ni modifica datos.
+- Cancela el envío si movements, orders y product_prices aparecen simultáneamente vacías.
+- El archivo incluye checksum SHA-256.
