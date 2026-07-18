@@ -1,14 +1,3 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "api/weekly-backup.js": {
-      "maxDuration": 60
-    }
-  },
-  "crons": [
-    {
-      "path": "/api/weekly-backup",
-      "schedule": "59 2 * * 0"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json"
 }
