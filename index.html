@@ -11,18 +11,23 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 30.7 · conexión automática</div>
+      <div class="subtitle">Control de operaciones · Versión 30.8 · seguridad de base de datos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
 
   <main class="container">
-    <section class="status-card">
-      <div>
-        <strong id="syncLabel">Modo local</strong>
+    <section class="status-card safety-status-card">
+      <div class="safety-status-main">
+        <strong id="syncLabel">Modo local protegido</strong>
         <span id="syncDetail">Los datos quedan guardados en este dispositivo.</span>
+        <span id="backupStatus" class="backup-status">Todavía no hay respaldo local.</span>
       </div>
-      <button id="openConfig" class="link-btn">Configurar nube</button>
+      <div class="safety-actions">
+        <button id="syncNow" class="secondary" type="button">↻ Sincronizar ahora</button>
+        <button id="downloadBackup" class="secondary" type="button">⬇ Descargar respaldo</button>
+        <button id="openConfig" class="link-btn" type="button">Ver configuración</button>
+      </div>
     </section>
 
     <nav class="tabs">

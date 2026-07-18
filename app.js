@@ -40,6 +40,9 @@ function monthStart(){
 
 const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
+const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
+const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
+const APP_VERSION = "30.8";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -49,6 +52,70 @@ function localSave(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(movements));
   localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
   localStorage.setItem(PRICES_STORAGE_KEY, JSON.stringify(productPrices));
+}
+
+function buildSafetySnapshot(reason="automático"){
+  return {
+    app:"Don Zoilo",
+    version:APP_VERSION,
+    created_at:new Date().toISOString(),
+    reason,
+    counts:{movements:movements.length,orders:orders.length,prices:Object.keys(productPrices||{}).length},
+    movements,
+    orders,
+    productPrices
+  };
+}
+
+function saveSafetyBackup(reason="sincronización correcta"){
+  try{
+    const current=localStorage.getItem(SAFETY_BACKUP_KEY);
+    if(current) localStorage.setItem(SAFETY_BACKUP_PREVIOUS_KEY,current);
+    const snapshot=buildSafetySnapshot(reason);
+    localStorage.setItem(SAFETY_BACKUP_KEY,JSON.stringify(snapshot));
+    updateSafetyStatus(snapshot);
+    return snapshot;
+  }catch(error){
+    console.warn("No se pudo guardar el respaldo local",error);
+    if($("backupStatus")) $("backupStatus").textContent="No se pudo guardar el respaldo local.";
+    return null;
+  }
+}
+
+function getLatestSafetyBackup(){
+  try{return JSON.parse(localStorage.getItem(SAFETY_BACKUP_KEY)||"null");}
+  catch(_){return null;}
+}
+
+function updateSafetyStatus(snapshot=getLatestSafetyBackup()){
+  const el=$("backupStatus");
+  if(!el) return;
+  if(!snapshot){ el.textContent="Todavía no hay respaldo local."; return; }
+  const when=new Date(snapshot.created_at).toLocaleString("es-AR");
+  el.textContent=`Último respaldo: ${when} · ${snapshot.counts?.movements||0} movimientos · ${snapshot.counts?.orders||0} pedidos`;
+}
+
+function downloadSafetyBackup(){
+  const snapshot=saveSafetyBackup("descarga manual") || buildSafetySnapshot("descarga manual");
+  const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download=`Don_Zoilo_Backup_${todayISO()}_${new Date().toTimeString().slice(0,8).replaceAll(":","")}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function validateCloudPayload(movementData,orderData,priceData){
+  if(!Array.isArray(movementData)||!Array.isArray(orderData)||!Array.isArray(priceData)){
+    throw new Error("La nube devolvió datos con un formato inválido.");
+  }
+  const localTotal=(movements?.length||0)+(orders?.length||0);
+  const cloudTotal=movementData.length+orderData.length;
+  if(localTotal>20 && cloudTotal===0){
+    throw new Error("Protección activada: la nube devolvió todo vacío y no se reemplazaron los datos del dispositivo.");
+  }
+  return true;
 }
 
 function getCloudConfig(){
@@ -63,53 +130,7 @@ function getCloudConfig(){
   return null;
 }
 
-async function initCloud(){
-  const cfg = getCloudConfig();
-  if(!cfg?.url || !cfg?.key || !window.supabase){
-    if($("syncLabel")) $("syncLabel").textContent = "Sin conexión configurada";
-    if($("syncDetail")) $("syncDetail").textContent = "Falta integrar la configuración pública de Supabase.";
-    return false;
-  }
-  try{
-    supabaseClient = window.supabase.createClient(cfg.url, cfg.key);
-    const {data, error} = await supabaseClient
-      .from("movements")
-      .select("*")
-      .order("date", {ascending:false})
-      .order("created_at", {ascending:false});
-    if(error) throw error;
-    movements = data || [];
-    const {data: orderData, error: orderError} = await supabaseClient
-      .from("orders").select("*")
-      .order("delivery_date", {ascending:false})
-      .order("created_at", {ascending:false});
-    if(orderError) throw orderError;
-    orders = orderData || [];
-
-    const {data: priceData, error: priceError} = await supabaseClient
-      .from("product_prices")
-      .select("*");
-    if(priceError) throw priceError;
-    productPrices = {};
-    (priceData || []).forEach(row => productPrices[row.product_key] = Number(row.last_price || 0));
-
-    localSave();
-    const now = new Date().toLocaleString("es-AR");
-    $("syncLabel").textContent = "Sincronización online activa";
-    $("syncDetail").textContent = `Nube ${cfg.source}. ${movements.length} movimientos · ${orders.length} pedidos · Última sincronización: ${now}`;
-    $("openConfig").textContent = cfg.source === "integrada" ? "Ver configuración" : "Cambiar configuración";
-    return true;
-  }catch(err){
-    console.error(err);
-    $("syncLabel").textContent = "No se pudo conectar";
-    $("syncDetail").textContent = "Se continúa en modo local. Revisá la configuración.";
-    return false;
-  }
-}
-
-
-async function reloadCloudData(){
-  if(!supabaseClient) return;
+async function fetchCloudPayload(){
   const {data: movementData, error: movementError} = await supabaseClient
     .from("movements").select("*")
     .order("date",{ascending:false})
@@ -126,12 +147,76 @@ async function reloadCloudData(){
     .from("product_prices").select("*");
   if(priceError) throw priceError;
 
-  movements=movementData||[];
-  orders=orderData||[];
-  productPrices={};
-  (priceData||[]).forEach(row=>productPrices[row.product_key]=Number(row.last_price||0));
-  localSave();
+  validateCloudPayload(movementData||[],orderData||[],priceData||[]);
+  return {movementData:movementData||[],orderData:orderData||[],priceData:priceData||[]};
 }
+
+function applyCloudPayload(payload,reason="sincronización correcta"){
+  movements=payload.movementData;
+  orders=payload.orderData;
+  productPrices={};
+  payload.priceData.forEach(row=>productPrices[row.product_key]=Number(row.last_price||0));
+  localSave();
+  saveSafetyBackup(reason);
+}
+
+function showCloudConnected(source){
+  const now=new Date().toLocaleString("es-AR");
+  if($("syncLabel")) $("syncLabel").textContent="Sincronización online activa";
+  if($("syncDetail")) $("syncDetail").textContent=`Nube ${source}. ${movements.length} movimientos · ${orders.length} pedidos · ${Object.keys(productPrices).length} precios · Última sincronización: ${now}`;
+  if($("openConfig")) $("openConfig").textContent=source==="integrada"?"Ver configuración":"Cambiar configuración";
+}
+
+async function initCloud(){
+  const cfg=getCloudConfig();
+  if(!cfg?.url||!cfg?.key||!window.supabase){
+    if($("syncLabel")) $("syncLabel").textContent="Sin conexión configurada";
+    if($("syncDetail")) $("syncDetail").textContent="Falta integrar la configuración pública de Supabase.";
+    updateSafetyStatus();
+    return false;
+  }
+  try{
+    supabaseClient=window.supabase.createClient(cfg.url,cfg.key);
+    const payload=await fetchCloudPayload();
+    applyCloudPayload(payload,"inicio conectado");
+    showCloudConnected(cfg.source);
+    return true;
+  }catch(err){
+    console.error(err);
+    if($("syncLabel")) $("syncLabel").textContent="Conexión no confirmada";
+    if($("syncDetail")) $("syncDetail").textContent=`Se conservaron los datos locales. ${err.message||"Revisá la conexión."}`;
+    updateSafetyStatus();
+    return false;
+  }
+}
+
+async function reloadCloudData(){
+  if(!supabaseClient) throw new Error("No hay conexión con Supabase.");
+  const payload=await fetchCloudPayload();
+  applyCloudPayload(payload,"sincronización manual");
+  showCloudConnected(getCloudConfig()?.source||"integrada");
+  return payload;
+}
+
+async function synchronizeNow(){
+  const btn=$("syncNow");
+  if(btn){btn.disabled=true;btn.textContent="Sincronizando…";}
+  try{
+    if(!supabaseClient){
+      const connected=await initCloud();
+      if(!connected) throw new Error("No se pudo conectar con la base.");
+    }else{
+      await reloadCloudData();
+    }
+    renderAll(); buildOrderSheet();
+    alert(`Sincronización completa. ${movements.length} movimientos y ${orders.length} pedidos protegidos.`);
+  }catch(error){
+    alert("No se reemplazó ningún dato. "+error.message);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent="↻ Sincronizar ahora";}
+  }
+}
+
 
 async function addMovement(item){
   if(supabaseClient){
@@ -3731,6 +3816,9 @@ on("refreshOrders","click",async()=>{
   await reconcileDeliveredOrders();
 });
 
+on("syncNow","click",synchronizeNow);
+on("downloadBackup","click",downloadSafetyBackup);
+
 window.addEventListener("beforeinstallprompt",(e)=>{
   e.preventDefault(); deferredPrompt=e; $("installBtn").classList.remove("hidden");
 });
@@ -3749,6 +3837,7 @@ $("installBtn").addEventListener("click",async()=>{
   if($("homeSelectedDate")) $("homeSelectedDate").value=dateWithOffset(1);
   if($("pricePrintDate")) $("pricePrintDate").value=todayISO();
   localLoad();
+  updateSafetyStatus();
   await initCloud();
   renderAll();
   buildOrderSheet();

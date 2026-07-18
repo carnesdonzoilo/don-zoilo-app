@@ -889,3 +889,11 @@ dialog::backdrop{background:#0009}
 .supplier-due-date{display:inline-block;margin-left:6px;color:#8c5f00;font-weight:800}
 @media(max-width:850px){.supplier-picker{grid-template-columns:1fr 1fr!important}}
 @media(max-width:560px){.supplier-picker{grid-template-columns:1fr!important}.supplier-history-row{grid-template-columns:1fr auto!important}.supplier-history-actions{grid-column:1/-1}}
+
+/* V30.8 · seguridad de base de datos */
+.safety-status-card{align-items:flex-start;gap:14px;flex-wrap:wrap}
+.safety-status-main{display:flex;flex-direction:column;gap:4px;min-width:240px;flex:1}
+.backup-status{font-size:.83rem;opacity:.82;margin-top:4px}
+.safety-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.safety-actions button{white-space:nowrap}
+@media(max-width:680px){.safety-actions{width:100%}.safety-actions .secondary{flex:1 1 150px}.safety-actions .link-btn{width:100%}}

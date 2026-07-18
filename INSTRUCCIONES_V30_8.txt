@@ -1,0 +1,10 @@
+DON ZOILO V30.8 — SEGURIDAD DE BASE DE DATOS
+
+1. Publicar todos los archivos de este ZIP reemplazando la versión anterior.
+2. La actualización NO borra ni modifica los datos existentes en Supabase.
+3. Al iniciar o sincronizar correctamente, la app guarda un respaldo local de seguridad.
+4. El botón “Descargar respaldo” genera un archivo JSON con movimientos, pedidos y precios.
+5. Si Supabase devuelve todo vacío de forma anormal, la protección impide reemplazar los datos locales.
+6. El botón “Sincronizar ahora” confirma la conexión, descarga los datos y crea un respaldo.
+
+Recomendación: descargar un respaldo antes de cada actualización importante y conservarlo fuera del dispositivo.
