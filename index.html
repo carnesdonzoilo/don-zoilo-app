@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 33.0 · stock manual seguro</div>
+      <div class="subtitle">Control de operaciones · Versión 33.1 · stock manual con lectura de imagen</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -808,7 +808,11 @@
           <h2>📦 Stock actual</h2>
           <p class="muted small">Planilla independiente. Por ahora las compras y las ventas no modifican el stock automáticamente.</p>
         </div>
-        <button id="stockNewBtn" type="button" class="primary">＋ Agregar mercadería</button>
+        <div class="stock-hero-actions">
+          <button id="stockImageBtn" type="button" class="secondary">📷 Importar imagen</button>
+          <input id="stockImageFile" type="file" accept="image/*" hidden>
+          <button id="stockNewBtn" type="button" class="primary">＋ Agregar mercadería</button>
+        </div>
       </div>
 
       <div class="stock-kpis">
@@ -896,6 +900,49 @@
   </dialog>
 
 
+
+  <dialog id="stockImageDialog">
+    <div class="dialog-card stock-image-dialog-card">
+      <div class="stock-image-head">
+        <div>
+          <h2>📷 Importar stock desde una imagen</h2>
+          <p class="muted small">Seleccioná una foto o captura de tu planilla. La lectura es automática, pero siempre podés corregir los datos antes de guardarlos.</p>
+        </div>
+        <button type="button" id="stockImageClose" class="secondary">Cerrar</button>
+      </div>
+      <div id="stockImageDrop" class="stock-image-drop">
+        <img id="stockImagePreview" alt="Vista previa de la imagen" class="hidden">
+        <div id="stockImagePlaceholder">Elegí una imagen desde la galería.</div>
+      </div>
+      <div class="stock-image-actions">
+        <button type="button" id="stockChooseImage" class="secondary">Elegir imagen</button>
+        <button type="button" id="stockReadImage" class="primary" disabled>🔎 Reconocer productos</button>
+      </div>
+      <div id="stockOcrProgress" class="stock-ocr-progress hidden">
+        <div class="progress-track"><div id="stockOcrProgressBar" class="progress-fill"></div></div>
+        <p id="stockOcrProgressText" class="muted small">Preparando lectura…</p>
+      </div>
+      <div id="stockOcrResults" class="hidden">
+        <div class="panel-head">
+          <div><h3>Revisar antes de guardar</h3><p class="muted small">Corregí nombres, kilos o costos si la foto no se leyó perfectamente.</p></div>
+          <button type="button" id="stockAddOcrRow" class="secondary">＋ Fila</button>
+        </div>
+        <div class="stock-ocr-table-scroll">
+          <table class="stock-ocr-table">
+            <thead><tr><th>Producto</th><th>Detalle</th><th>Categoría</th><th>Cantidad</th><th>KG</th><th>Precio</th><th>Importe</th><th></th></tr></thead>
+            <tbody id="stockOcrBody"></tbody>
+          </table>
+        </div>
+        <div class="stock-ocr-summary">
+          <span><strong id="stockOcrRowsCount">0</strong> productos</span>
+          <span><strong id="stockOcrKgTotal">0 kg</strong></span>
+          <span>Total: <strong id="stockOcrValueTotal">$ 0</strong></span>
+        </div>
+        <button type="button" id="stockSaveOcr" class="primary full">Guardar todo en Stock</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="stockDialog">
     <form id="stockForm" class="dialog-card stock-form">
       <div class="panel-head"><h2 id="stockDialogTitle">Agregar mercadería</h2><button id="stockCloseBtn" type="button" class="secondary">Cerrar</button></div>
@@ -941,6 +988,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="cloud-config.js"></script>
   <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="stock.js"></script>
+  <script src="stock-ocr.js"></script>
 </body>
 </html>
