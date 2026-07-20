@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 32.0 · backup semanal automático</div>
+      <div class="subtitle">Control de operaciones · Versión 33.0 · stock manual seguro</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -43,6 +43,7 @@
       <button class="tab" data-view="accounts">Cuentas corrientes</button>
       <button class="tab" data-view="suppliers">Proveedores</button>
       <button class="tab" data-view="prices">Precios</button>
+      <button class="tab" data-view="stock">📦 Stock</button>
     </nav>
 
 
@@ -799,6 +800,49 @@
       </div>
     </section>
 
+
+    <section id="stock" class="view">
+      <div class="stock-hero panel">
+        <div>
+          <div class="home-kicker">CONTROL MANUAL DE MERCADERÍA</div>
+          <h2>📦 Stock actual</h2>
+          <p class="muted small">Planilla independiente. Por ahora las compras y las ventas no modifican el stock automáticamente.</p>
+        </div>
+        <button id="stockNewBtn" type="button" class="primary">＋ Agregar mercadería</button>
+      </div>
+
+      <div class="stock-kpis">
+        <article><span>Productos</span><strong id="stockProductCount">0</strong></article>
+        <article><span>Kilos totales</span><strong id="stockKgTotal">0 kg</strong></article>
+        <article><span>Valor del stock</span><strong id="stockValueTotal">$ 0</strong></article>
+        <article><span>Última actualización</span><strong id="stockUpdatedAt">—</strong></article>
+      </div>
+
+      <div class="panel stock-toolbar">
+        <input id="stockSearch" placeholder="Buscar producto, estado o detalle">
+        <select id="stockCategoryFilter">
+          <option value="">Todas las categorías</option>
+          <option>Vacuno</option><option>Cerdo</option><option>Pollo</option><option>Embutidos</option><option>Achuras</option><option>Otros</option>
+        </select>
+        <button id="stockRefreshBtn" type="button" class="secondary">↻ Actualizar</button>
+        <button id="stockExportBtn" type="button" class="secondary">⬇ Exportar CSV</button>
+      </div>
+
+      <div class="panel stock-sheet-wrap">
+        <div class="stock-sheet-title">
+          <strong>MERCADERÍA</strong>
+          <span id="stockSheetDate"></span>
+        </div>
+        <div class="stock-table-scroll">
+          <table class="stock-table">
+            <thead><tr><th>Producto</th><th>Detalle / estado</th><th>Categoría</th><th>Unidad</th><th>Cantidad</th><th>KG</th><th>Precio unit.</th><th>Importe</th><th>Detalle</th><th>Acciones</th></tr></thead>
+            <tbody id="stockTableBody"></tbody>
+          </table>
+        </div>
+        <div id="stockEmpty" class="empty hidden">Todavía no hay mercadería cargada.</div>
+      </div>
+    </section>
+
   </main>
 
   <dialog id="signedReceiptDialog">
@@ -851,6 +895,27 @@
     </div>
   </dialog>
 
+
+  <dialog id="stockDialog">
+    <form id="stockForm" class="dialog-card stock-form">
+      <div class="panel-head"><h2 id="stockDialogTitle">Agregar mercadería</h2><button id="stockCloseBtn" type="button" class="secondary">Cerrar</button></div>
+      <input id="stockId" type="hidden">
+      <div class="stock-form-grid">
+        <label>Producto<input id="stockProduct" required placeholder="Ej.: Lomo"></label>
+        <label>Detalle / estado<input id="stockStatus" placeholder="Ej.: Fresco 18-07, congelado"></label>
+        <label>Categoría<select id="stockCategory"><option>Vacuno</option><option>Cerdo</option><option>Pollo</option><option>Embutidos</option><option>Achuras</option><option>Otros</option></select></label>
+        <label>Unidad<select id="stockUnit"><option value="kg">kg</option><option value="unidad">unidad</option><option value="caja">caja</option><option value="pieza">pieza</option><option value="gancho">gancho</option></select></label>
+        <label>Cantidad<input id="stockQuantity" type="number" min="0" step="0.01" value="0"></label>
+        <label>Kilos<input id="stockKg" type="number" min="0" step="0.01" value="0"></label>
+        <label>Precio unitario<input id="stockUnitCost" type="number" min="0" step="0.01" value="0"></label>
+        <label>Importe calculado<input id="stockAmountPreview" readonly value="$ 0"></label>
+        <label class="full">Detalle / observaciones<textarea id="stockNotes" rows="2" placeholder="Ej.: picar, reservado, lote"></textarea></label>
+      </div>
+      <p class="muted small">El importe se calcula con kilos × precio. Si no cargás kilos, usa cantidad × precio.</p>
+      <div class="dialog-actions"><button id="stockDeleteBtn" type="button" class="delete-order-btn hidden">Eliminar</button><button type="submit" class="primary">Guardar mercadería</button></div>
+    </form>
+  </dialog>
+
   <dialog id="configDialog">
     <form method="dialog" class="dialog-card">
       <h2>Sincronización online</h2>
@@ -876,5 +941,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="cloud-config.js"></script>
   <script src="app.js"></script>
+  <script src="stock.js"></script>
 </body>
 </html>

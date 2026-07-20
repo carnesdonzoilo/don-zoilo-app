@@ -41,3 +41,6 @@ Desde ese momento, los movimientos quedan sincronizados online.
 ## Seguridad
 
 La configuración incluida es un MVP: cualquiera con el link puede operar. Para producción se recomienda agregar usuarios, contraseña, permisos y auditoría de cambios.
+
+## V33.0 — Stock manual seguro
+Incluye la tabla independiente `inventory_stock` y la nueva pestaña Stock. Requiere ejecutar `supabase_update_v33.sql` una sola vez antes del despliegue.

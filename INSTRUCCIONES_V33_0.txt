@@ -1,0 +1,28 @@
+DON ZOILO V33.0 — STOCK MANUAL SEGURO
+
+QUÉ AGREGA
+- Nueva pestaña 📦 Stock.
+- Vista tipo planilla con producto, detalle/estado, categoría, unidad, cantidad, kilos, precio, importe y observaciones.
+- Alta, edición, eliminación y ajuste rápido de kilos.
+- Buscador, filtro por categoría y exportación CSV.
+- Totales de productos, kilos y valor de mercadería.
+- El stock NO está vinculado todavía con compras, pedidos, remitos ni ventas.
+
+SEGURIDAD
+- El SQL crea únicamente public.inventory_stock.
+- No modifica ni elimina datos de movements, orders, product_prices, signed_receipts u otras tablas.
+- La app conserva una copia local del stock por si hay una falla temporal de conexión.
+
+PASOS
+1. Antes de actualizar, usar "Descargar respaldo" en la app V32.
+2. En Supabase > SQL Editor > New query, pegar TODO supabase_update_v33.sql y tocar Run.
+3. Confirmar que aparece "Success. No rows returned".
+4. Subir a GitHub TODO el contenido de este ZIP, manteniendo la carpeta api y vercel.json.
+5. Esperar que Vercel indique Ready.
+6. Abrir la app y verificar que diga Versión 33.0 y aparezca 📦 Stock.
+
+PRUEBA SEGURA
+- Crear un producto de prueba.
+- Cerrar y volver a abrir la app.
+- Confirmar que sigue visible.
+- Editarlo y probar "± Ajustar".
