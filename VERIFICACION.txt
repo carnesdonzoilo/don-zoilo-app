@@ -1,7 +1,5 @@
-VERIFICACIÓN REALIZADA
-- app.js: sintaxis JavaScript válida
-- stock.js: sintaxis JavaScript válida
-- api/weekly-backup.js: sintaxis JavaScript válida
-- vercel.json: JSON válido
-- index.html carga stock.js
-- api/weekly-backup.js existe en la ruta requerida por vercel.json
+VERIFICACIÓN V33 SIN BACKUP AUTOMÁTICO
+- vercel.json ya no referencia api/weekly-backup.js.
+- La carpeta api fue retirada de este paquete.
+- El módulo Stock continúa conectado a public.inventory_stock en Supabase.
+- No se modifica movements, orders, product_prices ni las cuentas corrientes.

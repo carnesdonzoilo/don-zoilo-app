@@ -1,29 +1,29 @@
-DON ZOILO V33.0 — STOCK MANUAL — PAQUETE FINAL CORREGIDO
+DON ZOILO V33.0 — STOCK MANUAL SEGURO — SIN BACKUP AUTOMÁTICO
 
-ESTADO
-- El SQL de inventory_stock ya fue ejecutado correctamente en Supabase.
-- No hace falta volver a ejecutarlo.
-- Este paquete incluye la carpeta api/weekly-backup.js que faltaba en GitHub.
-
-ARCHIVOS A SUBIR A LA RAÍZ DE GITHUB
-- _headers
-- app.js
-- cloud-config.js
-- index.html
-- manifest.json
-- stock.js
-- styles.css
-- vercel.json
-- carpeta api (con weekly-backup.js adentro)
-
-OPCION RECOMENDADA DESDE TABLET
-1. Descomprimir este ZIP.
-2. En GitHub, subir primero los 8 archivos de la raíz (sin el SQL ni este LEEME).
-3. Crear/subir la carpeta api con el archivo weekly-backup.js.
-4. Confirmar Commit changes.
-5. Esperar el despliegue de Vercel y verificar que quede Ready.
+OBJETIVO
+- Habilitar el módulo Stock V33 sin depender de la función api/weekly-backup.js.
+- Evitar el error de despliegue de Vercel.
 
 IMPORTANTE
-- No subir el ZIP cerrado al repositorio: hay que subir su contenido descomprimido.
-- No borrar archivos existentes que no estén incluidos aquí.
-- Si GitHub rechaza una carga múltiple, subir de a 3 archivos por vez.
+- El stock se guarda en Supabase, en la tabla public.inventory_stock.
+- Cerrar la app, actualizar GitHub o cambiar de dispositivo NO borra el stock.
+- Los datos podrían perderse solamente si se borran manualmente filas o la tabla en Supabase.
+- El backup semanal automático queda desactivado temporalmente.
+- El botón de respaldo manual de la app y las tablas anteriores no se modifican.
+
+SUBIDA A GITHUB
+1. Reemplazar en la raíz del repositorio estos archivos:
+   index.html
+   app.js
+   styles.css
+   stock.js
+   cloud-config.js
+   manifest.json
+   vercel.json
+2. No crear ni subir la carpeta api en esta versión.
+3. Hacer Commit changes.
+4. Esperar el despliegue nuevo de Vercel hasta que diga Ready.
+5. Abrir la app y comprobar que aparezca la pestaña Stock.
+
+SUPABASE
+- No volver a ejecutar supabase_update_v33.sql si ya apareció Success.
