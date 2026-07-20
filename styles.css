@@ -905,3 +905,17 @@ dialog::backdrop{background:#0009}
 /* V33.1 — Importación de stock desde imagen */
 .stock-hero-actions{display:flex;gap:10px;flex-wrap:wrap}.stock-image-dialog-card{width:min(1100px,calc(100vw - 24px));max-width:1100px;max-height:92vh;overflow:auto}.stock-image-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.stock-image-head h2{margin:0 0 4px}.stock-image-drop{min-height:180px;border:2px dashed #b8c2ca;border-radius:16px;background:#f6f8f9;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:10px;text-align:center;color:var(--muted)}.stock-image-drop img{display:block;max-width:100%;max-height:320px;object-fit:contain}.stock-image-actions{display:flex;gap:10px;justify-content:flex-end}.stock-ocr-progress{padding:10px 0}.stock-ocr-progress .progress-track{height:12px}.stock-ocr-progress p{margin:7px 0 0}.stock-ocr-table-scroll{overflow:auto;border:1px solid var(--line);border-radius:14px}.stock-ocr-table{width:100%;border-collapse:collapse;min-width:980px}.stock-ocr-table th{background:#101820;color:#fff;font-size:.72rem;text-transform:uppercase;padding:8px}.stock-ocr-table td{padding:6px;border-bottom:1px solid var(--line)}.stock-ocr-table input,.stock-ocr-table select{padding:8px;border-radius:8px}.stock-ocr-table .ocr-num{width:100px}.stock-ocr-table .ocr-remove{border:0;background:#fee;color:var(--bad);border-radius:8px;padding:8px 10px;font-weight:900}.stock-ocr-summary{display:flex;justify-content:flex-end;gap:24px;flex-wrap:wrap;padding:12px 2px;font-size:1rem}.stock-ocr-summary strong{font-size:1.1rem}.stock-ocr-raw{white-space:pre-wrap;font-size:.72rem;background:#f6f8f9;padding:10px;border-radius:10px;max-height:160px;overflow:auto}
 @media(max-width:760px){.stock-image-head{flex-direction:column}.stock-image-actions{justify-content:stretch}.stock-image-actions button{flex:1}.stock-hero-actions{width:100%}.stock-hero-actions button{flex:1}.stock-image-dialog-card{width:calc(100vw - 16px);padding:14px}}
+
+/* V33.2 — STOCK EDITABLE TIPO EXCEL */
+.stock-table td{padding:3px 4px}
+.stock-cell-input{width:100%;min-width:76px;border:1px solid transparent;background:transparent;border-radius:6px;padding:7px 6px;font:inherit;color:inherit;box-sizing:border-box}
+.stock-cell-input:hover{border-color:#aebbc4;background:#fff}
+.stock-cell-input:focus{outline:2px solid #2276d2;border-color:#2276d2;background:#fff;box-shadow:0 0 0 2px rgba(34,118,210,.12)}
+.stock-cell-number{text-align:right;min-width:82px}
+.stock-product-name .stock-cell-input{font-weight:850;text-transform:uppercase;min-width:145px}
+.stock-cell-saved{outline:2px solid #2f9e44!important;background:#effff2!important}
+.stock-cell-error{outline:2px solid #d93025!important;background:#fff0f0!important}
+.stock-saving{opacity:.72}
+.stock-delete-inline{background:#ffe3e3!important;color:#a61b1b;min-width:38px}
+.stock-amount{background:rgba(255,255,255,.35)}
+@media(max-width:700px){.stock-hero{align-items:flex-start;flex-direction:column}.stock-hero-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.stock-hero-actions button{width:100%}.stock-kpis{grid-template-columns:1fr 1fr}.stock-toolbar{grid-template-columns:1fr 1fr}.stock-toolbar input{grid-column:1/-1}.stock-cell-input{font-size:16px;padding:9px 6px}.stock-table{min-width:1120px}}

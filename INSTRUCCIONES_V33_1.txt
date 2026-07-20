@@ -1,0 +1,23 @@
+DON ZOILO V33.1 — IMPORTAR STOCK DESDE FOTO O GALERÍA
+
+INCLUYE
+- Botón "Importar imagen" dentro de Stock.
+- Selección desde galería del celular o tablet.
+- Reconocimiento de producto, detalle, kilos y precio unitario.
+- Vista previa editable antes de guardar.
+- Cálculo de importe por fila, kilos totales y valor total.
+- Guardado múltiple en inventory_stock.
+
+SEGURIDAD
+- No modifica pedidos, movimientos, cuentas corrientes, compras ni ventas.
+- No requiere cambios nuevos en Supabase.
+- La lectura automática puede equivocarse: siempre revisar antes de guardar.
+- El reconocimiento usa Tesseract.js desde internet y puede tardar la primera vez.
+
+ACTUALIZACIÓN RÁPIDA EN GITHUB
+Reemplazar solamente:
+1. index.html
+2. styles.css
+3. stock-ocr.js (archivo nuevo)
+
+No modificar vercel.json. No ejecutar nuevamente el SQL V33.

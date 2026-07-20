@@ -1,0 +1,14 @@
+DON ZOILO V33.0 — STOCK MANUAL — CORRECCIÓN RÁPIDA VERCEL
+
+Supabase ya está listo. No volver a ejecutar el SQL.
+
+Para destrabar Vercel, reemplazar SOLO vercel.json por este contenido:
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json"
+}
+
+Esto elimina temporalmente la función de backup semanal que estaba causando el error.
+No modifica ni borra datos de Supabase.
+La tabla inventory_stock sigue guardando el stock en la nube.
+
+Después del commit, esperar 1 a 3 minutos y verificar que Vercel muestre Ready.

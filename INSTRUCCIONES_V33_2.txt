@@ -1,0 +1,13 @@
+DON ZOILO V33.2 — STOCK EDITABLE POR CELDA
+
+CAMBIOS:
+- La tabla de Stock ahora se edita directamente como Excel.
+- Tocá una celda, escribí y salí de la celda: el cambio se guarda automáticamente.
+- También podés presionar Enter para guardar y pasar al siguiente campo.
+- El botón “Agregar fila” crea una fila nueva arriba y deja el cursor en Producto.
+- Kilos, cantidad, precio e importe se recalculan al instante.
+- Se mantiene Importar imagen, filtros, exportación CSV y respaldo local/Supabase.
+- El botón de papelera elimina la fila.
+
+INSTALACIÓN EN VERCEL:
+Subí todos los archivos de esta carpeta reemplazando la versión anterior. No hace falta ejecutar SQL nuevo.
