@@ -1,0 +1,29 @@
+DON ZOILO V33.0 — STOCK MANUAL — PAQUETE FINAL CORREGIDO
+
+ESTADO
+- El SQL de inventory_stock ya fue ejecutado correctamente en Supabase.
+- No hace falta volver a ejecutarlo.
+- Este paquete incluye la carpeta api/weekly-backup.js que faltaba en GitHub.
+
+ARCHIVOS A SUBIR A LA RAÍZ DE GITHUB
+- _headers
+- app.js
+- cloud-config.js
+- index.html
+- manifest.json
+- stock.js
+- styles.css
+- vercel.json
+- carpeta api (con weekly-backup.js adentro)
+
+OPCION RECOMENDADA DESDE TABLET
+1. Descomprimir este ZIP.
+2. En GitHub, subir primero los 8 archivos de la raíz (sin el SQL ni este LEEME).
+3. Crear/subir la carpeta api con el archivo weekly-backup.js.
+4. Confirmar Commit changes.
+5. Esperar el despliegue de Vercel y verificar que quede Ready.
+
+IMPORTANTE
+- No subir el ZIP cerrado al repositorio: hay que subir su contenido descomprimido.
+- No borrar archivos existentes que no estén incluidos aquí.
+- Si GitHub rechaza una carga múltiple, subir de a 3 archivos por vez.

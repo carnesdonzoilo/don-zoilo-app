@@ -1,0 +1,7 @@
+VERIFICACIÓN REALIZADA
+- app.js: sintaxis JavaScript válida
+- stock.js: sintaxis JavaScript válida
+- api/weekly-backup.js: sintaxis JavaScript válida
+- vercel.json: JSON válido
+- index.html carga stock.js
+- api/weekly-backup.js existe en la ruta requerida por vercel.json
