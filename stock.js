@@ -177,4 +177,8 @@
     document.querySelector('[data-view="stock"]')?.addEventListener("click",()=>loadStock(false));
   }
   document.readyState==="loading"?document.addEventListener("DOMContentLoaded",()=>{bind();loadStock(false);}):(()=>{bind();loadStock(false);})();
+
+  window.addEventListener("donzoilo:cloud-ready",()=>loadStock(false));
+  window.addEventListener("donzoilo:remote-change",e=>{if(e.detail?.table==="inventory_stock")loadStock(false)});
+  window.addEventListener("donzoilo:app-visible",()=>loadStock(false));
 })();

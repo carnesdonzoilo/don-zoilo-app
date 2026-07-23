@@ -21,6 +21,9 @@ let orders = [];
 let productPrices = {};
 let supabaseClient = null;
 let deferredPrompt = null;
+let realtimeChannel = null;
+let realtimeReloadTimer = null;
+let lastRealtimeRefresh = 0;
 
 const $ = (id) => document.getElementById(id);
 const on = (id,event,handler) => { const el=$(id); if(el) el.addEventListener(event,handler); return el; };
@@ -42,7 +45,7 @@ const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "30.9";
+const APP_VERSION = "34.1";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -253,10 +256,17 @@ async function initCloud(){
     return false;
   }
   try{
-    supabaseClient=window.supabase.createClient(cfg.url,cfg.key);
+    supabaseClient=window.supabase.createClient(cfg.url,cfg.key,{
+      auth:{persistSession:false,autoRefreshToken:false},
+      realtime:{params:{eventsPerSecond:10}}
+    });
+    // Los módulos cargados en otros archivos necesitan acceder al mismo cliente.
+    window.supabaseClient=supabaseClient;
+    window.dispatchEvent(new CustomEvent("donzoilo:cloud-ready",{detail:{client:supabaseClient}}));
     const payload=await fetchCloudPayload();
     applyCloudPayload(payload,"inicio conectado");
     showCloudConnected(cfg.source);
+    startRealtimeSync();
     return true;
   }catch(err){
     console.error(err);
@@ -274,6 +284,52 @@ async function reloadCloudData(){
   showCloudConnected(getCloudConfig()?.source||"integrada");
   return payload;
 }
+
+
+function scheduleRealtimeRefresh(table){
+  clearTimeout(realtimeReloadTimer);
+  realtimeReloadTimer=setTimeout(async()=>{
+    if(!supabaseClient || document.visibilityState==="hidden") return;
+    // Caja/Stock administran sus propias tablas y reciben este aviso.
+    window.dispatchEvent(new CustomEvent("donzoilo:remote-change",{detail:{table}}));
+    if(!["movements","orders","product_prices"].includes(table)) return;
+    try{
+      await reloadCloudData();
+      renderAll();
+      buildOrderSheet();
+      lastRealtimeRefresh=Date.now();
+    }catch(error){
+      console.warn("No se pudo aplicar el cambio remoto",error);
+    }
+  },450);
+}
+
+function startRealtimeSync(){
+  if(!supabaseClient || realtimeChannel) return;
+  realtimeChannel=supabaseClient.channel("don-zoilo-live-v34")
+    .on("postgres_changes",{event:"*",schema:"public",table:"movements"},()=>scheduleRealtimeRefresh("movements"))
+    .on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>scheduleRealtimeRefresh("orders"))
+    .on("postgres_changes",{event:"*",schema:"public",table:"product_prices"},()=>scheduleRealtimeRefresh("product_prices"))
+    .on("postgres_changes",{event:"*",schema:"public",table:"inventory_stock"},()=>scheduleRealtimeRefresh("inventory_stock"))
+    .on("postgres_changes",{event:"*",schema:"public",table:"current_assets"},()=>scheduleRealtimeRefresh("current_assets"))
+    .subscribe(status=>{
+      if(status==="SUBSCRIBED") console.info("Sincronización en tiempo real activa");
+    });
+}
+
+async function refreshWhenAppReturns(){
+  if(document.visibilityState!=="visible" || !supabaseClient) return;
+  if(Date.now()-lastRealtimeRefresh<1500) return;
+  try{
+    await reloadCloudData();
+    renderAll();
+    buildOrderSheet();
+    window.dispatchEvent(new CustomEvent("donzoilo:app-visible"));
+    lastRealtimeRefresh=Date.now();
+  }catch(error){ console.warn("No se pudo actualizar al volver a la app",error); }
+}
+document.addEventListener("visibilitychange",refreshWhenAppReturns);
+window.addEventListener("focus",refreshWhenAppReturns);
 
 async function synchronizeNow(){
   const btn=$("syncNow");

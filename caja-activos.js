@@ -1,7 +1,7 @@
 /* DON ZOILO V34.0 — MÓDULO CAJA Y ACTIVOS */
 (function(){
 'use strict';
-const TABLE='current_assets', LOCAL_KEY='don_zoilo_current_assets_v34';
+const TABLE='current_assets', LOCAL_KEY='don_zoilo_current_assets_v34_1';
 const TYPES={cash:'Caja',checks:'Cheques',bank:'Bancos y billeteras',personal_receivable:'Clientes particulares'};
 let rows=[];
 const $=id=>document.getElementById(id);
@@ -30,6 +30,12 @@ async function removeRow(id){const r=rows.find(x=>x.id===id);if(!r||!confirm(`¿
 async function addRow(type){const max=rows.filter(r=>r.asset_type===type).reduce((m,r)=>Math.max(m,num(r.sort_order)),0);const now=new Date().toISOString();const r={id:uuid(),asset_type:type,name:type==='personal_receivable'?'NUEVO CLIENTE':'NUEVA CUENTA',balance:0,notes:'',sort_order:max+10,created_at:now,updated_at:now};rows.push(r);localWrite();render();await saveRow(r);setTimeout(()=>{const i=document.querySelector(`[data-asset-id="${r.id}"] [data-field="name"]`);i?.focus();i?.select()},0)}
 function bind(){document.addEventListener('keydown',e=>{const i=e.target.closest('#currentAssets .asset-input');if(i&&e.key==='Enter'){e.preventDefault();i.blur()}});document.addEventListener('change',async e=>{const i=e.target.closest('#currentAssets .asset-input');if(!i)return;const tr=i.closest('[data-asset-id]');const r=rows.find(x=>x.id===tr?.dataset.assetId);if(!r)return;const f=i.dataset.field,v=f==='balance'?num(i.value):i.value.trim();if(r[f]===v)return;r[f]=v;localWrite();totals();await saveRow(r)});document.addEventListener('click',e=>{const a=e.target.closest('[data-add-asset]');if(a)addRow(a.dataset.addAsset);const d=e.target.closest('[data-delete-asset]');if(d)removeRow(d.dataset.deleteAsset)})}
 async function loadAssets(show=false){try{if(cloud()){const {data,error}=await cloud().from(TABLE).select('*').order('sort_order',{ascending:true});if(error)throw error;rows=data||[]}else rows=localRead();if(!rows.length){rows=defaults();localWrite();if(cloud())await cloud().from(TABLE).upsert(rows)}localWrite()}catch(e){rows=localRead();if(!rows.length){rows=defaults();localWrite()}if(show)alert('No se pudo leer Caja y Activos desde Supabase. Se muestra la copia local. '+(e.message||e))}render()}
-function init(){injectStyles();injectUI();bind();loadAssets(false)}
+function init(){
+  injectStyles();injectUI();bind();
+  loadAssets(false);
+  window.addEventListener('donzoilo:cloud-ready',()=>loadAssets(false));
+  window.addEventListener('donzoilo:remote-change',e=>{if(e.detail?.table===TABLE)loadAssets(false)});
+  window.addEventListener('donzoilo:app-visible',()=>loadAssets(false));
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

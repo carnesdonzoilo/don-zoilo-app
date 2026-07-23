@@ -1,0 +1,22 @@
+DON ZOILO V34.1 — CORRECCIÓN DE SINCRONIZACIÓN
+
+CORRECCIONES REALIZADAS
+1. Caja y Activos ahora usa el mismo cliente Supabase que la aplicación principal.
+2. Los cambios de Pedidos, Movimientos, Precios, Stock y Caja/Activos se escuchan en tiempo real.
+3. Al volver a la aplicación o cambiar de pestaña/dispositivo, se descargan los datos actuales de Supabase.
+4. Se agregó control anti-caché para Vercel y versión en los archivos JavaScript.
+5. La información local queda como respaldo, pero Supabase es la fuente compartida entre dispositivos.
+
+CÓMO INSTALAR
+1. Descomprimir este ZIP.
+2. Subir TODOS los archivos y reemplazar los existentes en GitHub.
+3. Esperar a que Vercel indique Deployment Ready.
+4. Abrir la aplicación en cada dispositivo y recargar una vez.
+   - PC: Ctrl + F5.
+   - Celular/tablet: cerrar completamente la app o pestaña y volver a abrir.
+5. Probar cambiando un saldo pequeño en Caja y Activos desde un dispositivo.
+   El otro debe mostrarlo automáticamente o al volver a la app.
+
+IMPORTANTE
+No borrar las tablas ni ejecutar archivos SQL para esta corrección.
+No subir solamente caja-activos.js: deben reemplazarse también app.js, index.html y vercel.json.
