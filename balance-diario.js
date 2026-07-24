@@ -1,13 +1,14 @@
-/* DON ZOILO V34.1 — BALANCE DIARIO · SALDOS CORREGIDOS */
+/* DON ZOILO V34.3 — BALANCE DIARIO: CAJA Y ACTIVOS SINCRONIZADOS */
 (function(){
 'use strict';
 const TABLE='daily_balances';
 const LOCAL_KEY='don_zoilo_daily_balances_v34';
 const MOVEMENTS_KEY='don_zoilo_movements_v1';
 const STOCK_KEY='don_zoilo_stock_v33';
-const ASSETS_KEY='don_zoilo_current_assets_v34';
+const ASSETS_KEYS=['don_zoilo_current_assets_v34_1','don_zoilo_current_assets_v34'];
 let closings=[];
 let current=null;
+let cachedAssets=[];
 const $=id=>document.getElementById(id);
 const num=v=>{const n=Number(String(v??0).replace(/\$/g,'').replace(/\s/g,'').replace(/\.(?=\d{3}(?:\D|$))/g,'').replace(',','.'));return Number.isFinite(n)?n:0};
 const money=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(num(v));
@@ -20,22 +21,33 @@ const cloud=()=>window.supabaseClient||null;
 function localWrite(){localStorage.setItem(LOCAL_KEY,JSON.stringify(closings))}
 function isOpening(m){return m.type==='ajuste'&&String(m.notes||'').includes('SALDO_INICIAL')}
 function stockValue(rows){return rows.reduce((sum,r)=>{const basis=num(r.kg)>0?num(r.kg):num(r.quantity);return sum+basis*num(r.unit_cost)},0)}
-function calculations(date,previousOverride){
+async function loadCurrentAssets(){
+  try{
+    if(cloud()){
+      const {data,error}=await cloud().from('current_assets').select('*').order('sort_order',{ascending:true});
+      if(error)throw error;
+      cachedAssets=data||[];
+      localStorage.setItem(ASSETS_KEYS[0],JSON.stringify(cachedAssets));
+      return cachedAssets;
+    }
+  }catch(e){console.warn('Balance diario: no se pudo leer current_assets desde Supabase',e)}
+  for(const key of ASSETS_KEYS){
+    const local=readJson(key,[]);
+    if(Array.isArray(local)&&local.length){cachedAssets=local;return cachedAssets}
+  }
+  cachedAssets=[];
+  return cachedAssets;
+}
+function calculations(date,previousOverride,assetsRows=cachedAssets){
   const movements=readJson(MOVEMENTS_KEY,[]);
-  const assets=readJson(ASSETS_KEY,[]);
+  const assets=Array.isArray(assetsRows)?assetsRows:[];
   const stock=readJson(STOCK_KEY,[]);
   const currentAssets=assets.reduce((s,r)=>s+num(r.balance),0);
-  // Usa la misma función del módulo Saldos para evitar diferencias o duplicaciones.
-  // El cálculo local queda únicamente como respaldo si la función principal no estuviera disponible.
-  const sharedAccountsTotal=window.DonZoiloFinancialTotals?.clientCurrentAccounts;
-  const clientAccounts=typeof sharedAccountsTotal==='function'
-    ? Number(sharedAccountsTotal()||0)
-    : movements.filter(m=>m.status!=='pendiente'&&['venta','cobro','ajuste'].includes(m.type)).reduce((s,m)=>{
-        const amount=Number(m.amount||0);
-        if(m.type==='venta'||isOpening(m))return s+amount;
-        if(m.type==='cobro')return s-amount;
-        return s;
-      },0);
+  const clientAccounts=movements.filter(m=>m.status!=='pendiente'&&['venta','cobro','ajuste'].includes(m.type)).reduce((s,m)=>{
+    if(m.type==='venta'||isOpening(m))return s+num(m.amount);
+    if(m.type==='cobro')return s-num(m.amount);
+    return s;
+  },0);
   const inventory=stockValue(stock);
   const supplierDebt=movements.filter(m=>m.status!=='pendiente'&&['compra','pago'].includes(m.type)).reduce((s,m)=>s+(m.type==='compra'?num(m.amount):-num(m.amount)),0);
   const expenses=movements.filter(m=>m.type==='gasto'&&m.status!=='pendiente'&&m.date===date).reduce((s,m)=>s+num(m.amount),0);
@@ -87,10 +99,11 @@ function render(){
   $('balAssets').textContent=money(current.current_assets);$('balAccounts').textContent=money(current.client_accounts);$('balStock').textContent=money(current.stock_value);$('balTotalAssets').textContent=money(current.total_assets);$('balSuppliers').textContent=money(current.supplier_debt);$('balLiabilities').textContent=money(current.total_liabilities);$('balExpenses').textContent=money(current.daily_expenses);$('balPrevious').textContent=money(current.previous_equity);$('balFinal').textContent=money(current.final_equity);$('balBeforeExpenses').textContent=money(current.result_before_expenses);$('balNet').textContent=money(current.net_result);$('balNet').className=current.net_result>=0?'positive':'negative';$('balVariation').textContent=` · ${current.net_result>=0?'+':''}${pct(current.variation_pct)}`;
 }
 function renderHistory(){const box=$('balanceHistory');if(!box)return;box.innerHTML='<div class="history-row head"><span>Fecha</span><span>Patrimonio</span><span>Resultado</span><span>%</span></div>'+closings.slice().sort((a,b)=>String(b.balance_date).localeCompare(String(a.balance_date))).slice(0,30).map(r=>`<div class="history-row"><span>${new Date(r.balance_date+'T12:00:00').toLocaleDateString('es-AR')}</span><strong>${money(r.final_equity)}</strong><strong class="${num(r.net_result)>=0?'positive':'negative'}">${money(r.net_result)}</strong><span>${pct(r.variation_pct)}</span></div>`).join('')}
-async function refresh(preserveInput=false){await loadClosings();const date=$('balanceDate')?.value||today();const saved=closings.find(r=>r.balance_date===date);let previous;if(preserveInput&&$('balancePrevious')?.value!=='')previous=num($('balancePrevious').value);else previous=saved?num(saved.previous_equity):previousEquity(date);current=calculations(date,previous);if($('balancePrevious'))$('balancePrevious').value=String(current.previous_equity);if($('balanceNotes'))$('balanceNotes').value=saved?.notes||'';render();renderHistory()}
+async function refresh(preserveInput=false){await Promise.all([loadClosings(),loadCurrentAssets()]);const date=$('balanceDate')?.value||today();const saved=closings.find(r=>r.balance_date===date);let previous;if(preserveInput&&$('balancePrevious')?.value!=='')previous=num($('balancePrevious').value);else previous=saved?num(saved.previous_equity):previousEquity(date);current=calculations(date,previous,cachedAssets);if($('balancePrevious'))$('balancePrevious').value=String(current.previous_equity);if($('balanceNotes'))$('balanceNotes').value=saved?.notes||'';render();renderHistory()}
 async function save(){
   if(!current)return;
-  current=calculations($('balanceDate').value,num($('balancePrevious').value));
+  await loadCurrentAssets();
+  current=calculations($('balanceDate').value,num($('balancePrevious').value),cachedAssets);
   const existing=closings.find(r=>r.balance_date===current.date);
   const record={id:existing?.id||uid(),balance_date:current.date,...current,notes:$('balanceNotes').value.trim(),created_at:existing?.created_at||new Date().toISOString(),updated_at:new Date().toISOString()};delete record.date;
   try{if(cloud()){const {data,error}=await cloud().from(TABLE).upsert(record,{onConflict:'balance_date'}).select().single();if(error)throw error;Object.assign(record,data)}closings=closings.filter(r=>r.balance_date!==record.balance_date);closings.push(record);localWrite();renderHistory();alert('Cierre diario guardado correctamente.')}catch(e){alert('No se pudo guardar el cierre: '+(e.message||e))}
@@ -103,7 +116,7 @@ function simplePdfBlob(lines){
 function pdfFile(){return new File([simplePdfBlob(reportLines())],`Balance_Don_Zoilo_${current.date}.pdf`,{type:'application/pdf'})}
 function downloadPdf(){const file=pdfFile();const url=URL.createObjectURL(file);const a=document.createElement('a');a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
 async function sharePdf(){const file=pdfFile();try{if(navigator.canShare?.({files:[file]})&&navigator.share){await navigator.share({title:'Balance diario Don Zoilo',text:`Balance diario ${current.date}`,files:[file]})}else{downloadPdf();alert('Se descargó el PDF. Abrilo desde Descargas y compartilo por WhatsApp.')}}catch(e){if(e.name!=='AbortError')alert('No se pudo compartir: '+e.message)} }
-function bind(){$('balanceDate').value=today();$('balanceDate').addEventListener('change',()=>refresh(false));$('balancePrevious').addEventListener('input',()=>{current=calculations($('balanceDate').value,num($('balancePrevious').value));render()});$('balanceRefresh').addEventListener('click',()=>refresh(true));$('balanceSave').addEventListener('click',save);$('balancePdf').addEventListener('click',downloadPdf);$('balanceShare').addEventListener('click',sharePdf)}
-async function init(){injectStyles();injectUI();bind();await refresh(false)}
+function bind(){$('balanceDate').value=today();$('balanceDate').addEventListener('change',()=>refresh(false));$('balancePrevious').addEventListener('input',()=>{current=calculations($('balanceDate').value,num($('balancePrevious').value),cachedAssets);render()});$('balanceRefresh').addEventListener('click',()=>refresh(true));$('balanceSave').addEventListener('click',save);$('balancePdf').addEventListener('click',downloadPdf);$('balanceShare').addEventListener('click',sharePdf)}
+async function init(){injectStyles();injectUI();bind();window.addEventListener('donzoilo:remote-change',e=>{if(e.detail?.table==='current_assets')refresh(true)});window.addEventListener('donzoilo:app-visible',()=>refresh(true));await refresh(false)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

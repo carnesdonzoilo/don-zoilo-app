@@ -1,0 +1,13 @@
+DON ZOILO V34.3 — CORRECCIÓN CAJA Y ACTIVOS EN BALANCE DIARIO
+
+- El Balance Diario ahora lee la tabla current_assets directamente desde Supabase.
+- Usa como respaldo las dos claves locales compatibles: v34_1 y v34.
+- El total de Caja y Activos coincide con el módulo Caja y Activos.
+- Se actualiza al abrir el módulo, al volver a la app y ante cambios remotos.
+- No requiere ejecutar SQL nuevo.
+- No borra ni modifica los datos existentes.
+
+INSTALACIÓN
+1. Subir todos los archivos a GitHub reemplazando los actuales.
+2. Esperar el deploy de Vercel.
+3. En PC usar Ctrl+F5. En celular/tablet cerrar y volver a abrir.
