@@ -1,0 +1,15 @@
+DON ZOILO V34.0 — BALANCE DIARIO
+
+1. Antes de subir la versión, abrí Supabase > SQL Editor.
+2. Pegá y ejecutá el archivo supabase_update_v34.sql.
+3. Subí TODOS los archivos de esta carpeta a GitHub reemplazando los actuales.
+4. Esperá el deploy de Vercel y recargá la app.
+5. Abrí Balance diario, elegí la fecha y cargá el patrimonio anterior.
+
+CÁLCULO:
+Total activos = Caja y activos + Cuentas corrientes de clientes + Stock valorizado.
+Patrimonio final = Total activos - Deudas con proveedores.
+Resultado neto = Patrimonio final - Patrimonio anterior.
+Resultado antes de gastos = Resultado neto + Gastos del día.
+
+El PDF se genera en el teléfono y puede compartirse desde Android por WhatsApp.
