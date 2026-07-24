@@ -1,0 +1,16 @@
+DON ZOILO — VERSIÓN 34.4
+
+Correcciones incluidas:
+1. Balance Diario toma Caja y Activos desde la tabla current_assets, igual que la v34.3.
+2. Balance Diario toma Cuentas Corrientes desde la misma función usada por el módulo Saldos.
+3. Se conservan los datos existentes. No requiere ejecutar SQL nuevo.
+
+INSTALACIÓN
+- Subir todos los archivos a GitHub reemplazando los actuales.
+- Esperar el despliegue de Vercel.
+- En PC, presionar Ctrl + F5.
+- En celular/tablet, cerrar completamente la app y volver a abrirla.
+
+CONTROL ESPERADO
+- Caja y activos del Balance = Total activos corrientes del módulo Caja y activos.
+- Cuentas corrientes clientes del Balance = Total cuentas corrientes de clientes del módulo Saldos.

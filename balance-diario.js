@@ -1,4 +1,4 @@
-/* DON ZOILO V34.3 — BALANCE DIARIO: CAJA Y ACTIVOS SINCRONIZADOS */
+/* DON ZOILO V34.4 — BALANCE DIARIO: CAJA/ACTIVOS Y SALDOS CORREGIDOS */
 (function(){
 'use strict';
 const TABLE='daily_balances';
@@ -43,11 +43,16 @@ function calculations(date,previousOverride,assetsRows=cachedAssets){
   const assets=Array.isArray(assetsRows)?assetsRows:[];
   const stock=readJson(STOCK_KEY,[]);
   const currentAssets=assets.reduce((s,r)=>s+num(r.balance),0);
-  const clientAccounts=movements.filter(m=>m.status!=='pendiente'&&['venta','cobro','ajuste'].includes(m.type)).reduce((s,m)=>{
-    if(m.type==='venta'||isOpening(m))return s+num(m.amount);
-    if(m.type==='cobro')return s-num(m.amount);
-    return s;
-  },0);
+  // Usa exactamente la misma función que alimenta el total visible del módulo Saldos.
+  // El cálculo local queda solo como respaldo por compatibilidad.
+  const sharedAccountsTotal=window.DonZoiloFinancialTotals?.clientCurrentAccounts;
+  const clientAccounts=typeof sharedAccountsTotal==='function'
+    ? num(sharedAccountsTotal())
+    : movements.filter(m=>m.status!=='pendiente'&&['venta','cobro','ajuste'].includes(m.type)).reduce((s,m)=>{
+        if(m.type==='venta'||isOpening(m))return s+num(m.amount);
+        if(m.type==='cobro')return s-num(m.amount);
+        return s;
+      },0);
   const inventory=stockValue(stock);
   const supplierDebt=movements.filter(m=>m.status!=='pendiente'&&['compra','pago'].includes(m.type)).reduce((s,m)=>s+(m.type==='compra'?num(m.amount):-num(m.amount)),0);
   const expenses=movements.filter(m=>m.type==='gasto'&&m.status!=='pendiente'&&m.date===date).reduce((s,m)=>s+num(m.amount),0);
