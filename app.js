@@ -1832,6 +1832,10 @@ function totalClientCurrentAccounts(){
   return [...totals.values()].reduce((sum,value)=>sum+value,0);
 }
 
+// Fuente única para que Balance Diario muestre exactamente el mismo total que Saldos.
+window.DonZoiloFinancialTotals = window.DonZoiloFinancialTotals || {};
+window.DonZoiloFinancialTotals.clientCurrentAccounts = totalClientCurrentAccounts;
+
 function openBalanceDetail(client){
   const totals=accountTotals(client);
   if($("balanceDetailClient")) $("balanceDetailClient").textContent=client;

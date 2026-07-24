@@ -1,0 +1,13 @@
+DON ZOILO V34.1 — CORRECCIÓN BALANCE DIARIO
+
+CAMBIO REALIZADO
+- El total de Cuentas Corrientes del Balance Diario ahora usa exactamente la misma función que el módulo Saldos.
+- Se eliminó el cálculo independiente que podía interpretar o sumar importes de forma incorrecta.
+- No requiere ejecutar SQL nuevo.
+- No elimina ni modifica datos de Supabase.
+
+INSTALACIÓN
+1. Subir todos los archivos de este ZIP al repositorio de GitHub reemplazando los actuales.
+2. Esperar el despliegue de Vercel.
+3. Abrir la app y actualizar con Ctrl+F5 en PC o cerrar y volver a abrir en celular/tablet.
+4. Verificar que Cuentas Corrientes en Balance coincida con el total del módulo Saldos.
