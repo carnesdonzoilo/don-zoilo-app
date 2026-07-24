@@ -1,0 +1,14 @@
+V34.5 — BALANCE DIARIO CONSOLIDADO
+
+Problema corregido:
+El módulo Saldos mostraba $32.549.269, pero Balance Diario mostraba $32.549.269.116.
+
+Causa:
+El total compartido incluía decimales (por ejemplo 32549269.116). El conversor del Balance interpretaba el punto decimal como separador de miles.
+
+Solución:
+- Si el valor recibido ya es numérico, se conserva sin convertirlo a texto.
+- Solo se normalizan separadores cuando el origen es realmente texto.
+- Cuentas Corrientes usa como fuente única la misma función totalClientCurrentAccounts del módulo Saldos.
+
+No requiere cambios de base de datos.

@@ -1,4 +1,4 @@
-/* DON ZOILO V34.4 — BALANCE DIARIO: CAJA/ACTIVOS Y SALDOS CORREGIDOS */
+/* DON ZOILO V34.5 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
 (function(){
 'use strict';
 const TABLE='daily_balances';
@@ -10,7 +10,26 @@ let closings=[];
 let current=null;
 let cachedAssets=[];
 const $=id=>document.getElementById(id);
-const num=v=>{const n=Number(String(v??0).replace(/\$/g,'').replace(/\s/g,'').replace(/\.(?=\d{3}(?:\D|$))/g,'').replace(',','.'));return Number.isFinite(n)?n:0};
+const num=v=>{
+  // Los totales compartidos entre módulos ya llegan como Number.
+  // No deben convertirse a texto: un decimal como 32549269.116 podría
+  // confundirse con separadores de miles y transformarse en 32549269116.
+  if(typeof v==='number') return Number.isFinite(v)?v:0;
+  const raw=String(v??'').trim().replace(/\$/g,'').replace(/\s/g,'');
+  if(!raw) return 0;
+  let normalized=raw;
+  if(raw.includes(',')&&raw.includes('.')){
+    // Formato argentino: 1.234.567,89
+    normalized=raw.replace(/\./g,'').replace(',','.');
+  }else if(raw.includes(',')){
+    normalized=raw.replace(',','.');
+  }else if(/^[-+]?\d{1,3}(?:\.\d{3})+$/.test(raw)){
+    // Texto con puntos de miles: 32.549.269
+    normalized=raw.replace(/\./g,'');
+  }
+  const n=Number(normalized);
+  return Number.isFinite(n)?n:0;
+};
 const money=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(num(v));
 const pct=v=>`${num(v).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})}%`;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
@@ -46,8 +65,9 @@ function calculations(date,previousOverride,assetsRows=cachedAssets){
   // Usa exactamente la misma función que alimenta el total visible del módulo Saldos.
   // El cálculo local queda solo como respaldo por compatibilidad.
   const sharedAccountsTotal=window.DonZoiloFinancialTotals?.clientCurrentAccounts;
-  const clientAccounts=typeof sharedAccountsTotal==='function'
-    ? num(sharedAccountsTotal())
+  const sharedAccountsValue=typeof sharedAccountsTotal==='function'?sharedAccountsTotal():null;
+  const clientAccounts=typeof sharedAccountsValue==='number'&&Number.isFinite(sharedAccountsValue)
+    ? sharedAccountsValue
     : movements.filter(m=>m.status!=='pendiente'&&['venta','cobro','ajuste'].includes(m.type)).reduce((s,m)=>{
         if(m.type==='venta'||isOpening(m))return s+num(m.amount);
         if(m.type==='cobro')return s-num(m.amount);

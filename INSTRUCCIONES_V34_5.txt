@@ -1,0 +1,17 @@
+DON ZOILO — VERSIÓN 34.5
+
+CORRECCIÓN PRINCIPAL
+- Balance Diario toma el total de Cuentas Corrientes desde la misma función que usa el módulo Saldos.
+- Se corrigió la interpretación de decimales: un valor numérico como 32549269.116 ya no se transforma erróneamente en 32549269116.
+- Caja y Activos continúa tomando el total del módulo current_assets.
+- No se modifican ni se borran datos de Supabase.
+- No hace falta ejecutar SQL.
+
+INSTALACIÓN
+1. Descargar un respaldo desde la app.
+2. Descomprimir este ZIP.
+3. Subir todos los archivos a GitHub reemplazando los existentes.
+4. Esperar a que Vercel finalice el despliegue.
+5. En PC: Ctrl + F5. En celular/tablet: cerrar por completo y volver a abrir.
+6. Confirmar que el encabezado muestre Versión 34.5.
+7. Comparar Saldos y Balance Diario: ambos deben mostrar el mismo total de Cuentas Corrientes.
