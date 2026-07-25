@@ -1,0 +1,9 @@
+DON ZOILO V34.6 — LISTA DE PRECIOS PREMIUM
+
+- Nuevo formato A4 basado en el diseño aprobado.
+- Marca de agua centrada con el logo Don Zoilo.
+- Encabezado profesional con WhatsApp.
+- Tres columnas de rubros y precios.
+- Pie de página con teléfono, web, reparto y fecha de actualización.
+- La mejora se aplica a Vista previa A4, Imprimir normal y GD-88H/FxPrint.
+- No modifica Supabase ni los precios cargados.

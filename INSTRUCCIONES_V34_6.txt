@@ -1,0 +1,11 @@
+DON ZOILO — ACTUALIZACIÓN 34.6
+
+1. Descargar un respaldo desde la app.
+2. Descomprimir este ZIP.
+3. Subir todos los archivos a GitHub reemplazando los existentes.
+4. Esperar el despliegue de Vercel.
+5. En PC: Ctrl + F5. En Android/tablet: cerrar completamente y volver a abrir.
+6. Verificar el encabezado “Versión 34.6”.
+7. Ir a Precios y usar “Vista previa A4”.
+
+No requiere SQL y no borra datos.

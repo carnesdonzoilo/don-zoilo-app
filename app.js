@@ -3247,8 +3247,10 @@ function renderPricePrintSheet(){
   if($("priceSheetTitle")) $("priceSheetTitle").textContent=($("pricePrintTitle")?.value||"LISTA DE PRECIOS").toUpperCase();
   if($("priceSheetPhone")) $("priceSheetPhone").textContent=$("pricePrintPhone")?.value||"11 3039 0331";
   const date=$("pricePrintDate")?.value;
+  const dateLabel=date ? new Date(date+"T12:00:00").toLocaleDateString("es-AR") : new Date().toLocaleDateString("es-AR");
+  if($("priceUpdatedDate")) $("priceUpdatedDate").textContent=`▦ Actualizado: ${dateLabel}`;
   if($("priceSheetDate")) $("priceSheetDate").textContent=date
-    ? `VIGENTE A PARTIR DEL ${new Date(date+"T12:00:00").toLocaleDateString("es-AR")}`
+    ? `VIGENTE A PARTIR DEL ${dateLabel}`
     : "";
 }
 
@@ -3412,7 +3414,16 @@ function drawHeaderBrand(ctx,title,subtitle=""){
   ctx.stroke();
 }
 
-function buildPriceCanvas(){
+async function loadCanvasImage(src){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>resolve(img);
+    img.onerror=()=>reject(new Error(`No se pudo cargar ${src}`));
+    img.src=src;
+  });
+}
+
+async function buildPriceCanvas(){
   const canvas=document.createElement("canvas");
   canvas.width=A4_W;
   canvas.height=A4_H;
@@ -3420,14 +3431,29 @@ function buildPriceCanvas(){
   ctx.fillStyle="#fff";
   ctx.fillRect(0,0,A4_W,A4_H);
 
+  // Marca de agua aprobada, centrada y muy tenue.
+  try{
+    const watermark=await loadCanvasImage("don-zoilo-watermark.png");
+    const size=690;
+    ctx.save();
+    ctx.globalAlpha=.075;
+    ctx.drawImage(watermark,(A4_W-size)/2,500,size,size);
+    ctx.restore();
+  }catch(_){ /* La lista sigue funcionando aunque la imagen no cargue. */ }
+
   drawHeaderBrand(ctx,($("pricePrintTitle")?.value||"LISTA DE PRECIOS").toUpperCase(),"CORTES SELECCIONADOS");
 
   const phone=$("pricePrintPhone")?.value||"11 3039 0331";
-  ctx.fillStyle="#b5232a";
-  canvasText(ctx,"PEDIDOS POR WHATSAPP",A4_W-55,36,300,"16px Arial","bold","right");
-  canvasText(ctx,phone,A4_W-55,62,300,"28px Arial","bold","right");
+  const boxX=A4_W-355, boxY=24, boxW=310, boxH=91;
+  ctx.fillStyle="#fff";
+  ctx.strokeStyle="#d52b35";
+  ctx.lineWidth=3;
+  ctx.strokeRect(boxX,boxY,boxW,boxH);
+  ctx.fillStyle="#d52b35";
+  canvasText(ctx,"PEDIDOS POR WHATSAPP",boxX+boxW/2,boxY+11,boxW-20,"15px Arial","bold","center");
+  canvasText(ctx,phone,boxX+boxW/2,boxY+35,boxW-20,"27px Arial","bold","center");
   ctx.fillStyle="#0c2748";
-  canvasText(ctx,"ENTREGAS EN CABA Y GBA OESTE",A4_W-55,100,300,"13px Arial","bold","right");
+  canvasText(ctx,"ENTREGAS EN CABA Y GBA OESTE",boxX+boxW/2,boxY+69,boxW-20,"12px Arial","bold","center");
 
   const margin=42;
   const gap=14;
@@ -3438,45 +3464,42 @@ function buildPriceCanvas(){
   columns.forEach((chunks,col)=>{
     const x=margin+col*(colW+gap);
     let y=top;
-
     chunks.forEach(({category,items})=>{
       ctx.fillStyle="#0c2748";
       ctx.fillRect(x,y,colW,34);
       ctx.fillStyle="#fff";
       canvasText(ctx,category.toUpperCase(),x+colW/2,y+7,colW-10,"18px Arial","bold","center");
       y+=38;
-
       items.forEach(([name,defaultPrice])=>{
+        ctx.fillStyle="rgba(255,255,255,.82)";
+        ctx.fillRect(x,y-2,colW,25);
         ctx.fillStyle="#111";
         canvasText(ctx,name.toUpperCase(),x+5,y,colW-118,"15px Arial","bold");
         canvasText(ctx,moneyPlain(catalogPrice(name,defaultPrice)),x+colW-5,y,112,"16px Arial","bold","right");
-        ctx.strokeStyle="#c2c7cc";
+        ctx.strokeStyle="#d9dde2";
         ctx.lineWidth=1;
-        ctx.beginPath();
-        ctx.moveTo(x+5,y+22);
-        ctx.lineTo(x+colW-5,y+22);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x+5,y+22); ctx.lineTo(x+colW-5,y+22); ctx.stroke();
         y+=25;
       });
-
       y+=8;
     });
   });
 
-  ctx.strokeStyle="#0c2748";
-  ctx.lineWidth=4;
-  ctx.beginPath();
-  ctx.moveTo(42,1680);
-  ctx.lineTo(A4_W-42,1680);
-  ctx.stroke();
-
+  const footerTop=1640;
+  ctx.strokeStyle="#0c2748"; ctx.lineWidth=4;
+  ctx.beginPath(); ctx.moveTo(42,footerTop); ctx.lineTo(A4_W-42,footerTop); ctx.stroke();
   ctx.fillStyle="#0c2748";
-  canvasText(ctx,"LOS PRECIOS INCLUYEN I.V.A. · SUJETOS A VARIACIÓN SIN PREVIO AVISO",A4_W/2,1688,A4_W-84,"14px Arial","bold","center");
+  canvasText(ctx,`◉ ${phone}`,62,footerTop+13,240,"15px Arial","bold");
+  canvasText(ctx,"◎ carnesdonzoilo.com.ar",350,footerTop+13,300,"15px Arial","bold");
+  canvasText(ctx,"▣ Entrega en CABA y GBA",690,footerTop+13,300,"15px Arial","bold");
   const date=$("pricePrintDate")?.value;
-  if(date){
-    canvasText(ctx,`VIGENTE A PARTIR DEL ${new Date(date+"T12:00:00").toLocaleDateString("es-AR")}`,A4_W/2,1710,A4_W-84,"12px Arial","normal","center");
-  }
-  canvasText(ctx,"CARNES DON ZOILO · CASTELAR · WWW.CARNESDONZOILO.COM.AR",A4_W/2,1728,A4_W-84,"11px Arial","normal","center");
+  const dateLabel=date ? new Date(date+"T12:00:00").toLocaleDateString("es-AR") : new Date().toLocaleDateString("es-AR");
+  canvasText(ctx,`▦ Actualizado: ${dateLabel}`,A4_W-55,footerTop+13,250,"15px Arial","bold","right");
+  ctx.strokeStyle="#cbd1d8"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(42,footerTop+42); ctx.lineTo(A4_W-42,footerTop+42); ctx.stroke();
+  canvasText(ctx,"LOS PRECIOS INCLUYEN I.V.A. · SUJETOS A VARIACIÓN SIN PREVIO AVISO",A4_W/2,footerTop+51,A4_W-84,"14px Arial","bold","center");
+  if(date) canvasText(ctx,`VIGENTE A PARTIR DEL ${dateLabel}`,A4_W/2,footerTop+73,A4_W-84,"12px Arial","normal","center");
+  canvasText(ctx,"CARNES DON ZOILO · CASTELAR, BUENOS AIRES · WWW.CARNESDONZOILO.COM.AR",A4_W/2,footerTop+91,A4_W-84,"11px Arial","normal","center");
   return canvas;
 }
 
@@ -3708,54 +3731,34 @@ function buildPricePrintDocument(autoPrint=false){
 
   const printableCss=`
     *{box-sizing:border-box}
-    html,body{width:210mm;height:297mm;overflow:hidden} body{margin:0;padding:5mm;font-family:Arial,sans-serif;color:#111;background:#fff}
-    .price-print-sheet{display:block;width:196mm;min-height:283mm;margin:0 auto}
-    .price-print-header{display:grid;grid-template-columns:1fr 1.6fr 1fr;align-items:center;gap:12px;border-bottom:3px solid #0c2748;padding-bottom:9px;margin-bottom:10px}
-    .price-brand-name{font-family:Georgia,serif;font-size:24px;font-weight:900;letter-spacing:1px;color:#0c2748}
-    .price-brand-sub{font-size:7px;letter-spacing:1.3px}
+    html,body{width:210mm;height:297mm;overflow:hidden}
+    body{margin:0;padding:5mm;font-family:Arial,sans-serif;color:#111;background:#fff}
+    .price-print-sheet{display:block;position:relative;isolation:isolate;width:200mm;height:287mm;min-height:287mm;max-height:287mm;margin:0 auto;overflow:hidden;background:#fff}
+    .price-watermark{position:absolute;z-index:0;left:50%;top:51%;width:108mm;height:108mm;object-fit:contain;transform:translate(-50%,-50%);opacity:.075;pointer-events:none}
+    .price-print-header,.price-sheet-grid,.price-print-footer{position:relative;z-index:1}
+    .price-print-header{display:grid;grid-template-columns:1fr 1.55fr 1fr;align-items:center;gap:8px;height:25mm;border-bottom:2px solid #0c2748;padding:0 0 2mm;margin:0 0 2.5mm}
+    .price-brand-name{font-family:Georgia,serif;font-size:24px;font-weight:900;letter-spacing:.5px;color:#0c2748}
+    .price-brand-sub{font-size:7px;letter-spacing:1px;color:#53606d}
     .price-print-title-wrap{text-align:center}
-    .price-print-title-wrap h1{font-size:27px;margin:0;color:#0c2748;letter-spacing:1px}
-    .price-print-title-wrap div{font-size:11px;color:#b5232a;font-weight:800;letter-spacing:3px}
-    .price-contact{border:2px solid #b5232a;border-radius:6px;padding:7px;text-align:center;display:flex;flex-direction:column}
-    .price-contact strong{font-size:8px;color:#b5232a}
-    .price-contact span{font-size:17px;font-weight:900;color:#b5232a}
-    .price-contact small{font-size:7px;color:#0c2748;font-weight:800}
-    .price-sheet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;align-items:stretch;min-height:238mm}
-    .price-category{display:flex;flex-direction:column;break-inside:avoid;border:1px solid #bfc5cc;margin:0;background:#fff}
-    .price-category h2{font-size:12px;line-height:1.2;margin:0;padding:6px 7px;text-align:center;background:#0c2748;color:#fff;letter-spacing:.5px}
-    .price-category-list{padding:5px 7px;flex:1}
-    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:end;font-size:10px;line-height:1.25;min-height:24px;padding:3px 0;border-bottom:1px dotted #a8adb3}
-    .price-sheet-row:last-child{border-bottom:0}
-    .price-sheet-row .product{font-weight:700;text-transform:uppercase;overflow:hidden}
-    .price-sheet-row .price{font-size:10.5px;font-weight:900;white-space:nowrap}
-    .price-print-footer{margin-top:8px;border-top:3px solid #0c2748;text-align:center;display:flex;flex-direction:column;gap:3px;padding-top:5px;color:#0c2748}
-    .price-print-footer strong{font-size:8px}
-    .price-print-footer span,.price-print-footer small{font-size:7px}
-
-    .price-print-sheet{width:200mm;height:287mm;min-height:287mm;max-height:287mm;overflow:hidden}
-    .price-print-header{height:25mm;margin:0 0 2.5mm;padding:0 0 2mm}
-    .price-sheet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2.2mm;height:242mm;min-height:242mm;align-items:stretch}
+    .price-print-title-wrap h1{font-size:28px;margin:0;color:#0c2748;letter-spacing:1px}
+    .price-print-title-wrap div{font-size:10px;color:#c51f2b;font-weight:900;letter-spacing:3px}
+    .price-contact{border:2px solid #d52b35;border-radius:7px;background:#fff;padding:6px 7px;text-align:center;display:flex;flex-direction:column}
+    .price-contact strong{font-size:8px;color:#d52b35}.price-contact span{font-size:17px;font-weight:900;color:#d52b35}.price-contact small{font-size:7px;color:#0c2748;font-weight:800}
+    .price-sheet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2.2mm;height:236mm;min-height:236mm;align-items:stretch}
     .price-column{display:flex;flex-direction:column;gap:1.6mm;min-width:0;height:100%}
-    .price-category{display:block;flex:0 0 auto;border:1px solid #aeb6bf;margin:0;break-inside:avoid;overflow:hidden}
-    .price-category h2{font-size:10.5px;line-height:1.1;margin:0;padding:4px 5px;text-align:center;background:#0c2748;color:#fff}
-    .price-category-list{padding:3px 5px}
-    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px;align-items:center;font-size:9.5px;line-height:1.12;min-height:19px;padding:2px 0;border-bottom:1px dotted #a8adb3}
-    .price-sheet-row .product{font-size:9.5px;font-weight:800;white-space:normal}
-    .price-sheet-row .price{font-size:10px;font-weight:900;white-space:nowrap}
-    .price-print-footer{height:11mm;margin:2mm 0 0;padding-top:1.5mm;gap:1px}
-
+    .price-category{display:block;flex:0 0 auto;border:1px solid #cfd4da;margin:0;break-inside:avoid;overflow:hidden;background:rgba(255,255,255,.86)}
+    .price-category h2{font-size:10.5px;line-height:1.1;margin:0;padding:4px 5px;text-align:center;background:#0c2748;color:#fff;letter-spacing:.25px}
+    .price-category-list{padding:3px 5px;background:rgba(255,255,255,.72)}
+    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px;align-items:center;font-size:9.5px;line-height:1.12;min-height:19px;padding:2px 0;border-bottom:1px solid #e1e4e8}
+    .price-sheet-row:last-child{border-bottom:0}.price-sheet-row .product{font-size:9.5px;font-weight:800;text-transform:uppercase;white-space:normal}.price-sheet-row .price{font-size:10px;font-weight:900;white-space:nowrap}
+    .price-print-footer{height:17mm;margin:1.4mm 0 0;border-top:2px solid #0c2748;text-align:center;display:flex;flex-direction:column;gap:1px;padding-top:1.5mm;color:#0c2748}
+    .price-footer-contact{display:grid;grid-template-columns:1fr 1.35fr 1.45fr 1.25fr;gap:2mm;align-items:center;padding:0 1mm 1.6mm;border-bottom:1px solid #cbd1d8;font-size:7.2px;font-weight:800;text-align:center;white-space:nowrap}
+    .price-print-footer>strong{padding-top:1mm;font-size:8px}.price-print-footer>span,.price-print-footer>small{font-size:7px}
     .print-help{display:none}
-    @page{size:A4 portrait;margin:6mm}
-    @media screen{
-      body{background:#e9ecef}
-      .price-print-sheet{background:#fff;padding:0;box-shadow:0 5px 24px rgba(0,0,0,.18)}
-      .print-help{display:block;position:sticky;top:0;margin:-7mm -7mm 7mm;padding:12px;background:#101820;color:#fff;text-align:center;font-size:14px}
-    }
-    @media print{
-      body{padding:0}
-      .price-print-sheet{box-shadow:none;padding:0}
-      .print-help{display:none!important}
-    }`;
+    @page{size:A4 portrait;margin:5mm}
+    @media screen{body{background:#e9ecef}.price-print-sheet{box-shadow:0 5px 24px rgba(0,0,0,.18)}.print-help{display:block;position:sticky;top:0;margin:-5mm -5mm 5mm;padding:12px;background:#101820;color:#fff;text-align:center;font-size:14px}}
+    @media print{body{padding:0}.price-print-sheet{box-shadow:none}.print-help{display:none!important}.price-watermark{opacity:.07}.price-category,.price-category-list{background:rgba(255,255,255,.82);-webkit-print-color-adjust:exact;print-color-adjust:exact}.price-category h2,.price-contact{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  `
 
   popup.document.open();
   popup.document.write(`<!doctype html>
@@ -3783,7 +3786,7 @@ function buildPricePrintDocument(autoPrint=false){
 
 on("thermalPriceList","click",async()=>{
   try{
-    const canvas=buildPriceCanvas();
+    const canvas=await buildPriceCanvas();
     await shareCanvasWithFxPrint(canvas,"lista-precios-don-zoilo.png","Lista de precios Don Zoilo");
   }catch(e){
     if(e?.name!=="AbortError") alert("No se pudo compartir con FxPrint: "+e.message);

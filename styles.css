@@ -919,3 +919,52 @@ dialog::backdrop{background:#0009}
 .stock-delete-inline{background:#ffe3e3!important;color:#a61b1b;min-width:38px}
 .stock-amount{background:rgba(255,255,255,.35)}
 @media(max-width:700px){.stock-hero{align-items:flex-start;flex-direction:column}.stock-hero-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.stock-hero-actions button{width:100%}.stock-kpis{grid-template-columns:1fr 1fr}.stock-toolbar{grid-template-columns:1fr 1fr}.stock-toolbar input{grid-column:1/-1}.stock-cell-input{font-size:16px;padding:9px 6px}.stock-table{min-width:1120px}}
+
+
+/* V34.6 — Lista de precios premium basada en el modelo aprobado */
+.price-print-sheet{
+  position:relative!important;
+  isolation:isolate!important;
+  background:#fff!important;
+  padding:0!important;
+}
+.price-watermark{
+  position:absolute!important;
+  z-index:0!important;
+  left:50%!important;
+  top:51%!important;
+  width:108mm!important;
+  height:108mm!important;
+  object-fit:contain!important;
+  transform:translate(-50%,-50%)!important;
+  opacity:.075!important;
+  pointer-events:none!important;
+  user-select:none!important;
+}
+.price-print-header,.price-sheet-grid,.price-print-footer{position:relative!important;z-index:1!important}
+.price-print-header{
+  grid-template-columns:1fr 1.55fr 1fr!important;
+  border-bottom:2px solid #0c2748!important;
+}
+.price-brand-name{font-family:Georgia,serif!important;font-size:24px!important;color:#0c2748!important;letter-spacing:.5px!important}
+.price-brand-sub{font-size:7px!important;letter-spacing:1px!important;color:#53606d!important}
+.price-print-title-wrap h1{font-size:28px!important;color:#0c2748!important}
+.price-print-title-wrap div{color:#c51f2b!important;font-size:10px!important;font-weight:900!important;letter-spacing:3px!important}
+.price-contact{border:2px solid #d52b35!important;border-radius:7px!important;background:#fff!important;padding:6px 7px!important}
+.price-contact strong,.price-contact span{color:#d52b35!important}
+.price-contact small{color:#0c2748!important}
+.price-category{background:rgba(255,255,255,.86)!important;border:1px solid #cfd4da!important}
+.price-category h2{background:#0c2748!important;color:#fff!important;letter-spacing:.25px!important}
+.price-category-list{background:rgba(255,255,255,.72)!important}
+.price-sheet-row{border-bottom:1px solid #e1e4e8!important}
+.price-print-footer{border-top:2px solid #0c2748!important;color:#0c2748!important;height:17mm!important;margin-top:1.4mm!important;padding-top:1.5mm!important}
+.price-footer-contact{display:grid!important;grid-template-columns:1fr 1.35fr 1.45fr 1.25fr!important;gap:2mm!important;align-items:center!important;padding:0 1mm 1.6mm!important;border-bottom:1px solid #cbd1d8!important;font-size:7.2px!important;font-weight:800!important;text-align:center!important;white-space:nowrap!important}
+.price-print-footer>strong{padding-top:1mm!important}
+@media(max-width:800px){
+  .price-print-sheet{transform-origin:top left}
+}
+@media print{
+  .price-watermark{opacity:.07!important}
+  .price-category,.price-category-list{background:rgba(255,255,255,.82)!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  .price-category h2,.price-contact{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+}

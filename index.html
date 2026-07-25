@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 34.5 · balance diario consolidado y corrección numérica definitiva</div>
+      <div class="subtitle">Control de operaciones · Versión 34.6 · lista de precios premium con marca de agua</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -773,6 +773,7 @@
         </div>
 
         <div id="pricePrintSheet" class="price-print-sheet">
+          <img class="price-watermark" src="don-zoilo-watermark.png" alt="" aria-hidden="true">
           <header class="price-print-header">
             <div class="price-brand">
               <div class="price-brand-name">DON ZOILO</div>
@@ -792,6 +793,12 @@
           <div id="priceSheetGrid" class="price-sheet-grid"></div>
 
           <footer class="price-print-footer">
+            <div class="price-footer-contact">
+              <span>◉ 11 3039 0331</span>
+              <span>◎ carnesdonzoilo.com.ar</span>
+              <span>▣ Entrega en CABA y GBA</span>
+              <span id="priceUpdatedDate">▦ Actualizado: —</span>
+            </div>
             <strong>LOS PRECIOS INCLUYEN I.V.A. · SUJETOS A VARIACIÓN SIN PREVIO AVISO</strong>
             <span id="priceSheetDate"></span>
             <small>CARNES DON ZOILO · CASTELAR, BUENOS AIRES · WWW.CARNESDONZOILO.COM.AR</small>
@@ -986,12 +993,12 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=34.5"></script>
-  <script src="app.js?v=34.5"></script>
+  <script src="cloud-config.js?v=34.6"></script>
+  <script src="app.js?v=34.6"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=34.5"></script>
-  <script src="stock-ocr.js?v=34.5"></script>
-  <script src="caja-activos.js?v=34.5"></script>
-  <script src="balance-diario.js?v=34.5"></script>
+  <script src="stock.js?v=34.6"></script>
+  <script src="stock-ocr.js?v=34.6"></script>
+  <script src="caja-activos.js?v=34.6"></script>
+  <script src="balance-diario.js?v=34.6"></script>
 </body>
 </html>
