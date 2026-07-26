@@ -1,0 +1,7 @@
+DON ZOILO V34.7 — LISTA DE PRECIOS PREMIUM CORREGIDA
+
+- Corrige el problema de la versión 34.6 que seguía usando una distribución demasiado compacta.
+- Aumenta el alto de las filas para aprovechar la hoja A4.
+- Reemplaza el archivo de marca de agua incorrecto por un PNG transparente real.
+- Conserva precios y datos existentes.
+- No requiere SQL.

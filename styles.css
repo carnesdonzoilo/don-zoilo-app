@@ -968,3 +968,58 @@ dialog::backdrop{background:#0009}
   .price-category,.price-category-list{background:rgba(255,255,255,.82)!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   .price-category h2,.price-contact{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
 }
+
+/* V34.7 — corrección visual real: ocupa la hoja y marca de agua transparente */
+.price-print-sheet{
+  width:198mm!important;
+  height:285mm!important;
+  min-height:285mm!important;
+  max-height:285mm!important;
+  box-sizing:border-box!important;
+  overflow:hidden!important;
+}
+.price-print-header{
+  height:26mm!important;
+  margin-bottom:3mm!important;
+}
+.price-sheet-grid{
+  height:238mm!important;
+  min-height:238mm!important;
+  gap:2.6mm!important;
+}
+.price-column{
+  height:100%!important;
+  gap:2.2mm!important;
+}
+.price-sheet-row{
+  min-height:24px!important;
+  padding:3px 1px!important;
+  font-size:10.2px!important;
+  line-height:1.15!important;
+}
+.price-sheet-row .product{font-size:10.2px!important}
+.price-sheet-row .price{font-size:10.5px!important}
+.price-category h2{
+  font-size:11px!important;
+  padding:5px 6px!important;
+}
+.price-watermark{
+  width:118mm!important;
+  height:118mm!important;
+  top:50%!important;
+  opacity:.065!important;
+}
+.price-print-footer{
+  height:15mm!important;
+  margin-top:2mm!important;
+}
+@media print{
+  body.price-list-printing #pricePrintSheet,
+  .price-print-sheet{
+    width:200mm!important;
+    height:287mm!important;
+    min-height:287mm!important;
+    max-height:287mm!important;
+  }
+  .price-sheet-row{min-height:24px!important}
+}

@@ -3437,7 +3437,7 @@ async function buildPriceCanvas(){
     const size=690;
     ctx.save();
     ctx.globalAlpha=.075;
-    ctx.drawImage(watermark,(A4_W-size)/2,500,size,size);
+    ctx.drawImage(watermark,(A4_W-size)/2,470,size,size);
     ctx.restore();
   }catch(_){ /* La lista sigue funcionando aunque la imagen no cargue. */ }
 
@@ -3472,20 +3472,20 @@ async function buildPriceCanvas(){
       y+=38;
       items.forEach(([name,defaultPrice])=>{
         ctx.fillStyle="rgba(255,255,255,.82)";
-        ctx.fillRect(x,y-2,colW,25);
+        ctx.fillRect(x,y-2,colW,30);
         ctx.fillStyle="#111";
         canvasText(ctx,name.toUpperCase(),x+5,y,colW-118,"15px Arial","bold");
         canvasText(ctx,moneyPlain(catalogPrice(name,defaultPrice)),x+colW-5,y,112,"16px Arial","bold","right");
         ctx.strokeStyle="#d9dde2";
         ctx.lineWidth=1;
-        ctx.beginPath(); ctx.moveTo(x+5,y+22); ctx.lineTo(x+colW-5,y+22); ctx.stroke();
-        y+=25;
+        ctx.beginPath(); ctx.moveTo(x+5,y+27); ctx.lineTo(x+colW-5,y+27); ctx.stroke();
+        y+=30;
       });
       y+=8;
     });
   });
 
-  const footerTop=1640;
+  const footerTop=1650;
   ctx.strokeStyle="#0c2748"; ctx.lineWidth=4;
   ctx.beginPath(); ctx.moveTo(42,footerTop); ctx.lineTo(A4_W-42,footerTop); ctx.stroke();
   ctx.fillStyle="#0c2748";

@@ -1,0 +1,6 @@
+1. Descargar respaldo desde la app.
+2. Subir todos los archivos de este ZIP a GitHub reemplazando los actuales.
+3. Esperar el despliegue de Vercel.
+4. Hacer Ctrl+F5 en PC.
+5. En celular/tablet cerrar completamente y volver a abrir.
+6. Verificar que aparezca Versión 34.7.
