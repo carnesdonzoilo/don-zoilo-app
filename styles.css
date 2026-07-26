@@ -1023,30 +1023,3 @@ dialog::backdrop{background:#0009}
   }
   .price-sheet-row{min-height:24px!important}
 }
-
-/* V34.8 — diseño 1 aprobado: logo centrado, encabezado y pie premium */
-.price-print-sheet{width:198mm!important;height:285mm!important;min-height:285mm!important;max-height:285mm!important;border:1px solid #c9d0d8!important}
-.price-print-header{display:grid!important;grid-template-columns:30mm 1fr 54mm!important;height:29mm!important;margin:0 0 2.5mm!important;padding:2mm 2mm 2.2mm!important;border-bottom:2px solid #0c2748!important;gap:4mm!important}
-.price-brand-logo{height:24mm!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important}
-.price-brand-logo img{width:25mm!important;height:25mm!important;object-fit:contain!important;display:block!important}
-.price-print-title-wrap h1{font-size:27px!important;line-height:1!important;margin:0 0 2px!important;color:#0c2748!important}
-.price-print-title-wrap div{font-size:10px!important;letter-spacing:1.6px!important;color:#c62832!important;font-weight:900!important}
-.price-print-title-wrap small{display:block!important;margin-top:4px!important;font-size:7.5px!important;color:#53606d!important;font-weight:800!important;letter-spacing:.2px!important}
-.price-contact{min-height:20mm!important;justify-content:center!important;padding:4px 6px!important}
-.price-sheet-grid{height:233mm!important;min-height:233mm!important;padding:0 2mm!important;gap:2.4mm!important}
-.price-column{gap:1.7mm!important}
-.price-category{border:1px solid #c9cfd6!important;background:rgba(255,255,255,.80)!important}
-.price-category h2{display:flex!important;justify-content:space-between!important;align-items:center!important;text-align:left!important;font-size:10.5px!important;padding:4px 6px!important}
-.price-category h2::after{content:"$/KG";font-size:7.5px;font-weight:800;opacity:.9}
-.price-category-list{padding:2px 5px!important;background:rgba(255,255,255,.70)!important}
-.price-sheet-row{min-height:20px!important;padding:2px 0!important;font-size:9.2px!important;line-height:1.1!important}
-.price-sheet-row .product{font-size:9.2px!important}
-.price-sheet-row .price{font-size:9.6px!important}
-.price-watermark{width:128mm!important;height:128mm!important;top:52%!important;opacity:.055!important}
-.price-print-footer{height:15.5mm!important;margin:1.5mm 0 0!important;padding:0!important;border:0!important;background:transparent!important;gap:0!important}
-.price-footer-contact{height:7.2mm!important;display:grid!important;grid-template-columns:1fr 1.25fr 1.15fr!important;background:#0c2748!important;color:#fff!important;border:0!important;padding:0 3mm!important;font-size:7.5px!important;gap:1mm!important}
-.price-footer-contact span{border-right:1px solid rgba(255,255,255,.35);padding-right:1mm!important}.price-footer-contact span:last-child{border-right:0}
-.price-footer-tagline{font-family:Georgia,serif!important;font-style:italic!important;font-weight:700!important;font-size:9px!important;color:#0c2748!important;padding-top:1.3mm!important}
-.price-footer-tagline::after{content:"";display:inline-block;width:14mm;border-bottom:2px solid #c62832;margin-left:2mm;transform:translateY(-1px)}
-.price-print-footer>span{font-size:6.5px!important;color:#53606d!important}
-@media print{.price-print-sheet{border:0!important}.price-watermark{opacity:.05!important}.price-footer-contact{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
