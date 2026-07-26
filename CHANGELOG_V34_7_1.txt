@@ -1,0 +1,6 @@
+DON ZOILO V34.7.1 — AJUSTE DE ESCALA LISTA DE PRECIOS
+
+- Corrige la vista previa A4 que reducía el contenido en la mitad superior.
+- Aumenta altura de filas, títulos y separación entre categorías.
+- Mantiene el diseño, precios, columnas, marca de agua y pie de la V34.7.
+- No modifica Supabase ni otros módulos.

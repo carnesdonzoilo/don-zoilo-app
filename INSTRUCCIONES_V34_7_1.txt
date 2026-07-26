@@ -1,0 +1,5 @@
+1. Subir todos los archivos reemplazando los actuales en GitHub.
+2. Esperar el despliegue de Vercel.
+3. Cerrar la app en tablet/celular y volver a abrirla.
+4. Verificar: Versión 34.7.1 · lista A4 ampliada.
+5. Abrir Lista de precios > Vista previa A4.

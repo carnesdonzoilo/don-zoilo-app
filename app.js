@@ -3733,10 +3733,10 @@ function buildPricePrintDocument(autoPrint=false){
     *{box-sizing:border-box}
     html,body{width:210mm;height:297mm;overflow:hidden}
     body{margin:0;padding:5mm;font-family:Arial,sans-serif;color:#111;background:#fff}
-    .price-print-sheet{display:block;position:relative;isolation:isolate;width:200mm;height:287mm;min-height:287mm;max-height:287mm;margin:0 auto;overflow:hidden;background:#fff}
+    .price-print-sheet{display:block;position:relative;isolation:isolate;width:198mm;height:285mm;min-height:285mm;max-height:285mm;margin:0 auto;overflow:hidden;background:#fff}
     .price-watermark{position:absolute;z-index:0;left:50%;top:51%;width:108mm;height:108mm;object-fit:contain;transform:translate(-50%,-50%);opacity:.075;pointer-events:none}
     .price-print-header,.price-sheet-grid,.price-print-footer{position:relative;z-index:1}
-    .price-print-header{display:grid;grid-template-columns:1fr 1.55fr 1fr;align-items:center;gap:8px;height:25mm;border-bottom:2px solid #0c2748;padding:0 0 2mm;margin:0 0 2.5mm}
+    .price-print-header{display:grid;grid-template-columns:1fr 1.55fr 1fr;align-items:center;gap:8px;height:26mm;border-bottom:2px solid #0c2748;padding:0 0 2mm;margin:0 0 3mm}
     .price-brand-name{font-family:Georgia,serif;font-size:24px;font-weight:900;letter-spacing:.5px;color:#0c2748}
     .price-brand-sub{font-size:7px;letter-spacing:1px;color:#53606d}
     .price-print-title-wrap{text-align:center}
@@ -3744,14 +3744,14 @@ function buildPricePrintDocument(autoPrint=false){
     .price-print-title-wrap div{font-size:10px;color:#c51f2b;font-weight:900;letter-spacing:3px}
     .price-contact{border:2px solid #d52b35;border-radius:7px;background:#fff;padding:6px 7px;text-align:center;display:flex;flex-direction:column}
     .price-contact strong{font-size:8px;color:#d52b35}.price-contact span{font-size:17px;font-weight:900;color:#d52b35}.price-contact small{font-size:7px;color:#0c2748;font-weight:800}
-    .price-sheet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2.2mm;height:236mm;min-height:236mm;align-items:stretch}
-    .price-column{display:flex;flex-direction:column;gap:1.6mm;min-width:0;height:100%}
+    .price-sheet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2.6mm;height:238mm;min-height:238mm;align-items:stretch}
+    .price-column{display:flex;flex-direction:column;justify-content:flex-start;gap:2.2mm;min-width:0;height:100%}
     .price-category{display:block;flex:0 0 auto;border:1px solid #cfd4da;margin:0;break-inside:avoid;overflow:hidden;background:rgba(255,255,255,.86)}
-    .price-category h2{font-size:10.5px;line-height:1.1;margin:0;padding:4px 5px;text-align:center;background:#0c2748;color:#fff;letter-spacing:.25px}
+    .price-category h2{font-size:11px;line-height:1.1;margin:0;padding:5px 6px;text-align:center;background:#0c2748;color:#fff;letter-spacing:.25px}
     .price-category-list{padding:3px 5px;background:rgba(255,255,255,.72)}
-    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px;align-items:center;font-size:9.5px;line-height:1.12;min-height:19px;padding:2px 0;border-bottom:1px solid #e1e4e8}
-    .price-sheet-row:last-child{border-bottom:0}.price-sheet-row .product{font-size:9.5px;font-weight:800;text-transform:uppercase;white-space:normal}.price-sheet-row .price{font-size:10px;font-weight:900;white-space:nowrap}
-    .price-print-footer{height:17mm;margin:1.4mm 0 0;border-top:2px solid #0c2748;text-align:center;display:flex;flex-direction:column;gap:1px;padding-top:1.5mm;color:#0c2748}
+    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px;align-items:center;font-size:10.2px;line-height:1.15;min-height:24px;padding:3px 1px;border-bottom:1px solid #e1e4e8}
+    .price-sheet-row:last-child{border-bottom:0}.price-sheet-row .product{font-size:10.2px;font-weight:800;text-transform:uppercase;white-space:normal}.price-sheet-row .price{font-size:10.5px;font-weight:900;white-space:nowrap}
+    .price-print-footer{height:15mm;margin:2mm 0 0;border-top:2px solid #0c2748;text-align:center;display:flex;flex-direction:column;gap:1px;padding-top:1.5mm;color:#0c2748}
     .price-footer-contact{display:grid;grid-template-columns:1fr 1.35fr 1.45fr 1.25fr;gap:2mm;align-items:center;padding:0 1mm 1.6mm;border-bottom:1px solid #cbd1d8;font-size:7.2px;font-weight:800;text-align:center;white-space:nowrap}
     .price-print-footer>strong{padding-top:1mm;font-size:8px}.price-print-footer>span,.price-print-footer>small{font-size:7px}
     .print-help{display:none}
