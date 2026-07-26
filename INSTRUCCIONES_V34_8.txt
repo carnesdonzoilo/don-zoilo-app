@@ -1,0 +1,9 @@
+DON ZOILO V34.8
+
+1. Subir todos los archivos de esta carpeta a GitHub reemplazando los existentes.
+2. Esperar el despliegue de Vercel.
+3. En PC usar Ctrl + F5.
+4. En celular y tablet cerrar completamente la app y volver a abrir.
+5. Verificar que arriba diga “Versión 34.8 · lista de precios premium aprobada”.
+
+No ejecutar SQL para esta actualización.

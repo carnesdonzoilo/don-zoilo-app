@@ -1,0 +1,11 @@
+DON ZOILO V34.8 — LISTA DE PRECIOS, DISEÑO 1 APROBADO
+
+- Implementa de forma definitiva el diseño con logo grande centrado como marca de agua.
+- Agrega el logo institucional en el encabezado.
+- Cambia el subtítulo a “PRECIOS SIN IVA 10,5%”.
+- Muestra automáticamente la fecha de actualización.
+- Agrega “$/KG” en cada rubro.
+- Incorpora pie azul con WhatsApp, web, zona de entrega y la frase institucional.
+- Aplica el mismo diseño en vista previa A4, impresión normal y GD-88H/FxPrint.
+- Actualiza referencias de caché a 34.8 para que celular, tablet y PC reciban el cambio.
+- No requiere cambios en Supabase ni modifica precios guardados.
