@@ -45,7 +45,7 @@ const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.0";
+const APP_VERSION = "35.2.1";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3177,7 +3177,8 @@ function buildBalancedPriceColumns(){
   let col=0;
   let used=0;
 
-  for(const [category,items] of Object.entries(PRICE_CATALOG)){
+  for(const [category,itemsRaw] of Object.entries(PRICE_CATALOG)){
+    const items=[...itemsRaw].sort((a,b)=>String(a[0]||"").localeCompare(String(b[0]||""),"es",{sensitivity:"base"}));
     let offset=0;
     let continuation=false;
 

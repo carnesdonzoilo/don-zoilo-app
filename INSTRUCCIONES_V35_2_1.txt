@@ -1,0 +1,15 @@
+DON ZOILO V35.2.1 — CORRECCIÓN DE VERSIÓN Y ORDEN ALFABÉTICO
+
+Cambios:
+- Corrige la versión visible de 35.0 a 35.2.1.
+- Corrige APP_VERSION interno a 35.2.1.
+- Actualiza los parámetros ?v= para forzar recarga de archivos en navegador.
+- Ordena alfabéticamente los productos dentro de cada categoría de la lista de precios.
+- Agrega "Producto (A-Z)" como opción de orden en Estadísticas.
+- Mantiene Kilos vendidos como orden por defecto del ranking.
+
+Instalación:
+1. Subir todos los archivos de la carpeta don-zoilo-app-main a GitHub reemplazando los existentes.
+2. Esperar el deploy de Vercel.
+3. En PC usar Ctrl+F5; en celular/tablet cerrar y volver a abrir la app o recargar.
+4. No requiere cambios en Supabase.

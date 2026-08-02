@@ -1,4 +1,4 @@
-// DON ZOILO V35.2 — ESTADÍSTICAS
+// DON ZOILO V35.2.1 — ESTADÍSTICAS
 // Primer informe: ranking de productos vendidos a partir de remitos ENTREGADOS.
 (() => {
   const byId = id => document.getElementById(id);
@@ -115,9 +115,11 @@
     });
     const ranking=aggregate(rows);
     ranking.sort((a,b)=>{
-      if(sortBy==='billing') return b.billing-a.billing || b.kg-a.kg;
-      if(sortBy==='remitos') return b.remitoCount-a.remitoCount || b.kg-a.kg;
-      return b.kg-a.kg || b.billing-a.billing;
+      const alpha=(x,y)=>String(x.product||'').localeCompare(String(y.product||''),'es',{sensitivity:'base'});
+      if(sortBy==='alpha') return alpha(a,b);
+      if(sortBy==='billing') return b.billing-a.billing || b.kg-a.kg || alpha(a,b);
+      if(sortBy==='remitos') return b.remitoCount-a.remitoCount || b.kg-a.kg || alpha(a,b);
+      return b.kg-a.kg || b.billing-a.billing || alpha(a,b);
     });
 
     const totalKg=rows.reduce((sum,o)=>sum+(String(o.unit||'kg').toLowerCase()==='kg'?Number(o.quantity||0):0),0);
