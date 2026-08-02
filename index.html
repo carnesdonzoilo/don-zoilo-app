@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <title>Don Zoilo | Operaciones</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=35.0" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 34.7.1 · lista A4 ampliada</div>
+      <div class="subtitle">Control de operaciones · Versión 35.0 · Agenda de vencimientos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -39,6 +39,7 @@
       <button class="tab" data-view="new">Movimiento</button>
       <button class="tab" data-view="movements">Movimientos</button>
       <button class="tab" data-view="expenses">Gastos</button>
+      <button class="tab" data-view="dueDates">📅 Vencimientos</button>
       <button class="tab" data-view="balances">Saldos</button>
       <button class="tab" data-view="accounts">Cuentas corrientes</button>
       <button class="tab" data-view="suppliers">Proveedores</button>
@@ -530,6 +531,59 @@
     </section>
 
 
+    <section id="dueDates" class="view">
+      <div class="due-hero panel">
+        <div>
+          <div class="home-kicker">AGENDA DON ZOILO</div>
+          <h2>Vencimientos y recordatorios</h2>
+          <p class="muted">Calendario mensual sincronizado entre celular, tablet y PC.</p>
+        </div>
+        <button type="button" id="newDueDateBtn" class="primary">＋ Nuevo vencimiento</button>
+      </div>
+
+      <div class="due-kpis">
+        <article><span>Próximos 7 días</span><strong id="dueNext7">0</strong></article>
+        <article><span>Vencidos</span><strong id="dueOverdue">0</strong></article>
+        <article><span>Pendientes del mes</span><strong id="duePendingMonth">0</strong></article>
+        <article><span>Importe pendiente</span><strong id="duePendingAmount">$ 0</strong></article>
+      </div>
+
+      <div class="due-toolbar panel">
+        <button type="button" id="duePrevMonth" class="secondary">←</button>
+        <label>Mes <input id="dueMonth" type="month"></label>
+        <button type="button" id="dueNextMonth" class="secondary">→</button>
+        <button type="button" id="dueToday" class="secondary">Mes actual</button>
+        <button type="button" id="refreshDueDates" class="secondary">↻ Actualizar</button>
+      </div>
+
+      <div class="due-layout">
+        <div class="panel due-calendar-panel">
+          <div class="panel-head"><h2 id="dueMonthTitle">Calendario</h2><span class="muted small">Tocá un día para cargar un vencimiento.</span></div>
+          <div class="due-weekdays"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
+          <div id="dueCalendar" class="due-calendar"></div>
+        </div>
+
+        <div class="panel due-side-list">
+          <div class="panel-head"><h2>Próximos vencimientos</h2></div>
+          <div id="dueUpcomingList" class="due-list"></div>
+        </div>
+      </div>
+
+      <div class="panel due-photo-panel">
+        <div class="panel-head">
+          <div><h2>📷 Cargar desde foto</h2><p class="muted small">Fotografiá una hoja de vencimientos. La app intenta reconocer fechas, conceptos e importes para que los revises antes de guardar.</p></div>
+        </div>
+        <input id="duePhotoInput" type="file" accept="image/*" capture="environment">
+        <div class="due-photo-actions"><button type="button" id="scanDuePhoto" class="primary">Interpretar foto</button><span id="dueOcrStatus" class="muted small"></span></div>
+        <div id="dueOcrPreview" class="due-ocr-preview hidden"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Vencimientos del mes</h2><select id="dueStatusFilter"><option value="all">Todos</option><option value="pending">Pendientes</option><option value="paid">Pagados</option><option value="overdue">Vencidos</option></select></div>
+        <div id="dueMonthList" class="due-list"></div>
+      </div>
+    </section>
+
     <section id="suppliers" class="view">
       <div class="supplier-layout">
         <div class="panel">
@@ -993,12 +1047,13 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=34.6"></script>
-  <script src="app.js?v=34.6"></script>
+  <script src="cloud-config.js?v=35.0"></script>
+  <script src="app.js?v=35.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=34.6"></script>
-  <script src="stock-ocr.js?v=34.6"></script>
-  <script src="caja-activos.js?v=34.6"></script>
-  <script src="balance-diario.js?v=34.6"></script>
+  <script src="stock.js?v=35.0"></script>
+  <script src="stock-ocr.js?v=35.0"></script>
+  <script src="caja-activos.js?v=35.0"></script>
+  <script src="balance-diario.js?v=35.0"></script>
+  <script src="vencimientos.js?v=35.0"></script>
 </body>
 </html>

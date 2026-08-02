@@ -1,0 +1,38 @@
+DON ZOILO — V35.0 — AGENDA DE VENCIMIENTOS
+
+QUÉ SE AGREGÓ
+- Nueva pestaña: 📅 Vencimientos.
+- Calendario mensual.
+- Crear, editar y eliminar vencimientos.
+- Estados: Pendiente / Pagado / Vencido (vencido se calcula automáticamente por fecha).
+- Importe opcional, categoría, observaciones y días de aviso.
+- Indicadores de próximos 7 días, vencidos, pendientes del mes e importe pendiente.
+- Alertas de vencimientos próximos en el Resumen.
+- Carga desde foto mediante OCR: reconoce líneas con fechas tipo 05/08, 05-08-2026 o 05/08/26; permite revisar antes de guardar.
+- Sincronización mediante Supabase para ver lo mismo en celular, tablet y PC.
+
+PASO 1 — SUPABASE (UNA SOLA VEZ)
+1. Abrir el proyecto de Supabase de Don Zoilo.
+2. Ir a SQL Editor.
+3. Abrir el archivo: supabase_update_v35_vencimientos.sql
+4. Copiar todo su contenido y ejecutarlo con RUN.
+5. Debe finalizar sin errores.
+
+Este SQL SOLO CREA la tabla due_dates y sus políticas. NO borra ni modifica las tablas existentes.
+
+PASO 2 — GITHUB
+1. Subir todos los archivos de esta carpeta reemplazando los anteriores.
+2. Confirmar el commit.
+3. Esperar a que Vercel termine el deployment.
+4. Abrir Don Zoilo y recargar.
+
+PRUEBA RECOMENDADA
+1. Entrar a 📅 Vencimientos.
+2. Cargar un vencimiento para mañana.
+3. Verificar que aparezca en el calendario y en Próximos vencimientos.
+4. Abrir la app en otro dispositivo y tocar ↻ Actualizar: debe aparecer el mismo vencimiento.
+5. Marcarlo como Pagado y verificar la sincronización.
+6. Probar una foto simple con una línea como: "05/08/2026 Seguro Kangoo $ 185.000".
+
+NOTA SOBRE FOTO
+La imagen se procesa en el navegador para extraer texto. La foto no se guarda en Supabase en esta versión; se guardan solamente los vencimientos que el usuario revisa y confirma.
