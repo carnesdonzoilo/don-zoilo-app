@@ -34,6 +34,7 @@
 
     <nav class="tabs">
       <button class="tab active" data-view="dashboard">Resumen</button>
+      <button class="tab" data-view="statistics">📊 Estadísticas</button>
       <button class="tab" data-view="orders">Pedidos</button>
       <button class="tab" data-view="orderSheet">Hoja pedidos</button>
       <button class="tab" data-view="new">Movimiento</button>
@@ -136,6 +137,65 @@
           <button id="exportCsv" class="secondary">Exportar CSV</button>
         </div>
         <div id="recentList" class="movement-list"></div>
+      </div>
+    </section>
+
+
+    <section id="statistics" class="view">
+      <div class="stats-hero panel">
+        <div>
+          <div class="home-kicker">ESTADÍSTICAS DON ZOILO</div>
+          <h2>Ranking de productos vendidos</h2>
+          <p class="muted">Se calcula únicamente con remitos marcados como entregados.</p>
+        </div>
+      </div>
+
+      <div class="stats-shortcuts">
+        <button type="button" class="secondary stats-period-btn" data-period="day">Hoy</button>
+        <button type="button" class="secondary stats-period-btn" data-period="week">Esta semana</button>
+        <button type="button" class="secondary stats-period-btn" data-period="month">Este mes</button>
+      </div>
+
+      <div class="panel stats-filters">
+        <label>Desde<input type="date" id="statsDateFrom"></label>
+        <label>Hasta<input type="date" id="statsDateTo"></label>
+        <label>Cliente
+          <select id="statsClientFilter"><option value="">Todos los clientes</option></select>
+        </label>
+        <label>Ordenar por
+          <select id="statsSortBy">
+            <option value="kg">Kilos vendidos</option>
+            <option value="billing">Facturación</option>
+            <option value="remitos">Cantidad de remitos</option>
+          </select>
+        </label>
+        <button type="button" id="statsApply" class="primary">Aplicar</button>
+      </div>
+
+      <div class="stats-kpis">
+        <article class="metric"><span>Kilos vendidos</span><strong id="statsTotalKg">0 kg</strong></article>
+        <article class="metric"><span>Facturación entregada</span><strong id="statsTotalBilling">$ 0</strong></article>
+        <article class="metric"><span>Productos distintos</span><strong id="statsProductCount">0</strong></article>
+        <article class="metric"><span>Remitos entregados</span><strong id="statsRemitoCount">0</strong></article>
+      </div>
+
+      <div class="panel stats-ranking-panel">
+        <div class="panel-head stats-ranking-head">
+          <div>
+            <h2>Ranking</h2>
+            <p id="statsPeriodLabel" class="muted small"></p>
+          </div>
+          <button type="button" id="statsRefresh" class="secondary">↻ Actualizar</button>
+        </div>
+        <div class="stats-table-scroll">
+          <table class="stats-table">
+            <thead>
+              <tr><th>#</th><th>Producto</th><th>Kilos</th><th>Otras unidades</th><th>Remitos</th><th>Facturación</th></tr>
+            </thead>
+            <tbody id="statsRankingBody"></tbody>
+          </table>
+        </div>
+        <div id="statsEmpty" class="empty hidden">No hay remitos entregados para este período.</div>
       </div>
     </section>
 
@@ -1047,13 +1107,14 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=35.0"></script>
-  <script src="app.js?v=35.0"></script>
+  <script src="cloud-config.js?v=35.2"></script>
+  <script src="app.js?v=35.2"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=35.0"></script>
-  <script src="stock-ocr.js?v=35.0"></script>
-  <script src="caja-activos.js?v=35.0"></script>
-  <script src="balance-diario.js?v=35.0"></script>
-  <script src="vencimientos.js?v=35.0"></script>
+  <script src="stock.js?v=35.2"></script>
+  <script src="stock-ocr.js?v=35.2"></script>
+  <script src="caja-activos.js?v=35.2"></script>
+  <script src="balance-diario.js?v=35.2"></script>
+  <script src="vencimientos.js?v=35.2"></script>
+  <script src="estadisticas.js?v=35.2"></script>
 </body>
 </html>

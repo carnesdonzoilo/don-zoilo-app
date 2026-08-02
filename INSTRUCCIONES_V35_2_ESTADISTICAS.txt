@@ -1,0 +1,28 @@
+DON ZOILO V35.2 — MÓDULO ESTADÍSTICAS
+
+CAMBIO IMPLEMENTADO
+- Nuevo módulo “📊 Estadísticas” en el menú.
+- Primera estadística: Ranking de productos vendidos.
+- Usa SOLAMENTE pedidos/remitos marcados como ENTREGADOS.
+- Filtros rápidos: Hoy, Esta semana, Este mes.
+- Selector manual Desde / Hasta para cualquier período.
+- Filtro por cliente.
+- Orden por kilos vendidos, facturación o cantidad de remitos.
+- Importe total facturado por producto.
+- Total de kilos, facturación, productos distintos y remitos entregados.
+- Si un producto fue cargado en cajas/piezas/unidades, esas cantidades se muestran aparte y no se mezclan con kilos.
+
+SUPABASE
+- ESTA ACTUALIZACIÓN NO REQUIERE EJECUTAR SQL.
+- No crea tablas nuevas.
+- No modifica datos existentes.
+- Lee la tabla orders que la app ya utiliza.
+
+INSTALACIÓN
+1. Subir el contenido completo de esta carpeta al mismo repositorio de GitHub reemplazando los archivos correspondientes.
+2. Esperar a que Vercel termine el deploy.
+3. Actualizar la app en PC/tablet/celular.
+4. Entrar en “📊 Estadísticas”.
+5. Verificar el ranking de Este mes y comparar algún producto con los remitos entregados.
+
+VERSIÓN: 35.2
