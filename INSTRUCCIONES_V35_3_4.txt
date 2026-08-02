@@ -1,0 +1,22 @@
+DON ZOILO V35.3.4 — CORRECCIÓN FILTROS DE GASTOS
+
+CORREGIDO
+- Al entrar a Gastos, el listado muestra los gastos del mes corriente desde el día 1 hasta hoy.
+- El selector Categoría ahora carga todas las categorías:
+  CASA, LEO, ROMI, SERVICIOS, VACACIONES, TARJETAS, LOCAL, MERMA,
+  DESAYUNO, IMPUESTOS, RETENCIONES, NAFTA, PEAJE, PROPINA, REPARTO,
+  ATENCIÓN, SUELDOS, KANGOO y cualquier otra categoría encontrada en movimientos.
+- Los filtros por Categoría + Desde + Hasta funcionan combinados.
+- El listado se ordena por fecha, del más reciente al más antiguo.
+- Se muestran cantidad de movimientos y total filtrado.
+- "Limpiar filtros" vuelve al mes corriente.
+
+IMPORTANTE
+No requiere SQL ni cambios en Supabase.
+No modifica ni elimina gastos existentes.
+
+INSTALACIÓN
+1. Subir los archivos a GitHub reemplazando los actuales.
+2. Esperar el deploy de Vercel.
+3. Hacer Ctrl+F5.
+4. Verificar Versión 35.3.4.

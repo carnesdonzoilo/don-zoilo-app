@@ -913,26 +913,85 @@ function expenseMovements(){
   return movements.filter(m=>m.type==="gasto");
 }
 
+function renderExpenseListCategoryOptions(){
+  const select=$("expenseListCategory");
+  if(!select) return;
+
+  const current=select.value||"";
+  const movementCategories=expenseMovements().map(expenseCategoryFromMovement);
+  const categories=[...new Set([...EXPENSE_CATEGORIES,...movementCategories])]
+    .filter(Boolean)
+    .sort((a,b)=>String(a).localeCompare(String(b),"es",{sensitivity:"base"}));
+
+  select.innerHTML='<option value="">Todas</option>';
+  categories.forEach(category=>{
+    const option=document.createElement("option");
+    option.value=category;
+    option.textContent=category;
+    select.appendChild(option);
+  });
+
+  if(current && categories.includes(current)) select.value=current;
+}
+
+function ensureExpenseListDefaults(){
+  const from=$("expenseListFrom");
+  const to=$("expenseListTo");
+  const month=todayISO().slice(0,7);
+
+  // Al entrar por primera vez: mes corriente completo hasta hoy.
+  if(from && !from.value) from.value=`${month}-01`;
+  if(to && !to.value) to.value=todayISO();
+}
+
 function renderExpenseRecent(){
   const box=$("expenseRecentList");
   if(!box) return;
+
+  ensureExpenseListDefaults();
+  renderExpenseListCategoryOptions();
+
+  const category=$("expenseListCategory")?.value||"";
+  const from=$("expenseListFrom")?.value||"";
+  const to=$("expenseListTo")?.value||"";
+
+  const list=expenseMovements()
+    .filter(m=>{
+      const movementCategory=expenseCategoryFromMovement(m);
+      const date=String(m.date||"");
+
+      if(category && movementCategory!==category) return false;
+      if(from && date<from) return false;
+      if(to && date>to) return false;
+      return true;
+    })
+    .slice()
+    .sort((a,b)=>{
+      const byDate=String(b.date||"").localeCompare(String(a.date||""));
+      if(byDate!==0) return byDate;
+      return String(b.created_at||"").localeCompare(String(a.created_at||""));
+    });
+
+  const total=list.reduce((sum,m)=>sum+Number(m.amount||0),0);
+
+  if($("expenseFilteredCount")) $("expenseFilteredCount").textContent=String(list.length);
+  if($("expenseFilteredTotal")) $("expenseFilteredTotal").textContent=money(total);
+
   box.innerHTML="";
-  const list=expenseMovements().slice()
-    .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)))
-    .slice(0,10);
 
   if(!list.length){
-    box.innerHTML='<div class="expense-empty">Todavía no hay gastos cargados.</div>';
+    box.innerHTML='<div class="expense-empty">No hay gastos que coincidan con los filtros elegidos.</div>';
     return;
   }
 
   list.forEach(m=>{
     const row=document.createElement("div");
     row.className="expense-row";
-    const category=expenseCategoryFromMovement(m);
+    const movementCategory=expenseCategoryFromMovement(m);
+
     row.innerHTML=`
       <div class="expense-row-main">
-        <strong>${escapeHtml(category)} · ${escapeHtml(m.concept||"Sin detalle")}</strong>
+        <strong>${escapeHtml(movementCategory)} · ${escapeHtml(m.concept||"Sin detalle")}</strong>
         <small>${fmtDate(m.date)} · ${escapeHtml((m.payment_method||"efectivo").replace("_"," "))}</small>
       </div>
       <strong>${money(m.amount||0)}</strong>
@@ -946,7 +1005,6 @@ function renderExpenseRecent(){
     box.append(row);
   });
 }
-
 
 function expenseTotalsForDate(date){
   return expenseMovements()
@@ -1108,6 +1166,7 @@ function ensureTodayExpenseDate(){
 
 function renderExpenses(){
   ensureTodayExpenseDate();
+  ensureExpenseListDefaults();
   renderExpenseCategories();
   renderExpenseKpis();
   renderExpenseRecent();
@@ -4110,6 +4169,16 @@ on("expenseCategory","change",()=>{
 });
 
 on("expenseMonth","change",renderExpenseSummary);
+on("expenseListCategory","change",renderExpenseRecent);
+on("expenseListFrom","change",renderExpenseRecent);
+on("expenseListTo","change",renderExpenseRecent);
+on("expenseListClear","click",()=>{
+  if($("expenseListCategory")) $("expenseListCategory").value="";
+  if($("expenseListFrom")) $("expenseListFrom").value="";
+  if($("expenseListTo")) $("expenseListTo").value="";
+  ensureExpenseListDefaults();
+  renderExpenseRecent();
+});
 
 on("selectAllRemitos","change",()=>{
   const checked=$("selectAllRemitos")?.checked||false;
