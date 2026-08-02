@@ -1,0 +1,28 @@
+DON ZOILO V35.3.3 — GASTOS: FILTROS POR CATEGORÍA Y FECHA
+
+En el módulo Gastos se reemplazó "Últimos gastos" por un listado filtrable.
+
+NUEVO
+- Filtrar por categoría.
+- Filtrar por fecha DESDE / HASTA.
+- Se pueden combinar ambos filtros.
+- Muestra todos los movimientos que coinciden, no solamente los últimos 10.
+- Muestra cantidad de movimientos filtrados.
+- Muestra total $ de los gastos filtrados.
+- Botón "Limpiar filtros".
+- Al abrir la app, el listado comienza mostrando desde el día 1 del mes corriente hasta hoy.
+
+NO CAMBIA
+- La carga de gastos.
+- La edición/eliminación.
+- El resumen mensual por rubro.
+- Los datos existentes.
+
+SUPABASE
+No requiere SQL ni modificaciones de base de datos.
+
+INSTALACIÓN
+1. Subir los archivos a GitHub reemplazando los actuales.
+2. Esperar el deploy de Vercel.
+3. Actualizar la aplicación (Ctrl+F5 en PC).
+4. Debe mostrar Versión 35.3.3.

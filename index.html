@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <title>Don Zoilo | Operaciones</title>
-  <link rel="stylesheet" href="styles.css?v=35.3.2" />
+  <link rel="stylesheet" href="styles.css?v=35.3.3" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 35.3.2 · Cuentas Corrientes · Estadísticas y vencimientos</div>
+      <div class="subtitle">Control de operaciones · Versión 35.3.3 · Cuentas Corrientes · Estadísticas y vencimientos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -469,7 +469,33 @@
         </form>
 
         <div class="expense-last-card">
-          <h3>Últimos gastos</h3>
+          <div class="expense-summary-head">
+            <div>
+              <h3>Listado de gastos</h3>
+              <p class="muted small">Filtrá por categoría y por rango de fechas.</p>
+            </div>
+          </div>
+
+          <div class="expense-list-filters">
+            <label>Categoría
+              <select id="expenseListCategory">
+                <option value="">Todas</option>
+              </select>
+            </label>
+            <label>Desde
+              <input id="expenseListFrom" type="date">
+            </label>
+            <label>Hasta
+              <input id="expenseListTo" type="date">
+            </label>
+            <button type="button" id="expenseListClear" class="secondary">Limpiar filtros</button>
+          </div>
+
+          <div class="expense-filter-summary">
+            <span>Movimientos: <strong id="expenseFilteredCount">0</strong></span>
+            <span>Total filtrado: <strong id="expenseFilteredTotal">$ 0</strong></span>
+          </div>
+
           <div id="expenseRecentList"></div>
         </div>
 
@@ -1121,14 +1147,14 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=35.3.2"></script>
-  <script src="app.js?v=35.3.2"></script>
+  <script src="cloud-config.js?v=35.3.3"></script>
+  <script src="app.js?v=35.3.3"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=35.3.2"></script>
-  <script src="stock-ocr.js?v=35.3.2"></script>
-  <script src="caja-activos.js?v=35.3.2"></script>
-  <script src="balance-diario.js?v=35.3.2"></script>
-  <script src="vencimientos.js?v=35.3.2"></script>
-  <script src="estadisticas.js?v=35.3.2"></script>
+  <script src="stock.js?v=35.3.3"></script>
+  <script src="stock-ocr.js?v=35.3.3"></script>
+  <script src="caja-activos.js?v=35.3.3"></script>
+  <script src="balance-diario.js?v=35.3.3"></script>
+  <script src="vencimientos.js?v=35.3.3"></script>
+  <script src="estadisticas.js?v=35.3.3"></script>
 </body>
 </html>
