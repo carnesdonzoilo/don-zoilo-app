@@ -1,0 +1,16 @@
+DON ZOILO V35.2.2 — UNIFICACIÓN DE PRODUCTOS EN ESTADÍSTICAS
+
+- Unifica variantes de nombres en el ranking de productos vendidos.
+- Paleta: oferta, churrasco, picada, entera y paleta.
+- Tapa de asado: normal, oferta, envasada/envasado.
+- Lomo/Lomos.
+- Vacío fresco con/sin tilde.
+- Pollo de 8/Pollo 8.
+- Chorizo con morrón (incluye variante con º).
+- Nalga sin tapa / envasada.
+- Carré / Carré cortado.
+- Cuadril / Cuadril sin tapa.
+- Riñón/Riñon.
+- Chinchulín/Chinchulin.
+- Para productos de pollo o huevo: cada caja suma 20 kg y cada unidad suma 3 kg al ranking.
+- No requiere cambios en Supabase.

@@ -1,4 +1,4 @@
-// DON ZOILO V35.2.1 — ESTADÍSTICAS
+// DON ZOILO V35.2.2 — ESTADÍSTICAS
 // Primer informe: ranking de productos vendidos a partir de remitos ENTREGADOS.
 (() => {
   const byId = id => document.getElementById(id);
@@ -36,6 +36,43 @@
   }
   function titleCase(value){
     return String(value||'').trim().replace(/\s+/g,' ').replace(/(^|\s)\S/g,m=>m.toLocaleUpperCase('es-AR'));
+  }
+
+  // V35.2.2: unificación de nombres equivalentes para el ranking.
+  function productKey(value){
+    return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/º/g,'').trim();
+  }
+  const PRODUCT_GROUPS = new Map();
+  function addProductGroup(canonical, variants){
+    [canonical,...variants].forEach(v=>PRODUCT_GROUPS.set(productKey(v), canonical));
+  }
+  addProductGroup('Paleta', ['paleta de oferta','paleta churrasco','paleta picada','paleta entera']);
+  addProductGroup('Tapa de asado', ['tapa de asado oferta','tapa de asado envasada','tapa de asado envasado']);
+  addProductGroup('Lomo', ['lomos']);
+  addProductGroup('Vacío fresco', ['vacio fresco']);
+  addProductGroup('Pollo 8', ['pollo de 8']);
+  addProductGroup('Chorizo con morrón', ['chorizo con morron','chorizo con morronº']);
+  addProductGroup('Nalga sin tapa', ['nalga sin tapa envasada']);
+  addProductGroup('Carré', ['carre','carre cortado']);
+  addProductGroup('Cuadril', ['cuadril sin tapa']);
+  addProductGroup('Riñón', ['riñon']);
+  addProductGroup('Chinchulín', ['chinchulin']);
+
+  function canonicalProduct(value){
+    const raw=String(value||'').trim();
+    return PRODUCT_GROUPS.get(productKey(raw)) || titleCase(raw || 'Sin producto');
+  }
+
+  // Para pollo/huevo: caja = 20 kg; unidad = 3 kg.
+  function equivalentKg(product, unit, quantity){
+    const key=productKey(product);
+    const u=String(unit||'kg').toLowerCase();
+    const q=Number(quantity||0);
+    if(u==='kg') return q;
+    const isChickenOrEgg = key.includes('pollo') || key.includes('huevo');
+    if(isChickenOrEgg && (u==='caja' || u==='cajas')) return q*20;
+    if(isChickenOrEgg && (u==='unidad' || u==='unidades')) return q*3;
+    return 0;
   }
   function orderRows(){
     try { return Array.isArray(orders) ? orders : []; }
@@ -80,13 +117,15 @@
   function aggregate(rows){
     const map=new Map();
     for(const o of rows){
-      const key=norm(o.product) || 'sin producto';
-      if(!map.has(key)) map.set(key,{product:titleCase(o.product||'Sin producto'),kg:0,billing:0,remitos:new Set(),units:{}});
+      const canonical=canonicalProduct(o.product);
+      const key=productKey(canonical) || 'sin producto';
+      if(!map.has(key)) map.set(key,{product:canonical,kg:0,billing:0,remitos:new Set(),units:{}});
       const item=map.get(key);
       const q=Number(o.quantity||0);
       const u=String(o.unit||'kg').toLowerCase();
-      if(u==='kg') item.kg+=q;
-      else {
+      const kg=equivalentKg(o.product,u,q);
+      if(kg>0) item.kg+=kg;
+      if(u!=='kg') {
         const label=unitLabel(u);
         item.units[label]=(item.units[label]||0)+q;
       }
@@ -122,7 +161,7 @@
       return b.kg-a.kg || b.billing-a.billing || alpha(a,b);
     });
 
-    const totalKg=rows.reduce((sum,o)=>sum+(String(o.unit||'kg').toLowerCase()==='kg'?Number(o.quantity||0):0),0);
+    const totalKg=rows.reduce((sum,o)=>sum+equivalentKg(o.product,o.unit,o.quantity),0);
     const totalBilling=rows.reduce((sum,o)=>sum+Number(o.total||0),0);
     const remitos=new Set(rows.map(uniqueRemitoKey).filter(Boolean));
 
