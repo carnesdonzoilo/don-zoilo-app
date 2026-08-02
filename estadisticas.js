@@ -38,7 +38,7 @@
     return String(value||'').trim().replace(/\s+/g,' ').replace(/(^|\s)\S/g,m=>m.toLocaleUpperCase('es-AR'));
   }
 
-  // V35.2.5: unificación ampliada de nombres equivalentes para el ranking.
+  // V35.2.6: unificación ampliada de nombres equivalentes para el ranking.
   function productKey(value){
     return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/º/g,'').trim();
   }
@@ -57,6 +57,7 @@
   addProductGroup('Cuadril', ['cuadril sin tapa']);
   addProductGroup('Riñón', ['riñon']);
   addProductGroup('Chinchulín', ['chinchulin']);
+  addProductGroup('Molleja', ['mollejas']);
 
   function canonicalProduct(value){
     const raw=String(value||'').trim();
