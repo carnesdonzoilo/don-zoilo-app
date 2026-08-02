@@ -1,0 +1,25 @@
+DON ZOILO V35.3.0 — CUENTAS CORRIENTES: SOLO PENDIENTES
+
+CAMBIO N.º 3
+
+Se agregó en Cuentas Corrientes un segundo botón:
+  📋 Imprimir solo pendientes
+
+Funcionamiento:
+- El botón original "Imprimir estado de cuenta" sigue mostrando todo el historial.
+- El nuevo botón lista únicamente comprobantes que todavía conservan saldo pendiente.
+- Muestra fecha, tipo, detalle, importe original y saldo pendiente.
+- Las cobranzas se imputan por antigüedad (FIFO): primero cancelan las ventas más antiguas.
+- Admite saldos parciales.
+- No modifica movimientos ni datos históricos.
+- No requiere SQL ni cambios en Supabase.
+
+INSTALACIÓN
+1. Subir los archivos de esta carpeta a GitHub reemplazando los actuales.
+2. Esperar el deploy de Vercel.
+3. Actualizar la app. En PC usar Ctrl+F5.
+4. La cabecera debe mostrar Versión 35.3.0.
+5. Ir a Cuentas Corrientes, elegir un cliente y probar ambos botones.
+
+IMPORTANTE
+El listado "solo pendientes" es un cálculo de presentación. No cambia cómo están guardadas las cobranzas.

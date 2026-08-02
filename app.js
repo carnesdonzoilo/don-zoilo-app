@@ -45,7 +45,7 @@ const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.2.6";
+const APP_VERSION = "35.3.0";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1804,6 +1804,135 @@ function printAccountStatement(){
     <div class="final"><span>Saldo actual</span><strong>${money(totals.balance)}</strong></div>
   </div>
   <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script>
+  </body></html>`);
+  popup.document.close();
+}
+
+
+// V35.3.0 — Calcula comprobantes con saldo pendiente sin modificar la base de datos.
+// Las cobranzas se imputan por antigüedad (FIFO). Si existe un saldo a favor,
+// se conserva y se aplica contra la siguiente venta, igual que en el saldo general.
+function pendingAccountDebtsFor(client){
+  const list=accountMovementsFor(client)
+    .slice()
+    .sort((a,b)=>{
+      const da=String(a.created_at||a.date||"");
+      const db=String(b.created_at||b.date||"");
+      return da.localeCompare(db);
+    });
+
+  const debts=[];
+  let credit=0;
+
+  const applyCreditToDebt=(debt)=>{
+    if(credit<=0 || debt.remaining<=0) return;
+    const applied=Math.min(credit,debt.remaining);
+    debt.remaining-=applied;
+    credit-=applied;
+  };
+
+  list.forEach(m=>{
+    const isDebt=m.type==="venta" || isOpeningBalanceMovement(m);
+
+    if(isDebt){
+      const original=Math.max(0,Number(m.amount||0));
+      const debt={
+        movement:m,
+        original,
+        remaining:original
+      };
+      applyCreditToDebt(debt);
+      debts.push(debt);
+      return;
+    }
+
+    if(m.type==="cobro"){
+      let payment=Math.max(0,Number(m.amount||0));
+
+      // Primero cancela las deudas más antiguas.
+      for(const debt of debts){
+        if(payment<=0) break;
+        if(debt.remaining<=0) continue;
+        const applied=Math.min(payment,debt.remaining);
+        debt.remaining-=applied;
+        payment-=applied;
+      }
+
+      // Si la cobranza supera las deudas existentes, queda como saldo a favor.
+      if(payment>0) credit+=payment;
+    }
+  });
+
+  return debts.filter(d=>d.remaining>0.009);
+}
+
+function printPendingAccountStatement(){
+  const client=$("accountClientSelect")?.value||"";
+  if(!client) return alert("Elegí un cliente.");
+
+  const pending=pendingAccountDebtsFor(client);
+  const totalPending=pending.reduce((sum,d)=>sum+d.remaining,0);
+  const currentBalance=accountTotals(client).balance;
+
+  if(!pending.length){
+    if(currentBalance<=0){
+      return alert("Este cliente no tiene comprobantes pendientes.");
+    }
+    return alert("Hay saldo pendiente, pero no se pudo asociar a ventas individuales. Revisá los movimientos de ajuste.");
+  }
+
+  const rows=pending.map(d=>{
+    const m=d.movement;
+    const label=isOpeningBalanceMovement(m)?"Saldo anterior":"Venta";
+    return `<tr>
+      <td>${fmtDate(m.date)}</td>
+      <td>${escapeHtml(label)}</td>
+      <td>${escapeHtml(m.concept||"")}</td>
+      <td class="num">${money(d.original)}</td>
+      <td class="num strong">${money(d.remaining)}</td>
+    </tr>`;
+  }).join("");
+
+  const popup=window.open("","_blank");
+  if(!popup) return alert("El navegador bloqueó la ventana.");
+
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8">
+  <title>Pendientes ${escapeHtml(client)}</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:18mm;color:#111}
+    h1{margin:0}
+    .head{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid #111;padding-bottom:10px;margin-bottom:16px}
+    .subtitle{font-size:14px;margin-top:4px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #999;padding:7px;font-size:12px}
+    th{background:#eee}
+    .num{text-align:right;white-space:nowrap}
+    .strong{font-weight:900}
+    .summary{margin-top:14px;margin-left:auto;width:340px}
+    .summary div{display:flex;justify-content:space-between;padding:7px;border-bottom:1px solid #ccc}
+    .summary .final{font-size:18px;font-weight:900;border-top:3px solid #111}
+    .note{margin-top:14px;font-size:10px;color:#555}
+    @page{size:A4 portrait;margin:10mm}
+    @media print{body{padding:0}}
+  </style></head><body>
+    <div class="head">
+      <div><h1>DON ZOILO</h1><div class="subtitle">Cuenta corriente · Solo pendientes</div></div>
+      <div><strong>${escapeHtml(client)}</strong><br>${new Date().toLocaleDateString("es-AR")}</div>
+    </div>
+
+    <table>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Importe original</th><th>Pendiente</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <div class="summary">
+      <div><span>Comprobantes pendientes</span><strong>${pending.length}</strong></div>
+      <div class="final"><span>Total pendiente</span><strong>${money(totalPending)}</strong></div>
+    </div>
+
+    <div class="note">Las cobranzas se imputan por antigüedad a los comprobantes más antiguos para calcular el saldo pendiente de cada uno.</div>
+
+    <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script>
   </body></html>`);
   popup.document.close();
 }
@@ -3895,6 +4024,7 @@ on("accountClientSelect","change",renderAccounts);
 on("refreshAccounts","click",renderAccounts);
 on("collectFullBalance","click",collectFullBalance);
 on("printAccountStatement","click",printAccountStatement);
+on("printPendingAccountStatement","click",printPendingAccountStatement);
 
 
 on("importJulyExpenses","click",importJulyExpenses);
