@@ -1,0 +1,19 @@
+DON ZOILO V35.3.5 — GASTOS: LISTADO CORREGIDO
+
+CORRECCIÓN
+- El listado de gastos ahora usa exactamente la misma fuente de datos que el resumen mensual.
+- El selector Categoría carga las categorías base y también cualquier categoría detectada en gastos existentes.
+- Por defecto muestra desde el día 1 del mes corriente hasta hoy.
+- Los filtros Categoría + Desde + Hasta funcionan combinados.
+- Se muestra cantidad de movimientos y total filtrado.
+- Limpiar filtros vuelve al mes corriente.
+
+NO REQUIERE CAMBIOS EN SUPABASE.
+NO MODIFICA NI BORRA GASTOS EXISTENTES.
+
+INSTALACIÓN
+1. Subir los archivos a GitHub reemplazando los actuales.
+2. Esperar el deploy de Vercel.
+3. Hacer Ctrl+F5.
+4. Verificar Versión 35.3.5.
+5. Entrar a Gastos y comprobar que aparezcan los movimientos de agosto y las categorías.

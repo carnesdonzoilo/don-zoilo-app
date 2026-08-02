@@ -918,12 +918,21 @@ function renderExpenseListCategoryOptions(){
   if(!select) return;
 
   const current=select.value||"";
-  const movementCategories=expenseMovements().map(expenseCategoryFromMovement);
-  const categories=[...new Set([...EXPENSE_CATEGORIES,...movementCategories])]
+
+  // Usa las mismas categorías base del módulo + las detectadas en movimientos reales.
+  const categories=[...new Set([
+    ...EXPENSE_CATEGORIES,
+    ...expenseMovements().map(m=>expenseCategoryFromMovement(m))
+  ])]
     .filter(Boolean)
     .sort((a,b)=>String(a).localeCompare(String(b),"es",{sensitivity:"base"}));
 
-  select.innerHTML='<option value="">Todas</option>';
+  select.innerHTML="";
+  const all=document.createElement("option");
+  all.value="";
+  all.textContent="Todas";
+  select.appendChild(all);
+
   categories.forEach(category=>{
     const option=document.createElement("option");
     option.value=category;
@@ -939,7 +948,6 @@ function ensureExpenseListDefaults(){
   const to=$("expenseListTo");
   const month=todayISO().slice(0,7);
 
-  // Al entrar por primera vez: mes corriente completo hasta hoy.
   if(from && !from.value) from.value=`${month}-01`;
   if(to && !to.value) to.value=todayISO();
 }
@@ -955,20 +963,26 @@ function renderExpenseRecent(){
   const from=$("expenseListFrom")?.value||"";
   const to=$("expenseListTo")?.value||"";
 
-  const list=expenseMovements()
-    .filter(m=>{
-      const movementCategory=expenseCategoryFromMovement(m);
-      const date=String(m.date||"");
+  // IMPORTANTE: la fuente es exactamente la misma que usa el resumen mensual:
+  // expenseMovements(), que toma movements.filter(type==="gasto").
+  const source=expenseMovements();
 
-      if(category && movementCategory!==category) return false;
+  const list=source
+    .filter(m=>{
+      const date=String(m.date||"").slice(0,10);
+      const cat=expenseCategoryFromMovement(m);
+
+      if(category && cat!==category) return false;
       if(from && date<from) return false;
       if(to && date>to) return false;
       return true;
     })
     .slice()
     .sort((a,b)=>{
-      const byDate=String(b.date||"").localeCompare(String(a.date||""));
-      if(byDate!==0) return byDate;
+      const da=String(a.date||"").slice(0,10);
+      const db=String(b.date||"").slice(0,10);
+      const dateCmp=db.localeCompare(da);
+      if(dateCmp!==0) return dateCmp;
       return String(b.created_at||"").localeCompare(String(a.created_at||""));
     });
 
@@ -987,11 +1001,11 @@ function renderExpenseRecent(){
   list.forEach(m=>{
     const row=document.createElement("div");
     row.className="expense-row";
-    const movementCategory=expenseCategoryFromMovement(m);
+    const cat=expenseCategoryFromMovement(m);
 
     row.innerHTML=`
       <div class="expense-row-main">
-        <strong>${escapeHtml(movementCategory)} · ${escapeHtml(m.concept||"Sin detalle")}</strong>
+        <strong>${escapeHtml(cat)} · ${escapeHtml(m.concept||"Sin detalle")}</strong>
         <small>${fmtDate(m.date)} · ${escapeHtml((m.payment_method||"efectivo").replace("_"," "))}</small>
       </div>
       <strong>${money(m.amount||0)}</strong>
@@ -1005,6 +1019,19 @@ function renderExpenseRecent(){
     box.append(row);
   });
 }
+
+
+
+function ensureExpenseListDefaults(){
+  const from=$("expenseListFrom");
+  const to=$("expenseListTo");
+  const month=todayISO().slice(0,7);
+
+  // Al entrar por primera vez: mes corriente completo hasta hoy.
+  if(from && !from.value) from.value=`${month}-01`;
+  if(to && !to.value) to.value=todayISO();
+}
+
 
 function expenseTotalsForDate(date){
   return expenseMovements()
@@ -4174,9 +4201,8 @@ on("expenseListFrom","change",renderExpenseRecent);
 on("expenseListTo","change",renderExpenseRecent);
 on("expenseListClear","click",()=>{
   if($("expenseListCategory")) $("expenseListCategory").value="";
-  if($("expenseListFrom")) $("expenseListFrom").value="";
-  if($("expenseListTo")) $("expenseListTo").value="";
-  ensureExpenseListDefaults();
+  if($("expenseListFrom")) $("expenseListFrom").value=todayISO().slice(0,7)+"-01";
+  if($("expenseListTo")) $("expenseListTo").value=todayISO();
   renderExpenseRecent();
 });
 
