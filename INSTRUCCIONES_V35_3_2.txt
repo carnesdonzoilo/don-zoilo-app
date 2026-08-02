@@ -1,0 +1,29 @@
+DON ZOILO V35.3.2 — BALANCE MENSUAL Y RESULTADO ACUMULADO
+
+CAMBIO EN BALANCE DIARIO
+
+Se agregó:
+- El historial muestra por defecto solamente el mes corriente.
+- Selector "Filtrar por mes" para consultar cualquier otro mes.
+- Total de resultados positivos del mes.
+- Total de resultados negativos del mes.
+- Resultado acumulado mensual = positivos + negativos.
+- Cada fila muestra también el acumulado progresivo del mes.
+
+Ejemplo:
+Día 1  +$100.000  -> acumulado $100.000
+Día 2   -$30.000  -> acumulado $70.000
+Día 3   +$50.000  -> acumulado $120.000
+
+IMPORTANTE
+- No cambia la fórmula del Balance Diario.
+- No modifica cierres históricos.
+- No requiere SQL ni cambios en Supabase.
+- El cálculo mensual usa los cierres ya guardados en daily_balances.
+
+INSTALACIÓN
+1. Subir los archivos a GitHub reemplazando los actuales.
+2. Esperar el deploy de Vercel.
+3. Actualizar la app.
+4. Debe mostrar Versión 35.3.2.
+5. Entrar en Balance diario y verificar que el historial abra en el mes actual.

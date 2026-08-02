@@ -45,7 +45,7 @@ const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.1";
+const APP_VERSION = "35.3.2";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1809,7 +1809,7 @@ function printAccountStatement(){
 }
 
 
-// V35.3.1 — Calcula comprobantes con saldo pendiente sin modificar la base de datos.
+// V35.3.2 — Calcula comprobantes con saldo pendiente sin modificar la base de datos.
 // Las cobranzas se imputan por antigüedad (FIFO). Si existe un saldo a favor,
 // se conserva y se aplica contra la siguiente venta, igual que en el saldo general.
 function pendingAccountDebtsFor(client){

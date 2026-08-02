@@ -1,4 +1,4 @@
-/* DON ZOILO V34.5 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
+/* DON ZOILO V35.3.2 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
 (function(){
 'use strict';
 const TABLE='daily_balances';
@@ -98,7 +98,7 @@ async function loadClosings(){
   }catch(e){console.warn('Balance diario:',e);closings=readJson(LOCAL_KEY,[])}
 }
 function injectStyles(){if($('dailyBalanceStyles'))return;const s=document.createElement('style');s.id='dailyBalanceStyles';s.textContent=`
-#dailyBalance .balance-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:16px}#dailyBalance .balance-toolbar label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .balance-toolbar input{min-width:180px}#dailyBalance .balance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}#dailyBalance .balance-panel{background:#fff;border:1px solid #d9dee7;border-radius:14px;padding:16px}#dailyBalance .balance-panel h3{margin:0 0 12px;color:#101820}#dailyBalance .balance-line{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #eceff3}#dailyBalance .balance-line.total{font-size:1.08rem;font-weight:900;border-top:2px solid #101820;border-bottom:0;margin-top:7px}#dailyBalance .balance-result{grid-column:1/-1;background:#101820;color:#fff;border-radius:15px;padding:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}#dailyBalance .result-card{border:1px solid #ffffff33;border-radius:11px;padding:12px}#dailyBalance .result-card span{display:block;color:#d0d5dd;font-size:.8rem;margin-bottom:6px}#dailyBalance .result-card strong{font-size:1.2rem}#dailyBalance .positive{color:#1f9d55}#dailyBalance .negative{color:#d92d20}#dailyBalance .balance-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}#dailyBalance .balance-history{background:#fff;border:1px solid #d9dee7;border-radius:14px;overflow:hidden}#dailyBalance .history-row{display:grid;grid-template-columns:110px 1fr 1fr 80px;gap:10px;padding:11px 14px;border-bottom:1px solid #eceff3;align-items:center}#dailyBalance .history-row.head{font-weight:900;background:#f3f5f7}#dailyBalance .balance-note{width:100%;min-height:80px}@media(max-width:800px){#dailyBalance .balance-grid{grid-template-columns:1fr}#dailyBalance .balance-result{grid-template-columns:repeat(2,1fr)}#dailyBalance .history-row{grid-template-columns:90px 1fr 1fr}.history-row>*:last-child{display:none}}`;
+#dailyBalance .balance-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:16px}#dailyBalance .balance-toolbar label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .balance-toolbar input{min-width:180px}#dailyBalance .balance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}#dailyBalance .balance-panel{background:#fff;border:1px solid #d9dee7;border-radius:14px;padding:16px}#dailyBalance .balance-panel h3{margin:0 0 12px;color:#101820}#dailyBalance .balance-line{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #eceff3}#dailyBalance .balance-line.total{font-size:1.08rem;font-weight:900;border-top:2px solid #101820;border-bottom:0;margin-top:7px}#dailyBalance .balance-result{grid-column:1/-1;background:#101820;color:#fff;border-radius:15px;padding:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}#dailyBalance .result-card{border:1px solid #ffffff33;border-radius:11px;padding:12px}#dailyBalance .result-card span{display:block;color:#d0d5dd;font-size:.8rem;margin-bottom:6px}#dailyBalance .result-card strong{font-size:1.2rem}#dailyBalance .positive{color:#1f9d55}#dailyBalance .negative{color:#d92d20}#dailyBalance .balance-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}#dailyBalance .balance-history{background:#fff;border:1px solid #d9dee7;border-radius:14px;overflow:hidden}#dailyBalance .balance-history-tools{display:flex;gap:12px;align-items:end;justify-content:space-between;flex-wrap:wrap;margin:18px 0 10px}#dailyBalance .balance-history-tools label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .month-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 12px}#dailyBalance .month-summary-card{background:#fff;border:1px solid #d9dee7;border-radius:12px;padding:12px}#dailyBalance .month-summary-card span{display:block;font-size:.78rem;color:#667085;margin-bottom:5px}#dailyBalance .month-summary-card strong{font-size:1.05rem}#dailyBalance .history-row{display:grid;grid-template-columns:110px 1fr 1fr 80px;gap:10px;padding:11px 14px;border-bottom:1px solid #eceff3;align-items:center}#dailyBalance .history-row.head{font-weight:900;background:#f3f5f7}#dailyBalance .balance-note{width:100%;min-height:80px}@media(max-width:800px){#dailyBalance .month-summary{grid-template-columns:1fr}#dailyBalance .balance-grid{grid-template-columns:1fr}#dailyBalance .balance-result{grid-template-columns:repeat(2,1fr)}#dailyBalance .history-row{grid-template-columns:90px 1fr 1fr}.history-row>*:last-child{display:none}}`;
 document.head.appendChild(s)}
 function injectUI(){
   if($('dailyBalance'))return;
@@ -115,15 +115,68 @@ function injectUI(){
     </div>
     <label>Observaciones<textarea id="balanceNotes" class="balance-note" placeholder="Aclaraciones del cierre..."></textarea></label>
     <div class="balance-actions"><button id="balanceSave" type="button">💾 Guardar cierre diario</button><button id="balancePdf" type="button" class="secondary">📄 Generar PDF</button><button id="balanceShare" type="button" class="secondary">📲 Compartir PDF / WhatsApp</button></div>
-    <h3>Historial de cierres</h3><div class="balance-history" id="balanceHistory"></div>`;
+    <div class="balance-history-tools">
+      <div>
+        <h3 style="margin:0">Historial de cierres</h3>
+        <p class="muted small" style="margin:4px 0 0">Por defecto se muestran los movimientos del mes corriente.</p>
+      </div>
+      <label>Filtrar por mes<input id="balanceMonthFilter" type="month"></label>
+    </div>
+    <div class="month-summary">
+      <div class="month-summary-card"><span>Resultados positivos del mes</span><strong id="balMonthPositive" class="positive">$0</strong></div>
+      <div class="month-summary-card"><span>Resultados negativos del mes</span><strong id="balMonthNegative" class="negative">$0</strong></div>
+      <div class="month-summary-card"><span>Resultado acumulado del mes</span><strong id="balMonthAccumulated">$0</strong></div>
+    </div>
+    <div class="balance-history" id="balanceHistory"></div>`;
   main.appendChild(sec);
+  if($('balanceMonthFilter'))$('balanceMonthFilter').value=currentMonthValue();
   tab.addEventListener('click',async()=>{document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));sec.classList.add('active');tab.classList.add('active');await refresh(true)});
 }
 function render(){
   if(!current)return;
   $('balAssets').textContent=money(current.current_assets);$('balAccounts').textContent=money(current.client_accounts);$('balStock').textContent=money(current.stock_value);$('balTotalAssets').textContent=money(current.total_assets);$('balSuppliers').textContent=money(current.supplier_debt);$('balLiabilities').textContent=money(current.total_liabilities);$('balExpenses').textContent=money(current.daily_expenses);$('balPrevious').textContent=money(current.previous_equity);$('balFinal').textContent=money(current.final_equity);$('balBeforeExpenses').textContent=money(current.result_before_expenses);$('balNet').textContent=money(current.net_result);$('balNet').className=current.net_result>=0?'positive':'negative';$('balVariation').textContent=` · ${current.net_result>=0?'+':''}${pct(current.variation_pct)}`;
 }
-function renderHistory(){const box=$('balanceHistory');if(!box)return;box.innerHTML='<div class="history-row head"><span>Fecha</span><span>Patrimonio</span><span>Resultado</span><span>%</span></div>'+closings.slice().sort((a,b)=>String(b.balance_date).localeCompare(String(a.balance_date))).slice(0,30).map(r=>`<div class="history-row"><span>${new Date(r.balance_date+'T12:00:00').toLocaleDateString('es-AR')}</span><strong>${money(r.final_equity)}</strong><strong class="${num(r.net_result)>=0?'positive':'negative'}">${money(r.net_result)}</strong><span>${pct(r.variation_pct)}</span></div>`).join('')}
+function currentMonthValue(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function renderHistory(){
+  const box=$('balanceHistory');
+  if(!box)return;
+
+  const monthInput=$('balanceMonthFilter');
+  const month=monthInput?.value||currentMonthValue();
+  if(monthInput&&!monthInput.value)monthInput.value=month;
+
+  const rows=closings
+    .filter(r=>String(r.balance_date||'').slice(0,7)===month)
+    .sort((a,b)=>String(a.balance_date).localeCompare(String(b.balance_date)));
+
+  const positive=rows.reduce((s,r)=>s+(num(r.net_result)>0?num(r.net_result):0),0);
+  const negative=rows.reduce((s,r)=>s+(num(r.net_result)<0?num(r.net_result):0),0);
+  const accumulated=positive+negative;
+
+  if($('balMonthPositive'))$('balMonthPositive').textContent=money(positive);
+  if($('balMonthNegative'))$('balMonthNegative').textContent=money(negative);
+  if($('balMonthAccumulated')){
+    $('balMonthAccumulated').textContent=money(accumulated);
+    $('balMonthAccumulated').className=accumulated>=0?'positive':'negative';
+  }
+
+  let running=0;
+  const body=rows.map(r=>{
+    running+=num(r.net_result);
+    return `<div class="history-row">
+      <span>${new Date(r.balance_date+'T12:00:00').toLocaleDateString('es-AR')}</span>
+      <strong>${money(r.final_equity)}</strong>
+      <strong class="${num(r.net_result)>=0?'positive':'negative'}">${money(r.net_result)}</strong>
+      <span class="${running>=0?'positive':'negative'}">${money(running)}</span>
+    </div>`;
+  }).join('');
+
+  box.innerHTML='<div class="history-row head"><span>Fecha</span><span>Patrimonio</span><span>Resultado</span><span>Acumulado</span></div>'
+    +(body||'<div style="padding:16px" class="muted">No hay cierres guardados para este mes.</div>');
+}
 async function refresh(preserveInput=false){await Promise.all([loadClosings(),loadCurrentAssets()]);const date=$('balanceDate')?.value||today();const saved=closings.find(r=>r.balance_date===date);let previous;if(preserveInput&&$('balancePrevious')?.value!=='')previous=num($('balancePrevious').value);else previous=saved?num(saved.previous_equity):previousEquity(date);current=calculations(date,previous,cachedAssets);if($('balancePrevious'))$('balancePrevious').value=String(current.previous_equity);if($('balanceNotes'))$('balanceNotes').value=saved?.notes||'';render();renderHistory()}
 async function save(){
   if(!current)return;
@@ -142,6 +195,7 @@ function pdfFile(){return new File([simplePdfBlob(reportLines())],`Balance_Don_Z
 function downloadPdf(){const file=pdfFile();const url=URL.createObjectURL(file);const a=document.createElement('a');a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
 async function sharePdf(){const file=pdfFile();try{if(navigator.canShare?.({files:[file]})&&navigator.share){await navigator.share({title:'Balance diario Don Zoilo',text:`Balance diario ${current.date}`,files:[file]})}else{downloadPdf();alert('Se descargó el PDF. Abrilo desde Descargas y compartilo por WhatsApp.')}}catch(e){if(e.name!=='AbortError')alert('No se pudo compartir: '+e.message)} }
 function bind(){$('balanceDate').value=today();$('balanceDate').addEventListener('change',()=>refresh(false));$('balancePrevious').addEventListener('input',()=>{current=calculations($('balanceDate').value,num($('balancePrevious').value),cachedAssets);render()});$('balanceRefresh').addEventListener('click',()=>refresh(true));$('balanceSave').addEventListener('click',save);$('balancePdf').addEventListener('click',downloadPdf);$('balanceShare').addEventListener('click',sharePdf)}
-async function init(){injectStyles();injectUI();bind();window.addEventListener('donzoilo:remote-change',e=>{if(e.detail?.table==='current_assets')refresh(true)});window.addEventListener('donzoilo:app-visible',()=>refresh(true));await refresh(false)}
+async function init(){injectStyles();injectUI();
+setTimeout(()=>{$('balanceMonthFilter')?.addEventListener('change',renderHistory);},0);bind();window.addEventListener('donzoilo:remote-change',e=>{if(e.detail?.table==='current_assets')refresh(true)});window.addEventListener('donzoilo:app-visible',()=>refresh(true));await refresh(false)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
