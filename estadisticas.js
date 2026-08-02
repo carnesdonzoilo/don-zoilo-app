@@ -38,7 +38,7 @@
     return String(value||'').trim().replace(/\s+/g,' ').replace(/(^|\s)\S/g,m=>m.toLocaleUpperCase('es-AR'));
   }
 
-  // V35.2.2: unificación de nombres equivalentes para el ranking.
+  // V35.2.3: unificación ampliada de nombres equivalentes para el ranking.
   function productKey(value){
     return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/º/g,'').trim();
   }
@@ -47,7 +47,7 @@
     [canonical,...variants].forEach(v=>PRODUCT_GROUPS.set(productKey(v), canonical));
   }
   addProductGroup('Paleta', ['paleta de oferta','paleta churrasco','paleta picada','paleta entera']);
-  addProductGroup('Tapa de asado', ['tapa de asado oferta','tapa de asado envasada','tapa de asado envasado']);
+  addProductGroup('Tapa de asado', ['tapa asado','tapa de asado oferta','tapa','tapa asado oferta','tapa de asado envasada','tapa de asado envasado']);
   addProductGroup('Lomo', ['lomos']);
   addProductGroup('Vacío fresco', ['vacio fresco']);
   addProductGroup('Pollo 8', ['pollo de 8']);
