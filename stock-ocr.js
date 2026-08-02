@@ -14,7 +14,7 @@
     Cerdo:["bondiola","carre","carré","churrasquito","cerdo","pechito","solomillo"],
     Pollo:["pollo","suprema","pata muslo","pata y muslo","pechuga"],
     Embutidos:["chorizo","morcilla","colorado","salchicha"],
-    Achuras:["molleja","riñon","riñón","chinchulin","chinchulín","mondongo","tripa","higado","hígado"]
+    Achuras:["molleja", 'mollejas',"riñon","riñón","chinchulin","chinchulín","mondongo","tripa","higado","hígado"]
   };
   function categoryOf(product){const p=String(product||"").toLowerCase();for(const [cat,words] of Object.entries(categories))if(words.some(w=>p.includes(w)))return cat;return "Otros";}
   function cleanProduct(s){return String(s||"").replace(/^[\d\s.,$-]+/,"").replace(/\s{2,}/g," ").replace(/[|]/g," ").trim().toUpperCase();}
