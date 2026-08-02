@@ -45,7 +45,7 @@ const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.0";
+const APP_VERSION = "35.3.1";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1809,7 +1809,7 @@ function printAccountStatement(){
 }
 
 
-// V35.3.0 — Calcula comprobantes con saldo pendiente sin modificar la base de datos.
+// V35.3.1 — Calcula comprobantes con saldo pendiente sin modificar la base de datos.
 // Las cobranzas se imputan por antigüedad (FIFO). Si existe un saldo a favor,
 // se conserva y se aplica contra la siguiente venta, igual que en el saldo general.
 function pendingAccountDebtsFor(client){
@@ -2266,15 +2266,71 @@ async function submitSupplierPurchase(event){
   const amount=Number($("supplierPurchaseAmount")?.value||0);
   const date=$("supplierPurchaseDate")?.value||todayISO();
   const detail=String($("supplierPurchaseDetail")?.value||"").trim();
+  const isPaid=Boolean($("supplierPurchasePaid")?.checked);
+  const paymentMethod=$("supplierPurchasePaymentMethod")?.value||"efectivo";
+
   if(!name.trim()) return alert("Ingresá el proveedor.");
   if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
+
   try{
     const dueDate=$("supplierPurchaseDueDate")?.value||"";
     const purchaseDetail=dueDate?`${detail}${detail?" | ":""}VENCE: ${dueDate}`:detail;
-    await saveSupplierMovement({type:"compra",name,amount,date,detail:purchaseDetail,method:"cuenta_corriente"});
+
+    const purchaseMovement={
+      id:uid(),
+      date,
+      type:"compra",
+      party:name.trim(),
+      concept:purchaseDetail||"compra",
+      kg:0,
+      amount:Number(amount),
+      payment_method:isPaid?paymentMethod:"cuenta_corriente",
+      status:"confirmado",
+      notes:isPaid?"COMPRA_PAGADA_AL_CARGAR":"",
+      source_order_id:null,
+      created_at:new Date().toISOString()
+    };
+
+    const newMovements=[purchaseMovement];
+
+    // Si la compra se marca como pagada, se registra también el pago por el mismo importe.
+    // Así queda el historial completo pero la compra no aumenta la deuda del proveedor.
+    if(isPaid){
+      newMovements.push({
+        id:uid(),
+        date,
+        type:"pago",
+        party:name.trim(),
+        concept:`Pago de compra${purchaseDetail?` | ${purchaseDetail}`:""}`,
+        kg:0,
+        amount:Number(amount),
+        payment_method:paymentMethod,
+        status:"confirmado",
+        notes:`PAGO_AUTOMATICO_COMPRA | COMPRA_ID:${purchaseMovement.id}`,
+        source_order_id:null,
+        created_at:new Date(Date.now()+1).toISOString()
+      });
+    }
+
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").insert(newMovements);
+      if(error) throw error;
+    }
+
+    // Mantener el mismo orden visual que el resto del módulo: lo más nuevo primero.
+    movements.unshift(...newMovements.slice().reverse());
+    localSave();
+    if($("supplierAccountSelect")) $("supplierAccountSelect").value=name.trim();
+
     $("supplierPurchaseAmount").value="";
     $("supplierPurchaseDetail").value="";
-    showDeliveryToast("Compra del proveedor guardada.");
+    if($("supplierPurchaseDueDate")) $("supplierPurchaseDueDate").value="";
+    if($("supplierPurchasePaid")) $("supplierPurchasePaid").checked=false;
+
+    renderAll();
+    showDeliveryToast(isPaid
+      ?"Compra guardada como pagada. No genera deuda con el proveedor."
+      :"Compra del proveedor guardada.");
   }catch(error){
     alert("No se pudo guardar la compra: "+error.message);
   }

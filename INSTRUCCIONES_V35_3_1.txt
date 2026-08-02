@@ -1,0 +1,25 @@
+DON ZOILO V35.3.1 — PROVEEDORES: COMPRA PAGADA
+
+CAMBIO RÁPIDO EN PROVEEDORES
+
+En "Registrar compra" se agregó:
+- Casilla "Compra pagada".
+- Selector de medio de pago: efectivo, transferencia, cheque u otro.
+
+FUNCIONAMIENTO
+- Si NO se tilda "Compra pagada": funciona igual que antes y la compra aumenta la deuda del proveedor.
+- Si se tilda "Compra pagada": la app guarda la compra y, al mismo tiempo, registra un pago por el mismo importe.
+- De esta forma el historial conserva la compra y el pago, pero el saldo del proveedor no aumenta.
+- El pago queda registrado con el mismo día de la compra y el medio de pago elegido.
+
+BASE DE DATOS
+- No requiere SQL.
+- No agrega columnas ni modifica tablas.
+- Utiliza la tabla movements existente.
+
+INSTALACIÓN
+1. Subir estos archivos a GitHub reemplazando los actuales.
+2. Esperar el deploy de Vercel.
+3. Actualizar la app (Ctrl+F5 en PC).
+4. Debe mostrarse Versión 35.3.1.
+5. Probar una compra pequeña marcada como "Compra pagada" y verificar que en el historial aparezcan Compra + Pago y que el saldo del proveedor no cambie.
