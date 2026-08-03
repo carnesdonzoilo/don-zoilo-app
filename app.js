@@ -695,31 +695,117 @@ function remitoHtmlForItems(items){
   return `<main class="sheet">${copy("ORIGINAL")}<div class="cut">CORTAR AQUÍ</div>${copy("COPIA")}</main>`;
 }
 
+function selectedRemitosPrintHtml(batches){
+  const pages=batches.map(items=>`<div class="bulk-remito-page">${remitoHtmlForItems(items)}</div>`).join("");
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Remitos seleccionados</title>
+  <style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111}
+  .bulk-remito-page{page-break-after:always;break-after:page}
+  .bulk-remito-page:last-child{page-break-after:auto;break-after:auto}
+  .sheet{width:210mm;height:297mm;margin:0 auto;background:#fff;padding:6mm;overflow:hidden}
+  .ticket{height:137.5mm;border:1.2px solid #111;padding:5mm;overflow:hidden}
+  .cut{height:10mm;display:flex;align-items:center;gap:4mm;color:#555;font-size:8pt}
+  .cut:before,.cut:after{content:"";flex:1;border-top:1px dashed #777}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}
+  .logo{font-size:18pt;font-weight:900}.tag{font-size:6.5pt;letter-spacing:1.3px}
+  .title{text-align:right}.copy{font-size:7pt;font-weight:900}.title h1{margin:1mm 0 0;font-size:16pt}.number{font-size:8pt;font-weight:800}
+  .info{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #111;margin-bottom:3mm}
+  .info>div{padding:2mm;border-right:1px solid #111;min-height:10mm}.info>div:last-child{border-right:0}
+  .info span{display:block;font-size:6pt;font-weight:800;color:#555}.info strong{font-size:8pt}
+  table{width:100%;border-collapse:collapse;margin-bottom:2.5mm}
+  th,td{border:1px solid #111;padding:1.4mm}
+  th{font-size:6pt;background:#f1f1f1}td{font-size:7.2pt}
+  th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}
+  th:nth-child(2),td:nth-child(2){width:17mm}
+  th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
+  .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm}
+  .notes{border:1px solid #111;min-height:16mm;padding:2mm}.notes span{font-size:6pt;font-weight:900}.notes div{font-size:7pt}
+  .total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:9pt}.total strong{font-size:12pt}
+  .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}
+  .signatures>div{text-align:center}.line{border-top:1px solid #111}.signatures span{font-size:6.5pt}
+  @page{size:A4 portrait;margin:0}
+  @media print{html,body{width:210mm}.sheet{margin:0}}
+  </style></head><body>${pages}</body></html>`;
+}
+
+function isMobilePrintDevice(){
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent||"")
+    || (navigator.maxTouchPoints>1 && window.innerWidth<900);
+}
+
 function printSelectedRemitos(){
   const batches=[...selectedRemitoBatches]
     .map(key=>batchItemsByKey(key))
     .filter(items=>items.length);
+
   if(!batches.length) return alert("Seleccioná al menos un pedido.");
 
-  const pages=batches.map(items=>`<div class="bulk-remito-page">${remitoHtmlForItems(items)}</div>`).join("");
+  const printHtml=selectedRemitosPrintHtml(batches);
+
+  // En Android/Chrome, imprimir desde window.open("","_blank") puede dejar un
+  // about:blank y generar un PDF vacío o inválido. En móvil imprimimos desde
+  // un iframe oculto que permanece en la misma página hasta que finaliza.
+  if(isMobilePrintDevice()){
+    document.getElementById("mobileRemitosPrintFrame")?.remove();
+
+    const frame=document.createElement("iframe");
+    frame.id="mobileRemitosPrintFrame";
+    frame.setAttribute("title","Impresión de remitos");
+    frame.style.position="fixed";
+    frame.style.right="0";
+    frame.style.bottom="0";
+    frame.style.width="1px";
+    frame.style.height="1px";
+    frame.style.opacity="0";
+    frame.style.pointerEvents="none";
+    frame.style.border="0";
+    document.body.appendChild(frame);
+
+    const doc=frame.contentDocument||frame.contentWindow?.document;
+    if(!doc){
+      frame.remove();
+      return alert("No se pudo preparar la impresión en este dispositivo.");
+    }
+
+    doc.open();
+    doc.write(printHtml);
+    doc.close();
+
+    const doPrint=()=>{
+      try{
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      }catch(error){
+        console.error("Impresión móvil:",error);
+        alert("No se pudo abrir la impresión. Probá nuevamente.");
+      }
+      // Dar tiempo al servicio de impresión/PDF de Android antes de retirar el documento.
+      setTimeout(()=>frame.remove(),15000);
+    };
+
+    // Esperar a que el contenido esté realmente renderizado antes de abrir
+    // el diálogo de impresión; evita PDFs blancos.
+    if(frame.contentDocument?.readyState==="complete"){
+      setTimeout(doPrint,700);
+    }else{
+      frame.onload=()=>setTimeout(doPrint,700);
+      setTimeout(()=>{
+        if(document.body.contains(frame)) doPrint();
+      },1800);
+    }
+    return;
+  }
+
+  // Escritorio: se mantiene la vista previa en ventana nueva.
   const popup=window.open("","_blank");
   if(!popup) return alert("El navegador bloqueó la impresión. Habilitá ventanas emergentes.");
 
   popup.document.open();
-  popup.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Remitos seleccionados</title>
-  <style>
-  *{box-sizing:border-box}body{margin:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111}
-  .actions{position:sticky;top:0;z-index:10;background:#101820;padding:10px;text-align:center}
-  .actions button{border:0;border-radius:9px;padding:11px 18px;font-weight:800;background:#b38a3e}
-  .bulk-remito-page{page-break-after:always;break-after:page}.bulk-remito-page:last-child{page-break-after:auto;break-after:auto}
-  .sheet{width:210mm;height:297mm;margin:0 auto;background:#fff;padding:6mm;overflow:hidden}
-  .ticket{height:137.5mm;border:1.2px solid #111;padding:5mm;overflow:hidden}.cut{height:10mm;display:flex;align-items:center;gap:4mm;color:#555;font-size:8pt}.cut:before,.cut:after{content:"";flex:1;border-top:1px dashed #777}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}.logo{font-size:18pt;font-weight:900}.tag{font-size:6.5pt;letter-spacing:1.3px}.title{text-align:right}.copy{font-size:7pt;font-weight:900}.title h1{margin:1mm 0 0;font-size:16pt}.number{font-size:8pt;font-weight:800}
-  .info{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #111;margin-bottom:3mm}.info>div{padding:2mm;border-right:1px solid #111;min-height:10mm}.info>div:last-child{border-right:0}.info span{display:block;font-size:6pt;font-weight:800;color:#555}.info strong{font-size:8pt}
-  table{width:100%;border-collapse:collapse;margin-bottom:2.5mm}th,td{border:1px solid #111;padding:1.4mm}th{font-size:6pt;background:#f1f1f1}td{font-size:7.2pt}th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}th:nth-child(2),td:nth-child(2){width:17mm}th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
-  .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm}.notes{border:1px solid #111;min-height:16mm;padding:2mm}.notes span{font-size:6pt;font-weight:900}.notes div{font-size:7pt}.total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:9pt}.total strong{font-size:12pt}.signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}.signatures>div{text-align:center}.line{border-top:1px solid #111}.signatures span{font-size:6.5pt}
-  @page{size:A4 portrait;margin:0}@media print{.actions{display:none}.sheet{margin:0}}
-  </style></head><body><div class="actions"><button onclick="window.print()">Imprimir ${batches.length} remitos</button></div>${pages}</body></html>`);
+  popup.document.write(printHtml.replace("<body>",`<body><div class="actions"><button onclick="window.print()">Imprimir ${batches.length} remitos</button></div>`)
+    .replace("</style>",`.actions{position:sticky;top:0;z-index:10;background:#101820;padding:10px;text-align:center}.actions button{border:0;border-radius:9px;padding:11px 18px;font-weight:800;background:#b38a3e}@media print{.actions{display:none}}</style>`));
   popup.document.close();
   popup.focus();
 }
@@ -1150,6 +1236,46 @@ function monthBounds(monthValue){
   return {first,nextMonth};
 }
 
+function renderExpenseCategoryDetail(category){
+  const panel=$("expenseCategoryDetail");
+  const listBox=$("expenseCategoryDetailList");
+  if(!panel||!listBox) return;
+
+  const monthValue=$("expenseMonth")?.value||todayISO().slice(0,7);
+  const {first,nextMonth}=monthBounds(monthValue);
+
+  const list=expenseMovements()
+    .filter(m=>m.date>=first && m.date<nextMonth)
+    .filter(m=>expenseCategoryFromMovement(m)===category)
+    .slice()
+    .sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+
+  const total=list.reduce((sum,m)=>sum+Number(m.amount||0),0);
+
+  $("expenseCategoryDetailTitle").textContent=category;
+  const [year,month]=monthValue.split("-").map(Number);
+  const label=new Date(year,month-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"});
+  $("expenseCategoryDetailPeriod").textContent=`Movimientos de ${label}`;
+  $("expenseCategoryDetailTotal").textContent=money(total);
+
+  listBox.innerHTML="";
+  list.forEach(m=>{
+    const row=document.createElement("div");
+    row.className="expense-row expense-category-detail-row";
+    row.innerHTML=`
+      <div class="expense-row-main">
+        <strong>${escapeHtml(m.concept||category)}</strong>
+        <small>${fmtDate(m.date)} · ${escapeHtml((m.payment_method||"efectivo").replace("_"," "))}</small>
+      </div>
+      <strong>${money(m.amount||0)}</strong>`;
+    listBox.append(row);
+  });
+
+  if(!list.length) listBox.innerHTML='<div class="expense-empty">No hay movimientos para esta categoría en el mes elegido.</div>';
+  panel.hidden=false;
+  panel.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
 function renderExpenseSummary(){
   const box=$("expenseSummaryList");
   if(!box) return;
@@ -1171,16 +1297,17 @@ function renderExpenseSummary(){
     .filter(([,amount])=>amount>0)
     .sort((a,b)=>b[1]-a[1])
     .forEach(([category,amount])=>{
-      const row=document.createElement("div");
-      row.className="expense-summary-row";
+      const row=document.createElement("button");
+      row.type="button";
+      row.className="expense-summary-row expense-summary-link";
       row.innerHTML=`<span>${escapeHtml(category)}</span><strong>${money(amount)}</strong>`;
+      row.addEventListener("click",()=>renderExpenseCategoryDetail(category));
       box.append(row);
     });
 
-  if(!box.children.length){
-    box.innerHTML='<div class="expense-empty">No hay gastos en este mes.</div>';
-  }
+  if(!box.children.length) box.innerHTML='<div class="expense-empty">No hay gastos en este mes.</div>';
   $("expenseMonthTotal").textContent=money(total);
+  if($("expenseCategoryDetail")) $("expenseCategoryDetail").hidden=true;
 }
 
 
@@ -4196,6 +4323,9 @@ on("expenseCategory","change",()=>{
 });
 
 on("expenseMonth","change",renderExpenseSummary);
+on("expenseCategoryDetailClose","click",()=>{
+  if($("expenseCategoryDetail")) $("expenseCategoryDetail").hidden=true;
+});
 on("expenseListCategory","change",renderExpenseRecent);
 on("expenseListFrom","change",renderExpenseRecent);
 on("expenseListTo","change",renderExpenseRecent);

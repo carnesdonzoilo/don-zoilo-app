@@ -1,0 +1,27 @@
+DON ZOILO V35.3.7 — IMPRESIÓN MÚLTIPLE DE REMITOS EN CELULAR
+
+PROBLEMA CORREGIDO
+En algunos celulares Android, Chrome abría una ventana "about:blank" para la
+selección múltiple de remitos. El servicio de impresión podía guardar un PDF
+vacío o inválido, que después mostraba "No se puede abrir el archivo PDF".
+
+CAMBIO
+- En celular/tablet ya no se imprime la selección múltiple desde about:blank.
+- Se crea temporalmente el documento de impresión dentro de la propia app.
+- Se espera a que todos los remitos estén renderizados antes de abrir Imprimir.
+- El documento permanece cargado mientras Android crea el PDF.
+- En PC se conserva la vista previa tradicional.
+
+TAMBIÉN MANTIENE
+- El detalle de gastos por categoría desde el resumen mensual.
+
+SUPABASE
+No requiere SQL ni cambios en la base de datos.
+
+PRUEBA RECOMENDADA
+1. Subir la versión a GitHub.
+2. Esperar Vercel y comprobar Versión 35.3.7.
+3. En el celular seleccionar 2 o 3 remitos entregados.
+4. Tocar imprimir selección.
+5. Elegir "Guardar como PDF".
+6. Guardar y abrir el PDF para comprobar que tiene contenido.

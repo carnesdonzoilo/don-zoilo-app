@@ -1085,3 +1085,11 @@ dialog::backdrop{background:#0009}
   .expense-list-filters button{grid-column:1/-1}
   .expense-filter-summary{justify-content:space-between}
 }
+
+/* V35.3.6 — Resumen de gastos clickeable por categoría */
+.expense-summary-link{width:100%;appearance:none;border:0;border-bottom:1px solid #e5e7eb;background:transparent;color:inherit;cursor:pointer;text-align:left;font:inherit}
+.expense-summary-link:hover{background:#f8fafc}
+.expense-summary-link span{text-decoration:underline;text-underline-offset:3px;font-weight:700}
+.expense-category-detail{margin-top:18px;border-top:2px solid #d0d5dd;padding-top:16px}
+.expense-category-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.expense-category-detail-head h3{margin:4px 0 0}
