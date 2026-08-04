@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <title>Don Zoilo | Operaciones</title>
-  <link rel="stylesheet" href="styles.css?v=35.3.8" />
+  <link rel="stylesheet" href="styles.css?v=35.3.7" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 35.3.8 · Cuentas Corrientes · Estadísticas y vencimientos</div>
+      <div class="subtitle">Control de operaciones · Versión 35.3.7 · Cuentas Corrientes · Estadísticas y vencimientos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -275,9 +275,7 @@
               Seleccionar todos
             </label>
             <span id="selectedRemitosCount" class="muted small">0 remitos seleccionados</span>
-            <button type="button" id="downloadSelectedRemitosPdf" class="primary">📄 Crear PDF</button>
-            <button type="button" id="shareSelectedRemitos" class="whatsapp-btn">🟢 Compartir / WhatsApp</button>
-            <button type="button" id="printSelectedRemitos" class="secondary">🖨️ Imprimir</button>
+            <button type="button" id="printSelectedRemitos" class="primary">🖨️ Imprimir seleccionados</button>
           </div>
           <div class="orders-refresh-row"><button type="button" id="refreshOrders" class="secondary">↻ Actualizar pedidos</button></div>
           <div id="ordersList" class="orders-list"></div>
@@ -1165,16 +1163,14 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=35.3.8"></script>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-<script src="app.js?v=35.3.8"></script>
+  <script src="cloud-config.js?v=35.3.7"></script>
+  <script src="app.js?v=35.3.7"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=35.3.8"></script>
-  <script src="stock-ocr.js?v=35.3.8"></script>
-  <script src="caja-activos.js?v=35.3.8"></script>
-  <script src="balance-diario.js?v=35.3.8"></script>
-  <script src="vencimientos.js?v=35.3.8"></script>
-  <script src="estadisticas.js?v=35.3.8"></script>
+  <script src="stock.js?v=35.3.7"></script>
+  <script src="stock-ocr.js?v=35.3.7"></script>
+  <script src="caja-activos.js?v=35.3.7"></script>
+  <script src="balance-diario.js?v=35.3.7"></script>
+  <script src="vencimientos.js?v=35.3.7"></script>
+  <script src="estadisticas.js?v=35.3.7"></script>
 </body>
 </html>
