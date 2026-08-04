@@ -580,6 +580,8 @@ function updateSelectedRemitosUi(){
     $("selectedRemitosCount").textContent=`${count} remito${count===1?"":"s"} seleccionado${count===1?"":"s"}`;
   }
   if($("printSelectedRemitos")) $("printSelectedRemitos").disabled=count===0;
+  if($("downloadSelectedRemitosPdf")) $("downloadSelectedRemitosPdf").disabled=count===0;
+  if($("shareSelectedRemitos")) $("shareSelectedRemitos").disabled=count===0;
 
   const visibleChecks=[...document.querySelectorAll(".remito-select")];
   if($("selectAllRemitos") && visibleChecks.length){
@@ -693,6 +695,172 @@ function remitoHtmlForItems(items){
     </section>`;
 
   return `<main class="sheet">${copy("ORIGINAL")}<div class="cut">CORTAR AQUÍ</div>${copy("COPIA")}</main>`;
+}
+
+
+function selectedRemitoBatches(){
+  return [...selectedRemitoBatches]
+    .map(key=>batchItemsByKey(key))
+    .filter(items=>items.length);
+}
+
+function selectedRemitosFileName(batches){
+  const dates=[...new Set(batches.map(items=>items[0]?.delivery_date).filter(Boolean))].sort();
+  const datePart=dates.length===1?dates[0].split("-").reverse().join("_"):todayISO().split("-").reverse().join("_");
+  return `remitos_${datePart}.pdf`;
+}
+
+function remitoPdfRenderCss(){
+  return `
+    *{box-sizing:border-box}
+    .pdf-remito-root{position:fixed;left:-10000px;top:0;width:210mm;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;z-index:-1}
+    .sheet{width:210mm;height:297mm;margin:0;background:#fff;padding:6mm;overflow:hidden}
+    .ticket{height:137.5mm;border:1.2px solid #111;padding:5mm;overflow:hidden}
+    .cut{height:10mm;display:flex;align-items:center;gap:4mm;color:#555;font-size:8pt}
+    .cut:before,.cut:after{content:"";flex:1;border-top:1px dashed #777}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}
+    .logo{font-size:18pt;font-weight:900}.tag{font-size:6.5pt;letter-spacing:1.3px}
+    .title{text-align:right}.copy{font-size:7pt;font-weight:900}.title h1{margin:1mm 0 0;font-size:16pt}.number{font-size:8pt;font-weight:800}
+    .info{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #111;margin-bottom:3mm}
+    .info>div{padding:2mm;border-right:1px solid #111;min-height:10mm}.info>div:last-child{border-right:0}
+    .info span{display:block;font-size:6pt;font-weight:800;color:#555}.info strong{font-size:8pt}
+    table{width:100%;border-collapse:collapse;margin-bottom:2.5mm}
+    th,td{border:1px solid #111;padding:1.4mm}
+    th{font-size:6pt;background:#f1f1f1}td{font-size:7.2pt}
+    th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}
+    th:nth-child(2),td:nth-child(2){width:17mm}
+    th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
+    .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm}
+    .notes{border:1px solid #111;min-height:16mm;padding:2mm}.notes span{font-size:6pt;font-weight:900}.notes div{font-size:7pt}
+    .total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:9pt}.total strong{font-size:12pt}
+    .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}
+    .signatures>div{text-align:center}.line{border-top:1px solid #111}.signatures span{font-size:6.5pt}
+  `;
+}
+
+async function generateSelectedRemitosPdfBlob(){
+  const batches=selectedRemitoBatches();
+  if(!batches.length) throw new Error("Seleccioná al menos un pedido.");
+  if(typeof html2canvas!=="function") throw new Error("No se pudo cargar el generador visual de PDF.");
+  if(!window.jspdf?.jsPDF) throw new Error("No se pudo cargar el generador de PDF.");
+
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true});
+  const renderRoot=document.createElement("div");
+  renderRoot.className="pdf-remito-root";
+
+  const style=document.createElement("style");
+  style.textContent=remitoPdfRenderCss();
+  renderRoot.appendChild(style);
+  document.body.appendChild(renderRoot);
+
+  try{
+    for(let i=0;i<batches.length;i++){
+      const holder=document.createElement("div");
+      holder.innerHTML=remitoHtmlForItems(batches[i]);
+      const sheet=holder.firstElementChild;
+      renderRoot.appendChild(sheet);
+
+      // Dar al navegador un cuadro de render antes de capturar.
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+
+      const canvas=await html2canvas(sheet,{
+        backgroundColor:"#ffffff",
+        scale:1.5,
+        useCORS:true,
+        logging:false,
+        width:sheet.scrollWidth,
+        height:sheet.scrollHeight,
+        windowWidth:sheet.scrollWidth,
+        windowHeight:sheet.scrollHeight
+      });
+
+      const image=canvas.toDataURL("image/jpeg",0.92);
+      if(i>0) pdf.addPage("a4","portrait");
+      pdf.addImage(image,"JPEG",0,0,210,297,undefined,"FAST");
+      sheet.remove();
+    }
+
+    return pdf.output("blob");
+  }finally{
+    renderRoot.remove();
+  }
+}
+
+async function withPdfButtonBusy(button,callback){
+  if(!button) return callback();
+  const oldText=button.textContent;
+  button.disabled=true;
+  button.textContent="Generando PDF…";
+  try{
+    return await callback();
+  }finally{
+    button.textContent=oldText;
+    updateSelectedRemitosUi();
+  }
+}
+
+async function downloadSelectedRemitosPdf(){
+  const button=$("downloadSelectedRemitosPdf");
+  await withPdfButtonBusy(button,async()=>{
+    try{
+      const batches=selectedRemitoBatches();
+      if(!batches.length) return alert("Seleccioná al menos un pedido.");
+      const blob=await generateSelectedRemitosPdfBlob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=selectedRemitosFileName(batches);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),15000);
+      showDeliveryToast("PDF de remitos generado correctamente.");
+    }catch(error){
+      console.error("PDF remitos:",error);
+      alert("No se pudo generar el PDF: "+(error.message||error));
+    }
+  });
+}
+
+async function shareSelectedRemitos(){
+  const button=$("shareSelectedRemitos");
+  await withPdfButtonBusy(button,async()=>{
+    try{
+      const batches=selectedRemitoBatches();
+      if(!batches.length) return alert("Seleccioná al menos un pedido.");
+
+      const blob=await generateSelectedRemitosPdfBlob();
+      const file=new File([blob],selectedRemitosFileName(batches),{type:"application/pdf"});
+
+      // En Android/Chrome, el menú nativo permite elegir WhatsApp,
+      // WhatsApp Business, Gmail, Drive, etc. No necesita un número fijo.
+      if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+        await navigator.share({
+          files:[file],
+          title:"Remitos Don Zoilo",
+          text:`Remitos Don Zoilo · ${batches.length} seleccionado${batches.length===1?"":"s"}`
+        });
+        return;
+      }
+
+      // Fallback: si el navegador no permite compartir archivos, descargar PDF.
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=file.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),15000);
+      alert("Este navegador no permite compartir archivos directamente. Se descargó el PDF para que lo adjuntes en WhatsApp.");
+    }catch(error){
+      // Cancelar el menú de compartir no es un error de la app.
+      if(error?.name==="AbortError") return;
+      console.error("Compartir remitos:",error);
+      alert("No se pudo compartir el PDF: "+(error.message||error));
+    }
+  });
 }
 
 function selectedRemitosPrintHtml(batches){
@@ -4347,6 +4515,8 @@ on("selectAllRemitos","change",()=>{
   updateSelectedRemitosUi();
 });
 on("printSelectedRemitos","click",printSelectedRemitos);
+on("downloadSelectedRemitosPdf","click",downloadSelectedRemitosPdf);
+on("shareSelectedRemitos","click",shareSelectedRemitos);
 on("closeSignedReceipt","click",()=>{
   const dialog=$("signedReceiptDialog");
   if(typeof dialog?.close==="function") dialog.close();

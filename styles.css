@@ -1093,3 +1093,23 @@ dialog::backdrop{background:#0009}
 .expense-category-detail{margin-top:18px;border-top:2px solid #d0d5dd;padding-top:16px}
 .expense-category-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
 .expense-category-detail-head h3{margin:4px 0 0}
+
+
+/* V35.3.8 — compartir remitos */
+.whatsapp-btn{
+  border:0;
+  border-radius:10px;
+  padding:10px 14px;
+  font-weight:800;
+  cursor:pointer;
+  background:#25D366;
+  color:#071b0e;
+}
+.whatsapp-btn:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:720px){
+  .orders-bulk-toolbar #downloadSelectedRemitosPdf,
+  .orders-bulk-toolbar #shareSelectedRemitos,
+  .orders-bulk-toolbar #printSelectedRemitos{
+    width:100%;
+  }
+}

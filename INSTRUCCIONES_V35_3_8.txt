@@ -1,0 +1,35 @@
+DON ZOILO V35.3.8 — PDF REAL + COMPARTIR / WHATSAPP
+
+OBJETIVO
+Evitar el PDF inválido que algunos celulares Android generan desde el servicio
+de impresión del navegador.
+
+NUEVOS BOTONES EN PEDIDOS
+- 📄 Crear PDF
+- 🟢 Compartir / WhatsApp
+- 🖨️ Imprimir (se conserva como opción)
+
+CÓMO FUNCIONA
+1. Seleccionás uno o varios remitos.
+2. "Crear PDF" genera un archivo PDF real directamente dentro de la app.
+3. "Compartir / WhatsApp" genera ese mismo PDF y abre el menú nativo del celular.
+4. Desde ese menú elegís WhatsApp o WhatsApp Business y el contacto/grupo.
+
+NO HACE FALTA CONFIGURAR UN NÚMERO DE WHATSAPP.
+Esto es intencional: así podés elegir cualquier cliente o grupo al compartir.
+
+Si en el futuro se quiere un botón que abra SIEMPRE un número fijo o el WhatsApp
+guardado de cada cliente, eso sería una función adicional.
+
+IMPORTANTE
+- No requiere SQL.
+- No cambia Supabase.
+- No modifica remitos ni movimientos existentes.
+- La generación usa html2canvas + jsPDF desde CDN, por lo que requiere conexión a Internet.
+
+PRUEBA
+1. Subir a GitHub.
+2. Esperar Vercel y verificar versión 35.3.8.
+3. En Android seleccionar 2 o 3 remitos.
+4. Tocar "Crear PDF" y abrir el archivo.
+5. Luego tocar "Compartir / WhatsApp" y elegir WhatsApp.
