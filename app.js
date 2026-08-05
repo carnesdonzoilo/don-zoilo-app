@@ -19,6 +19,7 @@ const CONFIG_KEY = "don_zoilo_supabase_config";
 let movements = [];
 let orders = [];
 let productPrices = {};
+let productCatalogRows = [];
 let supabaseClient = null;
 let deferredPrompt = null;
 let realtimeChannel = null;
@@ -45,7 +46,7 @@ const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.2";
+const APP_VERSION = "35.3.9";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -235,7 +236,19 @@ function applyCloudPayload(payload,reason="sincronización correcta"){
   movements=payload.movementData;
   orders=payload.orderData;
   productPrices={};
-  payload.priceData.forEach(row=>productPrices[row.product_key]=Number(row.last_price||0));
+  productCatalogRows=[];
+  payload.priceData.forEach(row=>{
+    productPrices[row.product_key]=Number(row.last_price||0);
+    if(row.is_catalog===true){
+      productCatalogRows.push({
+        key:row.product_key,
+        name:row.product_name||row.product_key,
+        value:Number(row.last_price||0),
+        category:row.category||"Otros",
+        sort_order:Number(row.sort_order||0)
+      });
+    }
+  });
   localSave();
   saveSafetyBackup(reason);
 }
@@ -580,6 +593,8 @@ function updateSelectedRemitosUi(){
     $("selectedRemitosCount").textContent=`${count} remito${count===1?"":"s"} seleccionado${count===1?"":"s"}`;
   }
   if($("printSelectedRemitos")) $("printSelectedRemitos").disabled=count===0;
+  if($("downloadSelectedRemitosPdf")) $("downloadSelectedRemitosPdf").disabled=count===0;
+  if($("shareSelectedRemitos")) $("shareSelectedRemitos").disabled=count===0;
 
   const visibleChecks=[...document.querySelectorAll(".remito-select")];
   if($("selectAllRemitos") && visibleChecks.length){
@@ -693,6 +708,172 @@ function remitoHtmlForItems(items){
     </section>`;
 
   return `<main class="sheet">${copy("ORIGINAL")}<div class="cut">CORTAR AQUÍ</div>${copy("COPIA")}</main>`;
+}
+
+
+function selectedRemitoBatches(){
+  return [...selectedRemitoBatches]
+    .map(key=>batchItemsByKey(key))
+    .filter(items=>items.length);
+}
+
+function selectedRemitosFileName(batches){
+  const dates=[...new Set(batches.map(items=>items[0]?.delivery_date).filter(Boolean))].sort();
+  const datePart=dates.length===1?dates[0].split("-").reverse().join("_"):todayISO().split("-").reverse().join("_");
+  return `remitos_${datePart}.pdf`;
+}
+
+function remitoPdfRenderCss(){
+  return `
+    *{box-sizing:border-box}
+    .pdf-remito-root{position:fixed;left:-10000px;top:0;width:210mm;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;z-index:-1}
+    .sheet{width:210mm;height:297mm;margin:0;background:#fff;padding:6mm;overflow:hidden}
+    .ticket{height:137.5mm;border:1.2px solid #111;padding:5mm;overflow:hidden}
+    .cut{height:10mm;display:flex;align-items:center;gap:4mm;color:#555;font-size:8pt}
+    .cut:before,.cut:after{content:"";flex:1;border-top:1px dashed #777}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}
+    .logo{font-size:18pt;font-weight:900}.tag{font-size:6.5pt;letter-spacing:1.3px}
+    .title{text-align:right}.copy{font-size:7pt;font-weight:900}.title h1{margin:1mm 0 0;font-size:16pt}.number{font-size:8pt;font-weight:800}
+    .info{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #111;margin-bottom:3mm}
+    .info>div{padding:2mm;border-right:1px solid #111;min-height:10mm}.info>div:last-child{border-right:0}
+    .info span{display:block;font-size:6pt;font-weight:800;color:#555}.info strong{font-size:8pt}
+    table{width:100%;border-collapse:collapse;margin-bottom:2.5mm}
+    th,td{border:1px solid #111;padding:1.4mm}
+    th{font-size:6pt;background:#f1f1f1}td{font-size:7.2pt}
+    th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}
+    th:nth-child(2),td:nth-child(2){width:17mm}
+    th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
+    .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm}
+    .notes{border:1px solid #111;min-height:16mm;padding:2mm}.notes span{font-size:6pt;font-weight:900}.notes div{font-size:7pt}
+    .total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:9pt}.total strong{font-size:12pt}
+    .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}
+    .signatures>div{text-align:center}.line{border-top:1px solid #111}.signatures span{font-size:6.5pt}
+  `;
+}
+
+async function generateSelectedRemitosPdfBlob(){
+  const batches=selectedRemitoBatches();
+  if(!batches.length) throw new Error("Seleccioná al menos un pedido.");
+  if(typeof html2canvas!=="function") throw new Error("No se pudo cargar el generador visual de PDF.");
+  if(!window.jspdf?.jsPDF) throw new Error("No se pudo cargar el generador de PDF.");
+
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true});
+  const renderRoot=document.createElement("div");
+  renderRoot.className="pdf-remito-root";
+
+  const style=document.createElement("style");
+  style.textContent=remitoPdfRenderCss();
+  renderRoot.appendChild(style);
+  document.body.appendChild(renderRoot);
+
+  try{
+    for(let i=0;i<batches.length;i++){
+      const holder=document.createElement("div");
+      holder.innerHTML=remitoHtmlForItems(batches[i]);
+      const sheet=holder.firstElementChild;
+      renderRoot.appendChild(sheet);
+
+      // Dar al navegador un cuadro de render antes de capturar.
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+
+      const canvas=await html2canvas(sheet,{
+        backgroundColor:"#ffffff",
+        scale:1.5,
+        useCORS:true,
+        logging:false,
+        width:sheet.scrollWidth,
+        height:sheet.scrollHeight,
+        windowWidth:sheet.scrollWidth,
+        windowHeight:sheet.scrollHeight
+      });
+
+      const image=canvas.toDataURL("image/jpeg",0.92);
+      if(i>0) pdf.addPage("a4","portrait");
+      pdf.addImage(image,"JPEG",0,0,210,297,undefined,"FAST");
+      sheet.remove();
+    }
+
+    return pdf.output("blob");
+  }finally{
+    renderRoot.remove();
+  }
+}
+
+async function withPdfButtonBusy(button,callback){
+  if(!button) return callback();
+  const oldText=button.textContent;
+  button.disabled=true;
+  button.textContent="Generando PDF…";
+  try{
+    return await callback();
+  }finally{
+    button.textContent=oldText;
+    updateSelectedRemitosUi();
+  }
+}
+
+async function downloadSelectedRemitosPdf(){
+  const button=$("downloadSelectedRemitosPdf");
+  await withPdfButtonBusy(button,async()=>{
+    try{
+      const batches=selectedRemitoBatches();
+      if(!batches.length) return alert("Seleccioná al menos un pedido.");
+      const blob=await generateSelectedRemitosPdfBlob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=selectedRemitosFileName(batches);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),15000);
+      showDeliveryToast("PDF de remitos generado correctamente.");
+    }catch(error){
+      console.error("PDF remitos:",error);
+      alert("No se pudo generar el PDF: "+(error.message||error));
+    }
+  });
+}
+
+async function shareSelectedRemitos(){
+  const button=$("shareSelectedRemitos");
+  await withPdfButtonBusy(button,async()=>{
+    try{
+      const batches=selectedRemitoBatches();
+      if(!batches.length) return alert("Seleccioná al menos un pedido.");
+
+      const blob=await generateSelectedRemitosPdfBlob();
+      const file=new File([blob],selectedRemitosFileName(batches),{type:"application/pdf"});
+
+      // En Android/Chrome, el menú nativo permite elegir WhatsApp,
+      // WhatsApp Business, Gmail, Drive, etc. No necesita un número fijo.
+      if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+        await navigator.share({
+          files:[file],
+          title:"Remitos Don Zoilo",
+          text:`Remitos Don Zoilo · ${batches.length} seleccionado${batches.length===1?"":"s"}`
+        });
+        return;
+      }
+
+      // Fallback: si el navegador no permite compartir archivos, descargar PDF.
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=file.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),15000);
+      alert("Este navegador no permite compartir archivos directamente. Se descargó el PDF para que lo adjuntes en WhatsApp.");
+    }catch(error){
+      // Cancelar el menú de compartir no es un error de la app.
+      if(error?.name==="AbortError") return;
+      console.error("Compartir remitos:",error);
+      alert("No se pudo compartir el PDF: "+(error.message||error));
+    }
+  });
 }
 
 function selectedRemitosPrintHtml(batches){
@@ -3552,22 +3733,46 @@ $("printSheet").addEventListener("click",()=>{
 
 const PRICE_CATALOG={"Vacunos": [["Asado banderita", 19000], ["Asado completo", 17500], ["Asado costillar marcado", 17000], ["Asado premium 10 costillas", 24500], ["Bife ancho x taco", 16500], ["Bife ancho", 17500], ["Bife angosto", 18500], ["Bife con lomo 10 costillas", 17800], ["Bife de chorizo envasado", 22500], ["Bife de chorizo", 24000], ["Bife T-bone", 24000], ["Bola de lomo envasada", 15500], ["Colita de cuadril envasada", 18500], ["Cuadrada envasada", 15500], ["Cuadril envasado", 18000], ["Entraña", 26000], ["Lomo con cordón", 26000], ["Matambre envasado", 16000], ["Nalga con tapa envasada", 16000], ["Nalga feteada envasada", 18000], ["Nalga sin tapa envasada", 17500], ["Nalga sin tapa fresca", 20500], ["Ojo de bife envasado", 24500], ["Ojo de bife", 26500], ["Osobuco pata corta", 12500], ["Paleta envasada", 14000], ["Paleta", 16000], ["Peceto envasado", 18500], ["Picada especial", 13500], ["Picada oferta", 9500], ["Picaña", 17000], ["Roastbeef envasado", 14000], ["Roastbeef", 15500], ["Tapa asado envasada", 13500], ["Tapa de asado", 17500], ["Tapa de bife (marucha)", 14000], ["Tapa de nalga", 17000], ["Vacío envasado", 19000], ["Vacío", 20500]], "Pollos": [["Cajón de pollo", 75000], ["Pata y muslo", 4900], ["Churrasquito de pollo", 8800], ["Suprema fresca", 9500], ["Suprema x 15 kg congelada", 7900]], "Cerdo": [["Bondiola x caja", 8000], ["Bondiola", 8800], ["Carré deshuesado", 10000], ["Carré", 8200], ["Churrasquito de cerdo", 12500], ["Jamón", 6500], ["Lechón", 15000], ["Matambrito", 14500], ["Paleta de cerdo", 5500], ["Pechito con manta", 8200], ["Ribs Paladini", 12000], ["Solomillo", 10500]], "Achuras": [["Chinchulín", 5500], ["Lengua", 9500], ["Molleja", 26000], ["Mondongo", 8500], ["Rabo", 8500], ["Riñón", 5500]], "Embutidos": [["Chorizo colorado", 12500], ["Chorizo puro cerdo con morrón", 9500], ["Chorizo puro cerdo", 7500], ["Chorizo vacuno", 6500], ["Longaniza", 6500], ["Morcilla", 6500], ["Panceta", 22500], ["Salchicha copetín", 9800], ["Salchicha parrillera", 12500], ["Salchicha viena", 9500]], "Granja": [["Chivito", 16500], ["Cordero", 15500], ["Cochinillo", 17500], ["Pata de cordero", 14500]], "Preparados": [["Hamburguesas de carne", 13500], ["Milanesas de carne", 13500], ["Milanesas de pollo", 9500], ["Hamburguesas de pollo", 13500]]};
 
+const PRICE_CATEGORIES=["Vacunos","Pollos","Cerdo","Achuras","Embutidos","Granja","Preparados","Otros"];
+
+function catalogRowsFromBase(){
+  const rows=[];
+  let sort=0;
+  for(const [category,items] of Object.entries(PRICE_CATALOG)){
+    for(const [name,value] of items){
+      rows.push({key:normalizeProductKey(name),name,value:Number(value||0),category,sort_order:sort++});
+    }
+  }
+  return rows;
+}
+
+function activeCatalogRows(){
+  // Después de ejecutar supabase_update_v35_3_9_catalogo_precios.sql usamos el catálogo de la nube.
+  // Antes de la migración mantenemos el catálogo base para no romper la impresión actual.
+  const source=productCatalogRows.length ? productCatalogRows : catalogRowsFromBase();
+  return source.map(row=>({...row,value:catalogPrice(row.name,row.value)}));
+}
+
 function catalogPrice(name,defaultPrice){
   const key=normalizeProductKey(name);
   const direct=Object.prototype.hasOwnProperty.call(productPrices,key)
     ? productPrices[key]
     : undefined;
-
   if(direct !== undefined) return Number(direct||0);
-
-  const matchedKey=Object.keys(productPrices).find(existingKey =>
-    normalizeProductKey(existingKey) === key
-  );
-  if(matchedKey) return Number(productPrices[matchedKey]||0);
-
   return Number(defaultPrice||0);
 }
 
+function catalogGrouped(){
+  const grouped={};
+  for(const category of PRICE_CATEGORIES) grouped[category]=[];
+  activeCatalogRows()
+    .sort((a,b)=>(Number(a.sort_order||0)-Number(b.sort_order||0)) || String(a.name).localeCompare(String(b.name),"es",{sensitivity:"base"}))
+    .forEach(row=>{
+      const cat=PRICE_CATEGORIES.includes(row.category)?row.category:"Otros";
+      (grouped[cat] ||= []).push(row);
+    });
+  return Object.fromEntries(Object.entries(grouped).filter(([,items])=>items.length));
+}
 
 function buildBalancedPriceColumns(){
   const columns=[[],[],[]];
@@ -3575,38 +3780,22 @@ function buildBalancedPriceColumns(){
   let col=0;
   let used=0;
 
-  for(const [category,itemsRaw] of Object.entries(PRICE_CATALOG)){
-    const items=[...itemsRaw].sort((a,b)=>String(a[0]||"").localeCompare(String(b[0]||""),"es",{sensitivity:"base"}));
+  for(const [category,rowsRaw] of Object.entries(catalogGrouped())){
+    const items=[...rowsRaw].sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"es",{sensitivity:"base"}));
     let offset=0;
     let continuation=false;
-
     while(offset<items.length && col<3){
       const headerUnits=1.35;
       let capacity=Math.max(1,Math.floor(maxUnits-used-headerUnits));
-
-      if(capacity<=0){
-        col++;
-        used=0;
-        continue;
-      }
-
+      if(capacity<=0){ col++; used=0; continue; }
       const take=Math.min(capacity,items.length-offset);
-      columns[col].push({
-        category: continuation ? `${category} · CONT.` : category,
-        items: items.slice(offset,offset+take)
-      });
-
+      columns[col].push({category:continuation?`${category} · CONT.`:category,items:items.slice(offset,offset+take)});
       used+=headerUnits+take;
       offset+=take;
       continuation=true;
-
-      if(offset<items.length || used>=maxUnits-0.5){
-        col++;
-        used=0;
-      }
+      if(offset<items.length || used>=maxUnits-0.5){ col++; used=0; }
     }
   }
-
   return columns;
 }
 
@@ -3614,113 +3803,135 @@ function renderPricePrintSheet(){
   const sheet=$("pricePrintSheet");
   const density=$("priceDensity")?.value||"large";
   if(sheet) sheet.classList.toggle("density-medium",density==="medium");
-
   const grid=$("priceSheetGrid");
   if(!grid) return;
   grid.innerHTML="";
-
   const columns=buildBalancedPriceColumns();
   columns.forEach(chunks=>{
     const column=document.createElement("div");
     column.className="price-column";
-
     chunks.forEach(({category,items})=>{
       const section=document.createElement("section");
       section.className="price-category";
       section.innerHTML=`<h2>${escapeHtml(category.toUpperCase())}</h2><div class="price-category-list"></div>`;
       const list=section.querySelector(".price-category-list");
-
-      items.forEach(([name,defaultPrice])=>{
-        const row=document.createElement("div");
-        row.className="price-sheet-row";
-        row.innerHTML=`<span class="product">${escapeHtml(name)}</span><span class="price">${money(catalogPrice(name,defaultPrice))}</span>`;
-        list.append(row);
+      items.forEach(row=>{
+        const item=document.createElement("div");
+        item.className="price-sheet-row";
+        item.innerHTML=`<span class="product">${escapeHtml(row.name)}</span><span class="price">${money(Number(row.value||0))}</span>`;
+        list.append(item);
       });
-
       column.append(section);
     });
-
     grid.append(column);
   });
-
   if($("priceSheetTitle")) $("priceSheetTitle").textContent=($("pricePrintTitle")?.value||"LISTA DE PRECIOS").toUpperCase();
   if($("priceSheetPhone")) $("priceSheetPhone").textContent=$("pricePrintPhone")?.value||"11 3039 0331";
   const date=$("pricePrintDate")?.value;
   const dateLabel=date ? new Date(date+"T12:00:00").toLocaleDateString("es-AR") : new Date().toLocaleDateString("es-AR");
   if($("priceUpdatedDate")) $("priceUpdatedDate").textContent=`▦ Actualizado: ${dateLabel}`;
-  if($("priceSheetDate")) $("priceSheetDate").textContent=date
-    ? `VIGENTE A PARTIR DEL ${dateLabel}`
-    : "";
+  if($("priceSheetDate")) $("priceSheetDate").textContent=date ? `VIGENTE A PARTIR DEL ${dateLabel}` : "";
+}
+
+async function saveCatalogProduct({oldKey="",name,category,value,sortOrder=0}){
+  const cleanName=normalizeProductName(name);
+  const newKey=productKey(cleanName);
+  const cleanCategory=PRICE_CATEGORIES.includes(category)?category:"Otros";
+  const numeric=Number(value||0);
+  if(!newKey) throw new Error("Ingresá un nombre de producto.");
+  if(numeric<0) throw new Error("El precio no puede ser negativo.");
+  const duplicate=activeCatalogRows().find(row=>row.key===newKey && row.key!==oldKey);
+  if(duplicate) throw new Error(`Ya existe “${duplicate.name}” en el catálogo.`);
+  if(!supabaseClient) throw new Error("No hay conexión con Supabase.");
+  const payload={product_key:newKey,product_name:cleanName,last_price:numeric,category:cleanCategory,is_catalog:true,sort_order:Number(sortOrder||0),updated_at:new Date().toISOString()};
+  const {error}=await supabaseClient.from("product_prices").upsert(payload,{onConflict:"product_key"});
+  if(error){
+    if(/category|is_catalog|sort_order/i.test(error.message||"")) throw new Error("Primero ejecutá el SQL de la v35.3.9 en Supabase. "+error.message);
+    throw error;
+  }
+  if(oldKey && oldKey!==newKey){
+    const {error:deleteError}=await supabaseClient.from("product_prices").delete().eq("product_key",oldKey);
+    if(deleteError) throw deleteError;
+    delete productPrices[oldKey];
+  }
+  productPrices[newKey]=numeric;
+  const existingIndex=productCatalogRows.findIndex(row=>row.key===(oldKey||newKey));
+  const localRow={key:newKey,name:cleanName,value:numeric,category:cleanCategory,sort_order:Number(sortOrder||0)};
+  if(existingIndex>=0) productCatalogRows.splice(existingIndex,1,localRow); else productCatalogRows.push(localRow);
+  localSave();
+}
+
+async function deleteCatalogProduct(row){
+  if(!supabaseClient) throw new Error("No hay conexión con Supabase.");
+  const {error}=await supabaseClient.from("product_prices").delete().eq("product_key",row.key);
+  if(error) throw error;
+  productCatalogRows=productCatalogRows.filter(item=>item.key!==row.key);
+  delete productPrices[row.key];
+  localSave();
 }
 
 async function loadBaseCatalogPrices(){
+  if(!supabaseClient) throw new Error("No hay conexión con Supabase.");
   let saved=0;
-  for(const items of Object.values(PRICE_CATALOG)){
-    for(const [name,value] of items){
-      const key=normalizeProductKey(name);
-      if(!Object.prototype.hasOwnProperty.call(productPrices,key)){
-        await rememberProductPrice(name,value);
-        saved++;
-      }
+  const currentKeys=new Set(activeCatalogRows().map(row=>row.key));
+  for(const row of catalogRowsFromBase()){
+    if(!currentKeys.has(row.key)){
+      await saveCatalogProduct({name:row.name,category:row.category,value:catalogPrice(row.name,row.value),sortOrder:row.sort_order});
+      saved++;
     }
   }
-  renderPrices();
-  renderPricePrintSheet();
-  alert(saved ? `Se cargaron ${saved} precios base.` : "El catálogo base ya estaba cargado.");
+  renderPrices(); renderPricePrintSheet();
+  alert(saved ? `Se agregaron ${saved} productos faltantes del catálogo base.` : "El catálogo base ya está completo.");
 }
 
 function priceEntries(){
-  return Object.entries(productPrices)
-    .map(([key,value])=>({key,name:key.replace(/\s+/g," "),value:Number(value||0)}))
-    .sort((a,b)=>a.name.localeCompare(b.name,"es"));
+  return activeCatalogRows()
+    .map(row=>({...row,value:Number(catalogPrice(row.name,row.value)||0)}))
+    .sort((a,b)=>String(a.category).localeCompare(String(b.category),"es") || String(a.name).localeCompare(String(b.name),"es"));
+}
+
+function categoryOptions(selected){
+  return PRICE_CATEGORIES.map(cat=>`<option value="${escapeHtml(cat)}" ${cat===selected?"selected":""}>${escapeHtml(cat)}</option>`).join("");
 }
 
 function renderPrices(){
   const list=$("priceList");
   if(!list) return;
   const search=($("priceSearch")?.value||"").trim().toLowerCase();
-  const entries=priceEntries().filter(row=>row.name.includes(search));
-  if($("priceCount")) $("priceCount").textContent=`${entries.length} producto${entries.length===1?"":"s"}`;
+  const categoryFilter=$("priceCategoryFilter")?.value||"";
+  const entries=priceEntries().filter(row=>(!search || row.name.toLowerCase().includes(search)) && (!categoryFilter || row.category===categoryFilter));
+  if($("priceCount")) $("priceCount").textContent=`${entries.length} producto${entries.length===1?"":"s"} en catálogo`;
   list.innerHTML="";
-
-  if(!entries.length){
-    list.innerHTML='<div class="price-empty">No hay precios guardados con ese nombre.</div>';
-    return;
-  }
+  if(!entries.length){ list.innerHTML='<div class="price-empty">No hay productos del catálogo con ese filtro.</div>'; return; }
 
   entries.forEach(row=>{
     const div=document.createElement("div");
-    div.className="price-row";
+    div.className="price-row catalog-price-row";
     div.innerHTML=`
-      <div class="price-name">${escapeHtml(row.name)}</div>
-      <input type="number" min="0" step="0.01" value="${row.value}">
+      <input class="price-edit-name" value="${escapeHtml(row.name)}" aria-label="Producto">
+      <select class="price-edit-category" aria-label="Rubro">${categoryOptions(row.category)}</select>
+      <input class="price-edit-value" type="number" min="0" step="0.01" value="${Number(row.value||0)}" aria-label="Precio">
       <div class="price-actions">
-        <button type="button" class="secondary save-price-row">Guardar</button>
+        <button type="button" class="secondary save-price-row">Guardar cambios</button>
         <button type="button" class="danger delete-price-row">Eliminar</button>
       </div>`;
-    const input=div.querySelector("input");
+    const nameInput=div.querySelector(".price-edit-name");
+    const categoryInput=div.querySelector(".price-edit-category");
+    const valueInput=div.querySelector(".price-edit-value");
     div.querySelector(".save-price-row").addEventListener("click",async()=>{
       try{
-        await rememberProductPrice(row.name,Number(input.value||0));
-        renderPrices();
-      }catch(e){ alert("No se pudo guardar el precio: "+e.message); }
+        await saveCatalogProduct({oldKey:row.key,name:nameInput.value,category:categoryInput.value,value:Number(valueInput.value||0),sortOrder:row.sort_order});
+        renderPrices(); renderPricePrintSheet();
+      }catch(e){ alert("No se pudo guardar: "+e.message); }
     });
     div.querySelector(".delete-price-row").addEventListener("click",async()=>{
-      if(!confirm(`¿Eliminar el precio guardado de ${row.name}?`)) return;
-      try{
-        delete productPrices[row.key];
-        localSave();
-        if(supabaseClient){
-          const {error}=await supabaseClient.from("product_prices").delete().eq("product_key",row.key);
-          if(error) throw error;
-        }
-        renderPrices();
-      }catch(e){ alert("No se pudo eliminar: "+e.message); }
+      if(!confirm(`¿Eliminar “${row.name}” del catálogo de precios?\n\nLos pedidos y remitos ya guardados NO se modifican.`)) return;
+      try{ await deleteCatalogProduct(row); renderPrices(); renderPricePrintSheet(); }
+      catch(e){ alert("No se pudo eliminar: "+e.message); }
     });
     list.append(div);
   });
 }
-
 
 on("loadCatalogPrices","click",async()=>{
   const btn=$("loadCatalogPrices");
@@ -4226,22 +4437,25 @@ on("priceDensity","change",renderPricePrintSheet);
 window.addEventListener("afterprint",()=>document.body.classList.remove("price-list-printing"));
 
 on("priceSearch","input",renderPrices);
+on("priceCategoryFilter","change",renderPrices);
 on("priceForm","submit",async(event)=>{
   event.preventDefault();
   const product=normalizeProductName($("priceProduct")?.value||"");
+  const category=$("priceCategory")?.value||"Otros";
   const value=Number($("priceValue")?.value||0);
-  if(!product || value<0) return alert("Completá producto y precio.");
+  if(!product || value<0) return alert("Completá producto, rubro y precio.");
   try{
-    await rememberProductPrice(product,value);
+    const maxSort=Math.max(0,...activeCatalogRows().map(row=>Number(row.sort_order||0)));
+    await saveCatalogProduct({name:product,category,value,sortOrder:maxSort+1});
     if($("priceProduct")) $("priceProduct").value="";
     if($("priceValue")) $("priceValue").value="";
-    renderPrices();
-  }catch(e){ alert("No se pudo guardar: "+e.message); }
+    renderPrices(); renderPricePrintSheet();
+  }catch(e){ alert("No se pudo agregar el producto: "+e.message); }
 });
 on("refreshPrices","click",async()=>{
   try{
     if(supabaseClient) await reloadCloudData();
-    renderPrices();
+    renderPrices(); renderPricePrintSheet();
   }catch(e){ alert("No se pudieron actualizar los precios: "+e.message); }
 });
 
@@ -4347,6 +4561,8 @@ on("selectAllRemitos","change",()=>{
   updateSelectedRemitosUi();
 });
 on("printSelectedRemitos","click",printSelectedRemitos);
+on("downloadSelectedRemitosPdf","click",downloadSelectedRemitosPdf);
+on("shareSelectedRemitos","click",shareSelectedRemitos);
 on("closeSignedReceipt","click",()=>{
   const dialog=$("signedReceiptDialog");
   if(typeof dialog?.close==="function") dialog.close();

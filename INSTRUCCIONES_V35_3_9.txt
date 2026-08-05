@@ -1,0 +1,38 @@
+DON ZOILO v35.3.9 · CATÁLOGO ADMINISTRABLE DE PRECIOS
+
+QUÉ CAMBIA
+- El módulo Precios ahora permite agregar productos con rubro y precio.
+- Cada producto del catálogo puede editarse: nombre, rubro y precio.
+- Cada producto del catálogo puede eliminarse con confirmación.
+- Se evita crear un duplicado con el mismo nombre normalizado.
+- La lista A4 toma el catálogo administrable, no solamente la lista fija del código.
+- Pedidos y remitos ya guardados NO se modifican al editar o eliminar un producto.
+- Los precios guardados por otros flujos siguen existiendo como sugerencias, aunque no necesariamente formen parte del catálogo A4.
+
+PASO 1 · SUPABASE (HACER UNA SOLA VEZ)
+1. Abrir Supabase > SQL Editor.
+2. Abrir el archivo: supabase_update_v35_3_9_catalogo_precios.sql
+3. Copiar todo el contenido.
+4. Pegar en SQL Editor y ejecutar RUN.
+
+Este SQL:
+- agrega category, is_catalog y sort_order a product_prices;
+- agrega permiso DELETE para el rol anon usado actualmente por la app;
+- marca/carga el catálogo base SIN sobrescribir precios que ya existían;
+- no toca orders, movements, remitos, stock, caja ni cuentas corrientes.
+
+PASO 2 · GITHUB / VERCEL
+Subir los archivos de esta versión reemplazando los actuales. Vercel publicará el cambio automáticamente.
+
+PASO 3 · PRUEBA
+1. Abrir Precios.
+2. Tocar Actualizar.
+3. Probar agregar un producto nuevo.
+4. Editar su nombre, rubro y precio.
+5. Verificar Vista previa A4.
+6. Eliminar SOLO ese producto de prueba y confirmar que desaparece del catálogo.
+7. Revisar que un remito histórico siga igual.
+
+IMPORTANTE
+- No ejecutar el SQL anterior si se está usando otra política de seguridad distinta a la configuración actual sin revisarla primero.
+- La eliminación quita el registro de product_prices y su sugerencia futura; no elimina datos históricos de pedidos/remitos.
