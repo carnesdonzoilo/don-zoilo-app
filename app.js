@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.10";
+const APP_VERSION = "35.3.11";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2752,7 +2752,7 @@ function suggestedPrice(product){
   return Number(productPrices[productKey(product)] || 0);
 }
 
-async function rememberProductPrice(product, price, category=null){
+async function rememberProductPrice(product, price, category=null, catalogMode=null){
   const key=productKey(product);
   const value=Number(price||0);
   if(!key || value<0) return;
@@ -2760,8 +2760,17 @@ async function rememberProductPrice(product, price, category=null){
   const currentMeta=productCatalogMeta[key]||{};
   const cleanCategory=String(category ?? currentMeta.category ?? "Sin categoría").trim() || "Sin categoría";
 
+  // v35.3.11: un precio aprendido desde pedidos/remitos NO debe convertir
+  // automáticamente el producto en parte de la lista A4. Si ya existía,
+  // conserva su estado; si es histórico/nuevo, queda fuera del catálogo.
+  const isCatalog = catalogMode === true
+    ? true
+    : catalogMode === false
+      ? false
+      : (Object.prototype.hasOwnProperty.call(currentMeta,"is_catalog") ? currentMeta.is_catalog !== false : false);
+
   productPrices[key]=value;
-  productCatalogMeta[key]={...currentMeta,name:cleanName,category:cleanCategory,is_catalog:true};
+  productCatalogMeta[key]={...currentMeta,name:cleanName,category:cleanCategory,is_catalog:isCatalog};
   localSave();
 
   if(supabaseClient){
@@ -2770,7 +2779,7 @@ async function rememberProductPrice(product, price, category=null){
       product_name:cleanName,
       last_price:value,
       category:cleanCategory,
-      is_catalog:true,
+      is_catalog:isCatalog,
       updated_at:new Date().toISOString()
     },{onConflict:"product_key"});
     if(error) throw error;
@@ -3692,7 +3701,7 @@ async function loadBaseCatalogPrices(){
     for(const [name,value] of items){
       const key=normalizeProductKey(name);
       if(!Object.prototype.hasOwnProperty.call(productPrices,key)){
-        await rememberProductPrice(name,value);
+        await rememberProductPrice(name,value,null,true);
         saved++;
       }
     }
@@ -3702,18 +3711,25 @@ async function loadBaseCatalogPrices(){
   alert(saved ? `Se cargaron ${saved} precios base.` : "El catálogo base ya estaba cargado.");
 }
 
+const PRICE_CATEGORIES=["Vacunos","Pollos","Cerdo","Achuras","Embutidos","Granja","Preparados","Sin categoría"];
+
+function priceCategoryRank(category){
+  const idx=PRICE_CATEGORIES.indexOf(String(category||"Sin categoría"));
+  return idx>=0 ? idx : PRICE_CATEGORIES.length-1;
+}
+
 function priceEntries(){
   return Object.entries(productPrices)
     .map(([key,value])=>({
       key,
       name: productCatalogMeta[key]?.name || key.replace(/\s+/g," "),
       category: productCatalogMeta[key]?.category || "Sin categoría",
+      is_catalog: productCatalogMeta[key]?.is_catalog !== false,
       value:Number(value||0)
     }))
-    .sort((a,b)=>a.category.localeCompare(b.category,"es") || a.name.localeCompare(b.name,"es"));
+    // Regla fija: Vacunos siempre primero; Sin categoría siempre al final.
+    .sort((a,b)=>priceCategoryRank(a.category)-priceCategoryRank(b.category) || a.name.localeCompare(b.name,"es"));
 }
-
-const PRICE_CATEGORIES=["Vacunos","Pollos","Cerdo","Achuras","Embutidos","Granja","Preparados","Sin categoría"];
 
 function priceCategoryOptions(selected){
   const current=String(selected||"Sin categoría");
@@ -3731,7 +3747,7 @@ async function saveCatalogProduct({oldKey=null,name,category,value}){
     throw new Error("Ya existe otro producto con ese nombre.");
   }
 
-  await rememberProductPrice(cleanName,price,category);
+  await rememberProductPrice(cleanName,price,category,true);
 
   if(oldKey && oldKey!==newKey){
     delete productPrices[oldKey];
@@ -3765,9 +3781,10 @@ function renderPrices(){
       <label class="price-edit-field"><span>Producto</span><input class="price-name-input" value="${escapeHtml(row.name)}"></label>
       <label class="price-edit-field"><span>Rubro</span><select class="price-category-input">${priceCategoryOptions(row.category)}</select></label>
       <label class="price-edit-field"><span>Precio</span><input class="price-value-input" type="number" min="0" step="0.01" value="${row.value}"></label>
+      <div class="price-catalog-state ${row.is_catalog?"is-visible":"is-hidden"}">${row.is_catalog?"✓ Visible en lista A4":"○ Fuera de lista A4"}</div>
       <div class="price-actions">
         <button type="button" class="secondary save-price-row">Guardar cambios</button>
-        <button type="button" class="danger delete-price-row">Eliminar producto</button>
+        <button type="button" class="${row.is_catalog?"danger":"secondary"} toggle-price-catalog">${row.is_catalog?"Quitar de la lista":"Volver a mostrar"}</button>
       </div>`;
     const nameInput=div.querySelector(".price-name-input");
     const categoryInput=div.querySelector(".price-category-input");
@@ -3780,19 +3797,24 @@ function renderPrices(){
         alert("Producto actualizado. La lista A4 también quedó actualizada.");
       }catch(e){ alert("No se pudo guardar: "+e.message); }
     });
-    div.querySelector(".delete-price-row").addEventListener("click",async()=>{
-      if(!confirm(`¿Eliminar ${row.name} del catálogo de precios?\n\nLos pedidos y remitos ya guardados NO se modifican.`)) return;
+    div.querySelector(".toggle-price-catalog").addEventListener("click",async()=>{
+      const nextVisible=!row.is_catalog;
+      const message=nextVisible
+        ? `¿Volver a mostrar ${row.name} en la lista de precios?`
+        : `¿Quitar ${row.name} de la lista de precios?\n\nEl registro se conserva. No se borran pedidos, remitos ni datos históricos.`;
+      if(!confirm(message)) return;
       try{
         if(supabaseClient){
-          const {error}=await supabaseClient.from("product_prices").delete().eq("product_key",row.key);
+          const {error}=await supabaseClient.from("product_prices")
+            .update({is_catalog:nextVisible,updated_at:new Date().toISOString()})
+            .eq("product_key",row.key);
           if(error) throw error;
         }
-        delete productPrices[row.key];
-        delete productCatalogMeta[row.key];
+        productCatalogMeta[row.key]={...(productCatalogMeta[row.key]||{}),is_catalog:nextVisible};
         localSave();
         renderPrices();
         renderPricePrintSheet();
-      }catch(e){ alert("No se pudo eliminar: "+e.message); }
+      }catch(e){ alert("No se pudo cambiar la visibilidad: "+e.message); }
     });
     list.append(div);
   });

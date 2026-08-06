@@ -1093,3 +1093,27 @@ dialog::backdrop{background:#0009}
 .expense-category-detail{margin-top:18px;border-top:2px solid #d0d5dd;padding-top:16px}
 .expense-category-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
 .expense-category-detail-head h3{margin:4px 0 0}
+
+
+/* V35.3.9 etapa 1 — catálogo editable de Precios */
+.price-row-catalog{
+  display:grid;
+  grid-template-columns:minmax(220px,2fr) minmax(150px,1fr) minmax(130px,.8fr) auto;
+  gap:10px;
+  align-items:end;
+}
+.price-edit-field{display:flex;flex-direction:column;gap:4px;margin:0;}
+.price-edit-field>span{font-size:12px;color:var(--muted,#667085);font-weight:700;}
+.price-edit-field input,.price-edit-field select{width:100%;min-height:42px;}
+@media (max-width:760px){
+  .price-row-catalog{grid-template-columns:1fr 1fr;}
+  .price-row-catalog .price-edit-field:first-child{grid-column:1/-1;}
+  .price-row-catalog .price-actions{grid-column:1/-1;display:flex;gap:8px;}
+  .price-row-catalog .price-actions button{flex:1;}
+  .price-form{grid-template-columns:1fr;}
+}
+
+/* v35.3.11 - estado seguro del catálogo */
+.price-catalog-state{font-size:.86rem;font-weight:700;padding:7px 10px;border-radius:10px;background:#eef3f6;color:#42515b;align-self:center}
+.price-catalog-state.is-visible{background:#edf7ef;color:#246638}
+.price-catalog-state.is-hidden{background:#f5f1e8;color:#755c25}

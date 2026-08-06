@@ -1,0 +1,12 @@
+DON ZOILO v35.3.11 — CATÁLOGO SEGURO
+
+Cambios:
+- Se reemplaza “Eliminar producto” por “Quitar de la lista”.
+- Quitar de la lista NO borra el registro de product_prices: solo cambia is_catalog a false.
+- El producto desaparece de Vista previa A4/PDF, pero conserva precio/metadatos históricos.
+- Se puede restaurar con “Volver a mostrar”.
+- Los precios aprendidos automáticamente desde pedidos/remitos ya NO se agregan solos a la lista A4.
+- Vacunos queda siempre como primera categoría en Precios y en la lista A4.
+- No requiere SQL nuevo si ya se ejecutó la migración v35.3.9 (category/is_catalog/sort_order).
+
+IMPORTANTE: esta versión no elimina pedidos, remitos, movimientos ni registros históricos.
