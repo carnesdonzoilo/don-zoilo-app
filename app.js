@@ -19,6 +19,7 @@ const CONFIG_KEY = "don_zoilo_supabase_config";
 let movements = [];
 let orders = [];
 let productPrices = {};
+let productCatalogMeta = {};
 let supabaseClient = null;
 let deferredPrompt = null;
 let realtimeChannel = null;
@@ -43,18 +44,21 @@ function monthStart(){
 
 const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
+const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.2";
+const APP_VERSION = "35.3.9";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
   productPrices = JSON.parse(localStorage.getItem(PRICES_STORAGE_KEY) || "{}");
+  productCatalogMeta = JSON.parse(localStorage.getItem(PRICE_META_STORAGE_KEY) || "{}");
 }
 function localSave(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(movements));
   localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
   localStorage.setItem(PRICES_STORAGE_KEY, JSON.stringify(productPrices));
+  localStorage.setItem(PRICE_META_STORAGE_KEY, JSON.stringify(productCatalogMeta));
 }
 
 function buildSafetySnapshot(reason="automático"){
@@ -235,7 +239,17 @@ function applyCloudPayload(payload,reason="sincronización correcta"){
   movements=payload.movementData;
   orders=payload.orderData;
   productPrices={};
-  payload.priceData.forEach(row=>productPrices[row.product_key]=Number(row.last_price||0));
+  productCatalogMeta={};
+  payload.priceData.forEach(row=>{
+    const key=row.product_key;
+    productPrices[key]=Number(row.last_price||0);
+    productCatalogMeta[key]={
+      name: row.product_name || key.replace(/\s+/g," "),
+      category: row.category || "Sin categoría",
+      is_catalog: row.is_catalog !== false,
+      sort_order: Number(row.sort_order||0)
+    };
+  });
   localSave();
   saveSafetyBackup(reason);
 }
@@ -2738,22 +2752,28 @@ function suggestedPrice(product){
   return Number(productPrices[productKey(product)] || 0);
 }
 
-async function rememberProductPrice(product, price){
+async function rememberProductPrice(product, price, category=null){
   const key=productKey(product);
   const value=Number(price||0);
-  if(!key || value<=0) return;
+  if(!key || value<0) return;
+  const cleanName=normalizeProductName(product);
+  const currentMeta=productCatalogMeta[key]||{};
+  const cleanCategory=String(category ?? currentMeta.category ?? "Sin categoría").trim() || "Sin categoría";
 
   productPrices[key]=value;
+  productCatalogMeta[key]={...currentMeta,name:cleanName,category:cleanCategory,is_catalog:true};
   localSave();
 
   if(supabaseClient){
     const {error}=await supabaseClient.from("product_prices").upsert({
       product_key:key,
-      product_name:normalizeProductName(product),
+      product_name:cleanName,
       last_price:value,
+      category:cleanCategory,
+      is_catalog:true,
       updated_at:new Date().toISOString()
     },{onConflict:"product_key"});
-    if(error) console.warn("No se pudo guardar precio sugerido",error);
+    if(error) throw error;
   }
 }
 
@@ -3671,49 +3691,91 @@ async function loadBaseCatalogPrices(){
 
 function priceEntries(){
   return Object.entries(productPrices)
-    .map(([key,value])=>({key,name:key.replace(/\s+/g," "),value:Number(value||0)}))
-    .sort((a,b)=>a.name.localeCompare(b.name,"es"));
+    .map(([key,value])=>({
+      key,
+      name: productCatalogMeta[key]?.name || key.replace(/\s+/g," "),
+      category: productCatalogMeta[key]?.category || "Sin categoría",
+      value:Number(value||0)
+    }))
+    .sort((a,b)=>a.category.localeCompare(b.category,"es") || a.name.localeCompare(b.name,"es"));
+}
+
+const PRICE_CATEGORIES=["Vacunos","Pollos","Cerdo","Achuras","Embutidos","Granja","Preparados","Sin categoría"];
+
+function priceCategoryOptions(selected){
+  const current=String(selected||"Sin categoría");
+  const values=PRICE_CATEGORIES.includes(current) ? PRICE_CATEGORIES : [current,...PRICE_CATEGORIES];
+  return values.map(cat=>`<option value="${escapeHtml(cat)}" ${cat===current?"selected":""}>${escapeHtml(cat)}</option>`).join("");
+}
+
+async function saveCatalogProduct({oldKey=null,name,category,value}){
+  const cleanName=normalizeProductName(name||"");
+  const newKey=productKey(cleanName);
+  const price=Number(value||0);
+  if(!cleanName || !newKey) throw new Error("Ingresá un nombre de producto.");
+  if(price<0) throw new Error("El precio no puede ser negativo.");
+  if(oldKey && newKey!==oldKey && Object.prototype.hasOwnProperty.call(productPrices,newKey)){
+    throw new Error("Ya existe otro producto con ese nombre.");
+  }
+
+  await rememberProductPrice(cleanName,price,category);
+
+  if(oldKey && oldKey!==newKey){
+    delete productPrices[oldKey];
+    delete productCatalogMeta[oldKey];
+    localSave();
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("product_prices").delete().eq("product_key",oldKey);
+      if(error) throw error;
+    }
+  }
+  return newKey;
 }
 
 function renderPrices(){
   const list=$("priceList");
   if(!list) return;
   const search=($("priceSearch")?.value||"").trim().toLowerCase();
-  const entries=priceEntries().filter(row=>row.name.includes(search));
+  const entries=priceEntries().filter(row=>`${row.name} ${row.category}`.toLowerCase().includes(search));
   if($("priceCount")) $("priceCount").textContent=`${entries.length} producto${entries.length===1?"":"s"}`;
   list.innerHTML="";
 
   if(!entries.length){
-    list.innerHTML='<div class="price-empty">No hay precios guardados con ese nombre.</div>';
+    list.innerHTML='<div class="price-empty">No hay productos con ese nombre.</div>';
     return;
   }
 
   entries.forEach(row=>{
     const div=document.createElement("div");
-    div.className="price-row";
+    div.className="price-row price-row-catalog";
     div.innerHTML=`
-      <div class="price-name">${escapeHtml(row.name)}</div>
-      <input type="number" min="0" step="0.01" value="${row.value}">
+      <label class="price-edit-field"><span>Producto</span><input class="price-name-input" value="${escapeHtml(row.name)}"></label>
+      <label class="price-edit-field"><span>Rubro</span><select class="price-category-input">${priceCategoryOptions(row.category)}</select></label>
+      <label class="price-edit-field"><span>Precio</span><input class="price-value-input" type="number" min="0" step="0.01" value="${row.value}"></label>
       <div class="price-actions">
-        <button type="button" class="secondary save-price-row">Guardar</button>
-        <button type="button" class="danger delete-price-row">Eliminar</button>
+        <button type="button" class="secondary save-price-row">Guardar cambios</button>
+        <button type="button" class="danger delete-price-row">Eliminar producto</button>
       </div>`;
-    const input=div.querySelector("input");
+    const nameInput=div.querySelector(".price-name-input");
+    const categoryInput=div.querySelector(".price-category-input");
+    const valueInput=div.querySelector(".price-value-input");
     div.querySelector(".save-price-row").addEventListener("click",async()=>{
       try{
-        await rememberProductPrice(row.name,Number(input.value||0));
+        await saveCatalogProduct({oldKey:row.key,name:nameInput.value,category:categoryInput.value,value:valueInput.value});
         renderPrices();
-      }catch(e){ alert("No se pudo guardar el precio: "+e.message); }
+        alert("Producto actualizado.");
+      }catch(e){ alert("No se pudo guardar: "+e.message); }
     });
     div.querySelector(".delete-price-row").addEventListener("click",async()=>{
-      if(!confirm(`¿Eliminar el precio guardado de ${row.name}?`)) return;
+      if(!confirm(`¿Eliminar ${row.name} del catálogo de precios?\n\nLos pedidos y remitos ya guardados NO se modifican.`)) return;
       try{
-        delete productPrices[row.key];
-        localSave();
         if(supabaseClient){
           const {error}=await supabaseClient.from("product_prices").delete().eq("product_key",row.key);
           if(error) throw error;
         }
+        delete productPrices[row.key];
+        delete productCatalogMeta[row.key];
+        localSave();
         renderPrices();
       }catch(e){ alert("No se pudo eliminar: "+e.message); }
     });
@@ -4229,10 +4291,13 @@ on("priceSearch","input",renderPrices);
 on("priceForm","submit",async(event)=>{
   event.preventDefault();
   const product=normalizeProductName($("priceProduct")?.value||"");
+  const category=$("priceCategory")?.value||"Sin categoría";
   const value=Number($("priceValue")?.value||0);
+  const key=productKey(product);
   if(!product || value<0) return alert("Completá producto y precio.");
+  if(Object.prototype.hasOwnProperty.call(productPrices,key)) return alert("Ese producto ya existe. Buscalo en la lista y usá Guardar cambios.");
   try{
-    await rememberProductPrice(product,value);
+    await saveCatalogProduct({name:product,category,value});
     if($("priceProduct")) $("priceProduct").value="";
     if($("priceValue")) $("priceValue").value="";
     renderPrices();

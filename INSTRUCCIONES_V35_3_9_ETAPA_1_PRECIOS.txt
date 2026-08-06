@@ -1,0 +1,22 @@
+DON ZOILO v35.3.9 — ETAPA 1 PRECIOS
+
+BASE: v35.3.7 estable.
+
+CAMBIOS LIMITADOS AL MODULO PRECIOS:
+- Agregar producto con nombre, rubro y precio.
+- Editar nombre, rubro y precio.
+- Eliminar producto con confirmacion.
+- Evita duplicados por nombre normalizado.
+- Los pedidos y remitos historicos no se modifican.
+- NO se modifica en esta etapa el diseño A4/PDF.
+
+SUPABASE:
+El SQL de catalogo ejecutado anteriormente ya agrego category, is_catalog, sort_order y la policy DELETE. NO volver a ejecutarlo.
+
+PRUEBA RECOMENDADA:
+1) Subir esta version.
+2) Verificar que el resto de modulos conserva datos.
+3) En Precios agregar un producto de prueba.
+4) Editarlo.
+5) Eliminarlo.
+6) Confirmar desde otro dispositivo que sincroniza.
