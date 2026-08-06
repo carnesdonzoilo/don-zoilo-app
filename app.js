@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.9";
+const APP_VERSION = "35.3.10";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3589,13 +3589,26 @@ function catalogPrice(name,defaultPrice){
 }
 
 
+function dynamicPriceCatalog(){
+  const catalog={};
+  for(const row of priceEntries()){
+    const meta=productCatalogMeta[row.key]||{};
+    if(meta.is_catalog===false) continue;
+    const category=String(row.category||"Sin categoría").trim()||"Sin categoría";
+    if(!catalog[category]) catalog[category]=[];
+    catalog[category].push([row.name,Number(row.value||0)]);
+  }
+  return catalog;
+}
+
 function buildBalancedPriceColumns(){
   const columns=[[],[],[]];
   const maxUnits=30.5;
   let col=0;
   let used=0;
+  const liveCatalog=dynamicPriceCatalog();
 
-  for(const [category,itemsRaw] of Object.entries(PRICE_CATALOG)){
+  for(const [category,itemsRaw] of Object.entries(liveCatalog)){
     const items=[...itemsRaw].sort((a,b)=>String(a[0]||"").localeCompare(String(b[0]||""),"es",{sensitivity:"base"}));
     let offset=0;
     let continuation=false;
@@ -3763,7 +3776,8 @@ function renderPrices(){
       try{
         await saveCatalogProduct({oldKey:row.key,name:nameInput.value,category:categoryInput.value,value:valueInput.value});
         renderPrices();
-        alert("Producto actualizado.");
+        renderPricePrintSheet();
+        alert("Producto actualizado. La lista A4 también quedó actualizada.");
       }catch(e){ alert("No se pudo guardar: "+e.message); }
     });
     div.querySelector(".delete-price-row").addEventListener("click",async()=>{
@@ -3777,6 +3791,7 @@ function renderPrices(){
         delete productCatalogMeta[row.key];
         localSave();
         renderPrices();
+        renderPricePrintSheet();
       }catch(e){ alert("No se pudo eliminar: "+e.message); }
     });
     list.append(div);
@@ -4301,12 +4316,14 @@ on("priceForm","submit",async(event)=>{
     if($("priceProduct")) $("priceProduct").value="";
     if($("priceValue")) $("priceValue").value="";
     renderPrices();
+    renderPricePrintSheet();
   }catch(e){ alert("No se pudo guardar: "+e.message); }
 });
 on("refreshPrices","click",async()=>{
   try{
     if(supabaseClient) await reloadCloudData();
     renderPrices();
+    renderPricePrintSheet();
   }catch(e){ alert("No se pudieron actualizar los precios: "+e.message); }
 });
 

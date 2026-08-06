@@ -1,0 +1,15 @@
+DON ZOILO v35.3.10 — ETAPA 2 PRECIOS
+
+Base: v35.3.9 Etapa 1, construida sobre v35.3.7 estable.
+
+CAMBIO PRINCIPAL
+- La lista A4/PDF y la imagen para FxPrint ya no leen el catálogo fijo del código.
+- Leen en tiempo real los productos administrados en Precios (Supabase product_prices).
+- Si se agrega un producto, aparece en la lista A4 dentro de su rubro.
+- Si se cambia nombre, rubro o precio, la lista A4 refleja el cambio.
+- Si se elimina un producto, desaparece de la lista A4.
+- Los pedidos y remitos históricos no se modifican.
+
+IMPORTANTE
+- NO ejecutar SQL adicional. El SQL de v35.3.9 ya fue aplicado.
+- Primero verificar datos generales de la app; luego probar un producto de prueba y Vista previa A4.
