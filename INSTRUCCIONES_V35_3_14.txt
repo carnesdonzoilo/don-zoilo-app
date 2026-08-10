@@ -1,0 +1,16 @@
+DON ZOILO — V35.3.14
+
+CAMBIOS
+- En los remitos impresos/PDF se muestra TOTAL DEL REMITO.
+- Debajo se muestra SALDO ACTUALIZADO del cliente luego de ese remito.
+- La leyenda “Importado desde texto” se elimina de Observaciones al imprimir el remito.
+- Otras observaciones reales se conservan.
+
+BASE DE DATOS
+- No requiere cambios en Supabase.
+
+INSTALACION
+1. Subir/reemplazar estos archivos en GitHub.
+2. Esperar el despliegue de Vercel.
+3. Verificar que la cabecera muestre Versión 35.3.14.
+4. Probar un remito entregado de un cliente con cuenta corriente.

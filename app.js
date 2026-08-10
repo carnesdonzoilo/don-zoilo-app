@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.13";
+const APP_VERSION = "35.3.14";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -671,10 +671,39 @@ async function showSignedReceipt(batchKey,items){
   }
 }
 
+// V35.3.14 — Remitos: saldo actualizado y limpieza de observaciones importadas.
+function cleanRemitoNote(value){
+  return String(value||"")
+    .replace(/importado\s+desde\s+texto/gi,"")
+    .replace(/^[\s·|\-–—]+|[\s·|\-–—]+$/g,"")
+    .trim();
+}
+
+function clientBalanceThroughRemito(items){
+  if(!items?.length) return 0;
+  const first=items[0];
+  const batchKey=first.batch_id||first.id;
+  const target=movements.find(m=>m.type==="venta" && movementMatchesBatch(m,batchKey,items));
+  const list=accountMovementsFor(first.client).slice().sort((a,b)=>{
+    const da=String(a.date||""); const db=String(b.date||"");
+    if(da!==db) return da.localeCompare(db);
+    return String(a.created_at||"").localeCompare(String(b.created_at||""));
+  });
+  if(!target) return accountTotals(first.client).balance;
+  let balance=0;
+  for(const m of list){
+    if(isOpeningBalanceMovement(m) || m.type==="venta") balance+=Number(m.amount||0);
+    else if(m.type==="cobro") balance-=Number(m.amount||0);
+    if(m.id===target.id) break;
+  }
+  return balance;
+}
+
 function remitoHtmlForItems(items){
   const first=items[0];
   const total=items.reduce((sum,item)=>sum+Number(item.total||0),0);
-  const notes=[...new Set(items.map(i=>i.notes).filter(Boolean))].join(" · ") || "—";
+  const notes=[...new Set(items.map(i=>cleanRemitoNote(i.notes)).filter(Boolean))].join(" · ") || "—";
+  const updatedBalance=clientBalanceThroughRemito(items);
   const remitoNo=remitoSequence(items);
   const rows=items.map(item=>`
     <tr>
@@ -698,7 +727,7 @@ function remitoHtmlForItems(items){
         <div><span>Estado</span><strong>${items.every(i=>i.delivered)?"ENTREGADO":"PENDIENTE"}</strong></div>
       </div>
       <table><thead><tr><th>Cant.</th><th>Unidad</th><th>Descripción</th><th>P. unit.</th><th>Importe</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="bottom"><div class="notes"><span>Observaciones</span><div>${escapeHtml(notes)}</div></div><div class="total"><span>TOTAL</span><strong>${money(total)}</strong></div></div>
+      <div class="bottom"><div class="notes"><span>Observaciones</span><div>${escapeHtml(notes)}</div></div><div class="total remito-totals"><div><span>TOTAL DEL REMITO</span><strong>${money(total)}</strong></div><div><span>SALDO ACTUALIZADO</span><strong>${money(updatedBalance)}</strong></div></div></div>
       <div class="signatures">
         <div><div class="line"></div><span>Entregó</span></div>
         <div><div class="line"></div><span>Recibió conforme</span></div>
@@ -737,7 +766,7 @@ function selectedRemitosPrintHtml(batches){
   th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
   .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm}
   .notes{border:1px solid #111;min-height:16mm;padding:2mm}.notes span{font-size:6pt;font-weight:900}.notes div{font-size:7pt}
-  .total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:9pt}.total strong{font-size:12pt}
+  .total{border-top:2px solid #111;padding-top:2mm;font-size:8pt}.total>div{display:flex;justify-content:space-between;gap:3mm;margin-bottom:1.5mm}.total span{font-weight:800}.total strong{font-size:10.5pt;white-space:nowrap}.total>div:last-child{border-top:1px solid #999;padding-top:1.5mm;margin-top:1mm}
   .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}
   .signatures>div{text-align:center}.line{border-top:1px solid #111}.signatures span{font-size:6.5pt}
   @page{size:A4 portrait;margin:0}
