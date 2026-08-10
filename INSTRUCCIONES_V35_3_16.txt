@@ -1,0 +1,14 @@
+DON ZOILO V35.3.16 — RANKING DE CLIENTES EN ESTADÍSTICAS
+
+CAMBIO
+- Se mantiene intacto el Ranking de productos existente.
+- Se agrega debajo un Ranking de clientes.
+- Usa únicamente remitos marcados como ENTREGADOS, igual que las estadísticas actuales.
+- Respeta el período Desde/Hasta y el filtro de cliente.
+- Muestra: posición, cliente, kilos, cantidad de pedidos/remitos y facturación.
+- El Ranking de clientes se ordena siempre por FACTURACIÓN de mayor a menor.
+- En empates prioriza kilos y luego cantidad de pedidos.
+
+BASE DE DATOS
+- No requiere SQL ni cambios en Supabase.
+- Calcula la información con los datos de pedidos/remitos ya cargados.
