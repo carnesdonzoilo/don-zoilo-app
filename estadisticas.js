@@ -1,5 +1,5 @@
 // DON ZOILO V35.3.16 — ESTADÍSTICAS
-// Rankings de productos y clientes a partir de remitos ENTREGADOS.
+// Ranking de productos + ranking de clientes a partir de remitos ENTREGADOS.
 (() => {
   const byId = id => document.getElementById(id);
   const moneyFmt = new Intl.NumberFormat('es-AR', {style:'currency', currency:'ARS', maximumFractionDigits:0});
@@ -137,13 +137,12 @@
   }
 
 
-
   function aggregateClients(rows){
     const map=new Map();
     for(const o of rows){
-      const clientRaw=String(o.client||'').trim() || 'Sin cliente';
-      const key=norm(clientRaw) || 'sin cliente';
-      if(!map.has(key)) map.set(key,{client:clientRaw,kg:0,billing:0,remitos:new Set()});
+      const client=String(o.client||'').trim() || 'Sin cliente';
+      const key=norm(client) || 'sin cliente';
+      if(!map.has(key)) map.set(key,{client,kg:0,billing:0,remitos:new Set()});
       const item=map.get(key);
       item.kg+=equivalentKg(o.product,o.unit,o.quantity);
       item.billing+=Number(o.total||0);
@@ -151,6 +150,34 @@
       if(remitoKey) item.remitos.add(remitoKey);
     }
     return [...map.values()].map(x=>({...x,orderCount:x.remitos.size}));
+  }
+
+  function renderClientRanking(rows,from,to){
+    const body=byId('statsClientRankingBody');
+    const empty=byId('statsClientEmpty');
+    const period=byId('statsClientPeriodLabel');
+    if(!body) return;
+    if(period) period.textContent=`${displayDate(from)} al ${displayDate(to)}`;
+    const ranking=aggregateClients(rows).sort((a,b)=>
+      b.billing-a.billing || b.kg-a.kg || b.orderCount-a.orderCount ||
+      String(a.client||'').localeCompare(String(b.client||''),'es',{sensitivity:'base'})
+    );
+    if(!ranking.length){
+      body.innerHTML='';
+      if(empty){
+        empty.textContent='No hay clientes con remitos entregados para este período.';
+        empty.classList.remove('hidden');
+      }
+      return;
+    }
+    if(empty) empty.classList.add('hidden');
+    body.innerHTML=ranking.map((r,i)=>`<tr>
+      <td class="stats-rank">${i+1}</td>
+      <td><strong>${escapeHtmlStats(r.client)}</strong></td>
+      <td>${numFmt.format(r.kg)} kg</td>
+      <td>${r.orderCount}</td>
+      <td class="stats-money">${moneyFmt.format(r.billing)}</td>
+    </tr>`).join('');
   }
 
   function renderStatistics(){
@@ -163,15 +190,21 @@
       byId('statsEmpty').classList.remove('hidden');
       byId('statsEmpty').textContent='La fecha Desde no puede ser posterior a Hasta.';
       if(byId('statsClientRankingBody')) byId('statsClientRankingBody').innerHTML='';
-      if(byId('statsClientEmpty')){ byId('statsClientEmpty').classList.remove('hidden'); byId('statsClientEmpty').textContent='La fecha Desde no puede ser posterior a Hasta.'; }
+      if(byId('statsClientEmpty')){
+        byId('statsClientEmpty').textContent='La fecha Desde no puede ser posterior a Hasta.';
+        byId('statsClientEmpty').classList.remove('hidden');
+      }
       return;
     }
 
-    const rows=deliveredRows().filter(o=>{
+    // El ranking de clientes usa TODOS los clientes del período.
+    // El filtro Cliente se mantiene solamente para el ranking de productos/KPIs.
+    const periodRows=deliveredRows().filter(o=>{
       const date=String(o.delivery_date||'');
-      if(date<from || date>to) return false;
-      return !client || o.client===client;
+      return date>=from && date<=to;
     });
+    const rows=periodRows.filter(o=>!client || o.client===client);
+    renderClientRanking(periodRows,from,to);
     const ranking=aggregate(rows);
     ranking.sort((a,b)=>{
       const alpha=(x,y)=>String(x.product||'').localeCompare(String(y.product||''),'es',{sensitivity:'base'});
@@ -197,12 +230,6 @@
       tbody.innerHTML='';
       empty.textContent='No hay remitos entregados para este período.';
       empty.classList.remove('hidden');
-      const clientBody=byId('statsClientRankingBody');
-      const clientEmpty=byId('statsClientEmpty');
-      const clientPeriod=byId('statsClientPeriodLabel');
-      if(clientBody) clientBody.innerHTML='';
-      if(clientEmpty){ clientEmpty.textContent='No hay clientes con remitos entregados para este período.'; clientEmpty.classList.remove('hidden'); }
-      if(clientPeriod) clientPeriod.textContent=`${displayDate(from)} al ${displayDate(to)}${client?` · ${client}`:''}`;
       return;
     }
     empty.classList.add('hidden');
@@ -217,29 +244,6 @@
         <td class="stats-money">${moneyFmt.format(r.billing)}</td>
       </tr>`;
     }).join('');
-
-    // V35.3.16: ranking de clientes, siempre ordenado por facturación de mayor a menor.
-    const clientRanking=aggregateClients(rows).sort((a,b)=>
-      b.billing-a.billing || b.kg-a.kg || b.orderCount-a.orderCount ||
-      String(a.client||'').localeCompare(String(b.client||''),'es',{sensitivity:'base'})
-    );
-    const clientBody=byId('statsClientRankingBody');
-    const clientEmpty=byId('statsClientEmpty');
-    const clientPeriod=byId('statsClientPeriodLabel');
-    if(clientPeriod) clientPeriod.textContent=`${displayDate(from)} al ${displayDate(to)}${client?` · ${client}`:''}`;
-    if(clientBody){
-      clientBody.innerHTML=clientRanking.map((r,i)=>`<tr>
-        <td class="stats-rank">${i+1}</td>
-        <td><strong>${escapeHtmlStats(r.client)}</strong></td>
-        <td>${numFmt.format(r.kg)} kg</td>
-        <td>${r.orderCount}</td>
-        <td class="stats-money">${moneyFmt.format(r.billing)}</td>
-      </tr>`).join('');
-    }
-    if(clientEmpty){
-      clientEmpty.classList.toggle('hidden',clientRanking.length>0);
-      clientEmpty.textContent='No hay clientes con remitos entregados para este período.';
-    }
   }
 
   function initStatistics(){

@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <title>Don Zoilo | Operaciones</title>
-  <link rel="stylesheet" href="styles.css?v=35.3.15" />
+  <link rel="stylesheet" href="styles.css?v=35.3.16" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 35.3.15 · Cuentas Corrientes · Estadísticas y vencimientos</div>
+      <div class="subtitle">Control de operaciones · Versión 35.3.16 · Cuentas Corrientes · Estadísticas y vencimientos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -199,16 +199,16 @@
         <div id="statsEmpty" class="empty hidden">No hay remitos entregados para este período.</div>
       </div>
 
-      <div class="panel stats-ranking-panel stats-client-ranking-panel">
+      <div class="panel stats-ranking-panel">
         <div class="panel-head stats-ranking-head">
           <div>
             <h2>Ranking de clientes</h2>
-            <p class="muted small">Ordenado automáticamente por mayor facturación.</p>
+            <p class="muted small">Todos los clientes del período · ordenado de mayor a menor facturación.</p>
             <p id="statsClientPeriodLabel" class="muted small"></p>
           </div>
         </div>
         <div class="stats-table-scroll">
-          <table class="stats-table stats-client-table">
+          <table class="stats-table">
             <thead>
               <tr><th>#</th><th>Cliente</th><th>Kilos</th><th>Pedidos</th><th>Facturación</th></tr>
             </thead>
@@ -1199,14 +1199,14 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=35.3.15"></script>
-  <script src="app.js?v=35.3.15"></script>
+  <script src="cloud-config.js?v=35.3.16"></script>
+  <script src="app.js?v=35.3.16"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=35.3.15"></script>
-  <script src="stock-ocr.js?v=35.3.15"></script>
-  <script src="caja-activos.js?v=35.3.15"></script>
-  <script src="balance-diario.js?v=35.3.15"></script>
-  <script src="vencimientos.js?v=35.3.15"></script>
+  <script src="stock.js?v=35.3.16"></script>
+  <script src="stock-ocr.js?v=35.3.16"></script>
+  <script src="caja-activos.js?v=35.3.16"></script>
+  <script src="balance-diario.js?v=35.3.16"></script>
+  <script src="vencimientos.js?v=35.3.16"></script>
   <script src="estadisticas.js?v=35.3.16"></script>
 </body>
 </html>
