@@ -1,4 +1,4 @@
-/* DON ZOILO V35.3.2 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
+/* DON ZOILO V35.3.12 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
 (function(){
 'use strict';
 const TABLE='daily_balances';
@@ -98,7 +98,25 @@ async function loadClosings(){
   }catch(e){console.warn('Balance diario:',e);closings=readJson(LOCAL_KEY,[])}
 }
 function injectStyles(){if($('dailyBalanceStyles'))return;const s=document.createElement('style');s.id='dailyBalanceStyles';s.textContent=`
-#dailyBalance .balance-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:16px}#dailyBalance .balance-toolbar label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .balance-toolbar input{min-width:180px}#dailyBalance .balance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}#dailyBalance .balance-panel{background:#fff;border:1px solid #d9dee7;border-radius:14px;padding:16px}#dailyBalance .balance-panel h3{margin:0 0 12px;color:#101820}#dailyBalance .balance-line{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #eceff3}#dailyBalance .balance-line.total{font-size:1.08rem;font-weight:900;border-top:2px solid #101820;border-bottom:0;margin-top:7px}#dailyBalance .balance-result{grid-column:1/-1;background:#101820;color:#fff;border-radius:15px;padding:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}#dailyBalance .result-card{border:1px solid #ffffff33;border-radius:11px;padding:12px}#dailyBalance .result-card span{display:block;color:#d0d5dd;font-size:.8rem;margin-bottom:6px}#dailyBalance .result-card strong{font-size:1.2rem}#dailyBalance .positive{color:#1f9d55}#dailyBalance .negative{color:#d92d20}#dailyBalance .balance-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}#dailyBalance .balance-history{background:#fff;border:1px solid #d9dee7;border-radius:14px;overflow:hidden}#dailyBalance .balance-history-tools{display:flex;gap:12px;align-items:end;justify-content:space-between;flex-wrap:wrap;margin:18px 0 10px}#dailyBalance .balance-history-tools label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .month-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 12px}#dailyBalance .month-summary-card{background:#fff;border:1px solid #d9dee7;border-radius:12px;padding:12px}#dailyBalance .month-summary-card span{display:block;font-size:.78rem;color:#667085;margin-bottom:5px}#dailyBalance .month-summary-card strong{font-size:1.05rem}#dailyBalance .history-row{display:grid;grid-template-columns:110px 1fr 1fr 80px;gap:10px;padding:11px 14px;border-bottom:1px solid #eceff3;align-items:center}#dailyBalance .history-row.head{font-weight:900;background:#f3f5f7}#dailyBalance .balance-note{width:100%;min-height:80px}@media(max-width:800px){#dailyBalance .month-summary{grid-template-columns:1fr}#dailyBalance .balance-grid{grid-template-columns:1fr}#dailyBalance .balance-result{grid-template-columns:repeat(2,1fr)}#dailyBalance .history-row{grid-template-columns:90px 1fr 1fr}.history-row>*:last-child{display:none}}`;
+#dailyBalance .balance-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:16px}#dailyBalance .balance-toolbar label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .balance-toolbar input{min-width:180px}#dailyBalance .balance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}#dailyBalance .balance-panel{background:#fff;border:1px solid #d9dee7;border-radius:14px;padding:16px}#dailyBalance .balance-panel h3{margin:0 0 12px;color:#101820}#dailyBalance .balance-line{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #eceff3}#dailyBalance .balance-line.total{font-size:1.08rem;font-weight:900;border-top:2px solid #101820;border-bottom:0;margin-top:7px}#dailyBalance .balance-result{grid-column:1/-1;background:#101820;color:#fff;border-radius:15px;padding:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}#dailyBalance .result-card{border:1px solid #ffffff33;border-radius:11px;padding:12px}#dailyBalance .result-card span{display:block;color:#d0d5dd;font-size:.8rem;margin-bottom:6px}#dailyBalance .result-card strong{font-size:1.2rem}#dailyBalance .positive{color:#1f9d55}#dailyBalance .negative{color:#d92d20}#dailyBalance .balance-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}#dailyBalance .balance-history{background:#fff;border:1px solid #d9dee7;border-radius:14px;overflow:hidden}#dailyBalance .balance-history-tools{display:flex;gap:12px;align-items:end;justify-content:space-between;flex-wrap:wrap;margin:18px 0 10px}#dailyBalance .balance-history-tools label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .month-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 12px}#dailyBalance .month-summary-card{background:#fff;border:1px solid #d9dee7;border-radius:12px;padding:12px}#dailyBalance .month-summary-card span{display:block;font-size:.78rem;color:#667085;margin-bottom:5px}#dailyBalance .month-summary-card strong{font-size:1.05rem}#dailyBalance .history-row{display:grid;grid-template-columns:110px 1fr 1fr 80px;gap:10px;padding:11px 14px;border-bottom:1px solid #eceff3;align-items:center}#dailyBalance .history-row.head{font-weight:900;background:#f3f5f7}#dailyBalance .balance-note{width:100%;min-height:80px}
+#dailyBalance .income-statement{margin-top:24px;background:#fff;border:1px solid #d9dee7;border-radius:14px;padding:16px}
+#dailyBalance .income-head{display:flex;justify-content:space-between;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
+#dailyBalance .income-head h3{margin:0}
+#dailyBalance .income-head label{display:flex;flex-direction:column;gap:5px;font-weight:700}
+#dailyBalance .income-meta{font-size:.82rem;color:#667085;margin-bottom:10px}
+#dailyBalance .income-row{width:100%;display:grid;grid-template-columns:1fr auto;gap:12px;padding:12px 8px;border:0;border-bottom:1px solid #eceff3;background:transparent;text-align:left;font:inherit;color:inherit}
+#dailyBalance button.income-row{cursor:pointer}
+#dailyBalance button.income-row:hover{background:#f8fafc}
+#dailyBalance button.income-row span{text-decoration:underline;text-underline-offset:3px}
+#dailyBalance .income-row strong{white-space:nowrap}
+#dailyBalance .income-row.major{font-size:1.08rem;font-weight:900}
+#dailyBalance .income-row.clean{background:#f3f5f7;border-top:2px solid #101820}
+#dailyBalance .income-row.final{background:#101820;color:#fff;border-radius:10px;margin-top:8px;font-size:1.15rem;font-weight:900;border-bottom:0}
+#dailyBalance .income-detail{margin-top:14px;border:1px solid #d9dee7;border-radius:12px;overflow:hidden}
+#dailyBalance .income-detail-head{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px;background:#f3f5f7}
+#dailyBalance .income-detail-head h4{margin:0}
+#dailyBalance .income-detail-row{display:grid;grid-template-columns:100px 120px 1fr auto;gap:10px;padding:9px 12px;border-top:1px solid #eceff3;font-size:.88rem}
+#dailyBalance .income-detail-total{display:flex;justify-content:space-between;padding:12px;font-weight:900;border-top:2px solid #101820}@media(max-width:800px){#dailyBalance .month-summary{grid-template-columns:1fr}#dailyBalance .balance-grid{grid-template-columns:1fr}#dailyBalance .balance-result{grid-template-columns:repeat(2,1fr)}#dailyBalance .history-row{grid-template-columns:90px 1fr 1fr}.history-row>*:last-child{display:none}}`;
 document.head.appendChild(s)}
 function injectUI(){
   if($('dailyBalance'))return;
@@ -127,7 +145,20 @@ function injectUI(){
       <div class="month-summary-card"><span>Resultados negativos del mes</span><strong id="balMonthNegative" class="negative">$0</strong></div>
       <div class="month-summary-card"><span>Resultado acumulado del mes</span><strong id="balMonthAccumulated">$0</strong></div>
     </div>
-    <div class="balance-history" id="balanceHistory"></div>`;
+    <div class="balance-history" id="balanceHistory"></div>
+
+    <section class="income-statement">
+      <div class="income-head">
+        <div>
+          <h3>Estado de resultados</h3>
+          <p class="muted small" style="margin:4px 0 0">Resultado mensual calculado desde Balance Diario y Gastos.</p>
+        </div>
+        <label>Mes<input id="incomeStatementMonth" type="month"></label>
+      </div>
+      <div id="incomeStatementMeta" class="income-meta"></div>
+      <div id="incomeStatementRows"></div>
+      <div id="incomeStatementDetail" class="income-detail" hidden></div>
+    </section>`;
   main.appendChild(sec);
   if($('balanceMonthFilter'))$('balanceMonthFilter').value=currentMonthValue();
   tab.addEventListener('click',async()=>{document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));sec.classList.add('active');tab.classList.add('active');await refresh(true)});
@@ -177,14 +208,91 @@ function renderHistory(){
   box.innerHTML='<div class="history-row head"><span>Fecha</span><span>Patrimonio</span><span>Resultado</span><span>Acumulado</span></div>'
     +(body||'<div style="padding:16px" class="muted">No hay cierres guardados para este mes.</div>');
 }
-async function refresh(preserveInput=false){await Promise.all([loadClosings(),loadCurrentAssets()]);const date=$('balanceDate')?.value||today();const saved=closings.find(r=>r.balance_date===date);let previous;if(preserveInput&&$('balancePrevious')?.value!=='')previous=num($('balancePrevious').value);else previous=saved?num(saved.previous_equity):previousEquity(date);current=calculations(date,previous,cachedAssets);if($('balancePrevious'))$('balancePrevious').value=String(current.previous_equity);if($('balanceNotes'))$('balanceNotes').value=saved?.notes||'';render();renderHistory()}
+
+const INCOME_GROUPS={
+  reparto:["MERMA","DESAYUNO","NAFTA","PEAJE","PROPINA","REPARTO","ATENCIÓN","SUELDOS","KANGOO"],
+  impuestos:["RETENCIONES","IMPUESTOS"],
+  local:["LOCAL"],
+  casa:["CASA","LEO","ROMI","SERVICIOS","VACACIONES","TARJETAS"]
+};
+function expenseCategoryForIncome(m){
+  const notes=String(m.notes||"");
+  const match=notes.match(/RUBRO:\s*([^|]+)/i);
+  if(match)return match[1].trim().toUpperCase();
+  const concept=String(m.concept||"").toUpperCase();
+  const all=[...new Set(Object.values(INCOME_GROUPS).flat())];
+  return all.find(c=>concept.includes(c))||"OTROS";
+}
+function incomeMonth(){
+  return $('incomeStatementMonth')?.value||currentMonthValue();
+}
+function incomeExpenses(month){
+  const movements=readJson(MOVEMENTS_KEY,[]);
+  return movements.filter(m=>m.type==='gasto'&&m.status!=='pendiente'&&String(m.date||'').slice(0,7)===month);
+}
+function groupExpenseTotal(list,categories){
+  return list.filter(m=>categories.includes(expenseCategoryForIncome(m))).reduce((s,m)=>s+num(m.amount),0);
+}
+function showIncomeDetail(key,title){
+  const box=$('incomeStatementDetail');
+  if(!box)return;
+  const month=incomeMonth();
+  const expenses=incomeExpenses(month);
+  const cats=INCOME_GROUPS[key]||[];
+  const rows=expenses
+    .filter(m=>cats.includes(expenseCategoryForIncome(m)))
+    .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+  const total=rows.reduce((s,m)=>s+num(m.amount),0);
+  box.hidden=false;
+  box.innerHTML=`<div class="income-detail-head"><h4>${esc(title)}</h4><button type="button" id="incomeDetailClose" class="secondary">Cerrar</button></div>
+    ${rows.map(m=>`<div class="income-detail-row"><span>${new Date(String(m.date).slice(0,10)+'T12:00:00').toLocaleDateString('es-AR')}</span><strong>${esc(expenseCategoryForIncome(m))}</strong><span>${esc(m.concept||'')}</span><strong>${money(m.amount)}</strong></div>`).join('')||'<div style="padding:12px" class="muted">No hay movimientos para este grupo en el mes elegido.</div>'}
+    <div class="income-detail-total"><span>Total ${esc(title)}</span><strong>${money(total)}</strong></div>`;
+  $('incomeDetailClose')?.addEventListener('click',()=>box.hidden=true);
+}
+function renderIncomeStatement(){
+  const rowsBox=$('incomeStatementRows');
+  if(!rowsBox)return;
+  const month=incomeMonth();
+  if($('incomeStatementMonth')&&!$('incomeStatementMonth').value)$('incomeStatementMonth').value=month;
+
+  const monthClosings=closings.filter(r=>String(r.balance_date||'').slice(0,7)===month);
+  // Definición acordada: suma mensual de "Resultado antes de gastos" de cada cierre diario.
+  const margin=monthClosings.reduce((s,r)=>s+num(r.result_before_expenses),0);
+  const expenses=incomeExpenses(month);
+  const reparto=groupExpenseTotal(expenses,INCOME_GROUPS.reparto);
+  const impuestos=groupExpenseTotal(expenses,INCOME_GROUPS.impuestos);
+  const local=groupExpenseTotal(expenses,INCOME_GROUPS.local);
+  const casa=groupExpenseTotal(expenses,INCOME_GROUPS.casa);
+  const clean=margin-reparto-impuestos-local;
+  const result=clean-casa;
+
+  const meta=$('incomeStatementMeta');
+  if(meta)meta.textContent=`Balances registrados: ${monthClosings.length} día${monthClosings.length===1?'':'s'} · Gastos cargados: ${expenses.length}`;
+
+  rowsBox.innerHTML=`
+    <div class="income-row major"><span>Margen total antes de gastos</span><strong class="${margin>=0?'positive':'negative'}">${money(margin)}</strong></div>
+    <button type="button" class="income-row" data-income-detail="reparto"><span>− Gastos de reparto</span><strong>${money(reparto)}</strong></button>
+    <button type="button" class="income-row" data-income-detail="impuestos"><span>− Impuestos</span><strong>${money(impuestos)}</strong></button>
+    <button type="button" class="income-row" data-income-detail="local"><span>− Gastos del local</span><strong>${money(local)}</strong></button>
+    <div class="income-row major clean"><span>Ganancia limpia</span><strong class="${clean>=0?'positive':'negative'}">${money(clean)}</strong></div>
+    <button type="button" class="income-row" data-income-detail="casa"><span>− Gastos de casa</span><strong>${money(casa)}</strong></button>
+    <div class="income-row final"><span>RESULTADO DEL PERÍODO</span><strong>${money(result)}</strong></div>`;
+
+  const titles={reparto:'Gastos de reparto',impuestos:'Impuestos',local:'Gastos del local',casa:'Gastos de casa'};
+  rowsBox.querySelectorAll('[data-income-detail]').forEach(btn=>{
+    btn.addEventListener('click',()=>showIncomeDetail(btn.dataset.incomeDetail,titles[btn.dataset.incomeDetail]));
+  });
+  if($('incomeStatementDetail'))$('incomeStatementDetail').hidden=true;
+}
+
+async function refresh(preserveInput=false){await Promise.all([loadClosings(),loadCurrentAssets()]);const date=$('balanceDate')?.value||today();const saved=closings.find(r=>r.balance_date===date);let previous;if(preserveInput&&$('balancePrevious')?.value!=='')previous=num($('balancePrevious').value);else previous=saved?num(saved.previous_equity):previousEquity(date);current=calculations(date,previous,cachedAssets);if($('balancePrevious'))$('balancePrevious').value=String(current.previous_equity);if($('balanceNotes'))$('balanceNotes').value=saved?.notes||'';render();renderHistory();renderIncomeStatement()}
 async function save(){
   if(!current)return;
   await loadCurrentAssets();
   current=calculations($('balanceDate').value,num($('balancePrevious').value),cachedAssets);
   const existing=closings.find(r=>r.balance_date===current.date);
   const record={id:existing?.id||uid(),balance_date:current.date,...current,notes:$('balanceNotes').value.trim(),created_at:existing?.created_at||new Date().toISOString(),updated_at:new Date().toISOString()};delete record.date;
-  try{if(cloud()){const {data,error}=await cloud().from(TABLE).upsert(record,{onConflict:'balance_date'}).select().single();if(error)throw error;Object.assign(record,data)}closings=closings.filter(r=>r.balance_date!==record.balance_date);closings.push(record);localWrite();renderHistory();alert('Cierre diario guardado correctamente.')}catch(e){alert('No se pudo guardar el cierre: '+(e.message||e))}
+  try{if(cloud()){const {data,error}=await cloud().from(TABLE).upsert(record,{onConflict:'balance_date'}).select().single();if(error)throw error;Object.assign(record,data)}closings=closings.filter(r=>r.balance_date!==record.balance_date);closings.push(record);localWrite();renderHistory();renderIncomeStatement();alert('Cierre diario guardado correctamente.')}catch(e){alert('No se pudo guardar el cierre: '+(e.message||e))}
 }
 function reportLines(){const d=new Date(current.date+'T12:00:00').toLocaleDateString('es-AR');return['DON ZOILO','BALANCE DIARIO - '+d,'','ACTIVOS','Caja y activos: '+money(current.current_assets),'Cuentas corrientes clientes: '+money(current.client_accounts),'Stock valorizado: '+money(current.stock_value),'TOTAL ACTIVOS: '+money(current.total_assets),'','PASIVOS','Deudas con proveedores: '+money(current.supplier_debt),'TOTAL PASIVOS: '+money(current.total_liabilities),'','Patrimonio anterior: '+money(current.previous_equity),'PATRIMONIO FINAL: '+money(current.final_equity),'Gastos del dia: '+money(current.daily_expenses),'Resultado antes de gastos: '+money(current.result_before_expenses),'RESULTADO NETO: '+money(current.net_result),'Variacion: '+pct(current.variation_pct),'','Observaciones: '+($('balanceNotes').value.trim()||'-')]}
 function simplePdfBlob(lines){
@@ -196,6 +304,10 @@ function downloadPdf(){const file=pdfFile();const url=URL.createObjectURL(file);
 async function sharePdf(){const file=pdfFile();try{if(navigator.canShare?.({files:[file]})&&navigator.share){await navigator.share({title:'Balance diario Don Zoilo',text:`Balance diario ${current.date}`,files:[file]})}else{downloadPdf();alert('Se descargó el PDF. Abrilo desde Descargas y compartilo por WhatsApp.')}}catch(e){if(e.name!=='AbortError')alert('No se pudo compartir: '+e.message)} }
 function bind(){$('balanceDate').value=today();$('balanceDate').addEventListener('change',()=>refresh(false));$('balancePrevious').addEventListener('input',()=>{current=calculations($('balanceDate').value,num($('balancePrevious').value),cachedAssets);render()});$('balanceRefresh').addEventListener('click',()=>refresh(true));$('balanceSave').addEventListener('click',save);$('balancePdf').addEventListener('click',downloadPdf);$('balanceShare').addEventListener('click',sharePdf)}
 async function init(){injectStyles();injectUI();
-setTimeout(()=>{$('balanceMonthFilter')?.addEventListener('change',renderHistory);},0);bind();window.addEventListener('donzoilo:remote-change',e=>{if(e.detail?.table==='current_assets')refresh(true)});window.addEventListener('donzoilo:app-visible',()=>refresh(true));await refresh(false)}
+setTimeout(()=>{
+  $('balanceMonthFilter')?.addEventListener('change',renderHistory);
+  if($('incomeStatementMonth'))$('incomeStatementMonth').value=currentMonthValue();
+  $('incomeStatementMonth')?.addEventListener('change',renderIncomeStatement);
+},0);bind();window.addEventListener('donzoilo:remote-change',e=>{if(e.detail?.table==='current_assets')refresh(true)});window.addEventListener('donzoilo:app-visible',()=>refresh(true));await refresh(false)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

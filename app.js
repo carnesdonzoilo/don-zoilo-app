@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.11";
+const APP_VERSION = "35.3.12";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2760,7 +2760,7 @@ async function rememberProductPrice(product, price, category=null, catalogMode=n
   const currentMeta=productCatalogMeta[key]||{};
   const cleanCategory=String(category ?? currentMeta.category ?? "Sin categoría").trim() || "Sin categoría";
 
-  // v35.3.11: un precio aprendido desde pedidos/remitos NO debe convertir
+  // v35.3.12: un precio aprendido desde pedidos/remitos NO debe convertir
   // automáticamente el producto en parte de la lista A4. Si ya existía,
   // conserva su estado; si es histórico/nuevo, queda fuera del catálogo.
   const isCatalog = catalogMode === true
