@@ -1,16 +1,15 @@
-DON ZOILO — V35.3.14
+DON ZOILO V35.3.14 — TOTAL DE REMITO + SALDO ACTUALIZADO
 
 CAMBIOS
-- En los remitos impresos/PDF se muestra TOTAL DEL REMITO.
-- Debajo se muestra SALDO ACTUALIZADO del cliente luego de ese remito.
-- La leyenda “Importado desde texto” se elimina de Observaciones al imprimir el remito.
-- Otras observaciones reales se conservan.
+1. Los remitos muestran debajo del total del comprobante el SALDO ACTUALIZADO del cliente.
+2. Si el remito todavía no fue confirmado como entregado, el saldo mostrado proyecta el saldo actual + este remito.
+3. Si ya fue entregado y la venta está registrada, no se duplica el importe.
+4. El saldo también aparece en impresión normal, impresión múltiple y salida para FxPrint.
+5. Los pedidos importados desde texto ya no guardan la leyenda automática "Importado desde texto" en Observaciones.
+6. Los remitos históricos que todavía tengan esa leyenda guardada dejan de mostrarla.
 
 BASE DE DATOS
-- No requiere cambios en Supabase.
+No requiere cambios ni SQL.
 
-INSTALACION
-1. Subir/reemplazar estos archivos en GitHub.
-2. Esperar el despliegue de Vercel.
-3. Verificar que la cabecera muestre Versión 35.3.14.
-4. Probar un remito entregado de un cliente con cuenta corriente.
+VERSIÓN
+35.3.14

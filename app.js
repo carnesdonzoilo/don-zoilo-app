@@ -671,39 +671,11 @@ async function showSignedReceipt(batchKey,items){
   }
 }
 
-// V35.3.14 — Remitos: saldo actualizado y limpieza de observaciones importadas.
-function cleanRemitoNote(value){
-  return String(value||"")
-    .replace(/importado\s+desde\s+texto/gi,"")
-    .replace(/^[\s·|\-–—]+|[\s·|\-–—]+$/g,"")
-    .trim();
-}
-
-function clientBalanceThroughRemito(items){
-  if(!items?.length) return 0;
-  const first=items[0];
-  const batchKey=first.batch_id||first.id;
-  const target=movements.find(m=>m.type==="venta" && movementMatchesBatch(m,batchKey,items));
-  const list=accountMovementsFor(first.client).slice().sort((a,b)=>{
-    const da=String(a.date||""); const db=String(b.date||"");
-    if(da!==db) return da.localeCompare(db);
-    return String(a.created_at||"").localeCompare(String(b.created_at||""));
-  });
-  if(!target) return accountTotals(first.client).balance;
-  let balance=0;
-  for(const m of list){
-    if(isOpeningBalanceMovement(m) || m.type==="venta") balance+=Number(m.amount||0);
-    else if(m.type==="cobro") balance-=Number(m.amount||0);
-    if(m.id===target.id) break;
-  }
-  return balance;
-}
-
 function remitoHtmlForItems(items){
   const first=items[0];
   const total=items.reduce((sum,item)=>sum+Number(item.total||0),0);
-  const notes=[...new Set(items.map(i=>cleanRemitoNote(i.notes)).filter(Boolean))].join(" · ") || "—";
-  const updatedBalance=clientBalanceThroughRemito(items);
+  const updatedBalance=remitoUpdatedBalance(items);
+  const notes=remitoVisibleNotes(items).join(" · ") || "—";
   const remitoNo=remitoSequence(items);
   const rows=items.map(item=>`
     <tr>
@@ -727,7 +699,7 @@ function remitoHtmlForItems(items){
         <div><span>Estado</span><strong>${items.every(i=>i.delivered)?"ENTREGADO":"PENDIENTE"}</strong></div>
       </div>
       <table><thead><tr><th>Cant.</th><th>Unidad</th><th>Descripción</th><th>P. unit.</th><th>Importe</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="bottom"><div class="notes"><span>Observaciones</span><div>${escapeHtml(notes)}</div></div><div class="total remito-totals"><div><span>TOTAL DEL REMITO</span><strong>${money(total)}</strong></div><div><span>SALDO ACTUALIZADO</span><strong>${money(updatedBalance)}</strong></div></div></div>
+      <div class="bottom"><div class="notes"><span>Observaciones</span><div>${escapeHtml(notes)}</div></div><div class="total-stack"><div class="total"><span>TOTAL REMITO</span><strong>${money(total)}</strong></div><div class="balance"><span>SALDO ACTUALIZADO</span><strong>${money(updatedBalance)}</strong></div></div></div>
       <div class="signatures">
         <div><div class="line"></div><span>Entregó</span></div>
         <div><div class="line"></div><span>Recibió conforme</span></div>
@@ -764,9 +736,9 @@ function selectedRemitosPrintHtml(batches){
   th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}
   th:nth-child(2),td:nth-child(2){width:17mm}
   th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
-  .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm}
+  .bottom{display:grid;grid-template-columns:1fr 58mm;gap:4mm}
   .notes{border:1px solid #111;min-height:16mm;padding:2mm}.notes span{font-size:6pt;font-weight:900}.notes div{font-size:7pt}
-  .total{border-top:2px solid #111;padding-top:2mm;font-size:8pt}.total>div{display:flex;justify-content:space-between;gap:3mm;margin-bottom:1.5mm}.total span{font-weight:800}.total strong{font-size:10.5pt;white-space:nowrap}.total>div:last-child{border-top:1px solid #999;padding-top:1.5mm;margin-top:1mm}
+  .total-stack{display:grid;gap:2mm}.total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:9pt}.total strong{font-size:12pt}.balance{border-top:1px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:7pt}.balance strong{font-size:10pt}
   .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}
   .signatures>div{text-align:center}.line{border-top:1px solid #111}.signatures span{font-size:6.5pt}
   @page{size:A4 portrait;margin:0}
@@ -3071,7 +3043,7 @@ $("saveImportedOrder").addEventListener("click",async()=>{
           product:item.product,quantity:Number(item.quantity||0),unit:item.unit,
           unit_price:Number(item.unit_price||0),
           total:Number(item.quantity||0)*Number(item.unit_price||0),
-          payment_method:payment,notes:"Importado desde texto",
+          payment_method:payment,notes:"",
           delivered:false,delivered_at:null,created_at:new Date().toISOString()
         });
         await rememberProductPrice(item.product,item.unit_price);
@@ -3142,6 +3114,27 @@ function remitoSequence(items){
   return raw ? raw.slice(-8).toUpperCase() : "—";
 }
 
+// V35.3.14 — El remito muestra el saldo que queda luego de sumar ese comprobante.
+// Si la venta ya fue registrada al confirmar la entrega, accountTotals() ya la incluye
+// y no se vuelve a sumar.
+function remitoUpdatedBalance(items){
+  if(!items?.length) return 0;
+  const first=items[0];
+  const current=accountTotals(first.client||"").balance;
+  const batchKey=first.batch_id||first.id;
+  const alreadyPosted=movements.some(m=>
+    m.type==="venta" && movementMatchesBatch(m,batchKey,items)
+  );
+  const total=items.reduce((sum,item)=>sum+Number(item.total||0),0);
+  return current + (alreadyPosted?0:total);
+}
+
+function remitoVisibleNotes(items){
+  return [...new Set(items
+    .map(i=>String(i.notes||"").trim())
+    .filter(note=>note && note.toLowerCase()!=="importado desde texto"))];
+}
+
 function openRemito(items){
   if(!items?.length) return;
   currentRemitoItems=items;
@@ -3154,8 +3147,9 @@ function openRemito(items){
   $("remitoPayment").textContent=(first.payment_method||"").replace("_"," ");
   $("remitoStatus").textContent=items.every(i=>i.delivered)?"ENTREGADO":"PENDIENTE";
   $("remitoTotal").textContent=money(total);
+  if($("remitoUpdatedBalance")) $("remitoUpdatedBalance").textContent=money(remitoUpdatedBalance(items));
 
-  const notes=[...new Set(items.map(i=>i.notes).filter(Boolean))];
+  const notes=remitoVisibleNotes(items);
   $("remitoNotes").textContent=notes.join(" · ") || "—";
 
   const tbody=$("remitoItems");
@@ -3189,7 +3183,8 @@ $("printRemito").addEventListener("click",()=>{
 
   const first=currentRemitoItems[0];
   const total=currentRemitoItems.reduce((sum,item)=>sum+Number(item.total||0),0);
-  const notes=[...new Set(currentRemitoItems.map(i=>i.notes).filter(Boolean))].join(" · ") || "—";
+  const updatedBalance=remitoUpdatedBalance(currentRemitoItems);
+  const notes=remitoVisibleNotes(currentRemitoItems).join(" · ") || "—";
   const remitoNo=remitoSequence(currentRemitoItems);
 
   const rows=currentRemitoItems.map(item=>`
@@ -3229,7 +3224,10 @@ $("printRemito").addEventListener("click",()=>{
 
       <div class="bottom">
         <div class="notes"><span>Observaciones</span><div>${escapeHtml(notes)}</div></div>
-        <div class="total"><span>TOTAL</span><strong>${money(total)}</strong></div>
+        <div class="total-stack">
+          <div class="total"><span>TOTAL REMITO</span><strong>${money(total)}</strong></div>
+          <div class="balance"><span>SALDO ACTUALIZADO</span><strong>${money(updatedBalance)}</strong></div>
+        </div>
       </div>
 
       <div class="signatures">
@@ -3269,10 +3267,10 @@ $("printRemito").addEventListener("click",()=>{
       th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}
       th:nth-child(2),td:nth-child(2){width:17mm}
       th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
-      .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm;align-items:start}
+      .bottom{display:grid;grid-template-columns:1fr 58mm;gap:4mm;align-items:start}
       .notes{border:1px solid #111;min-height:16mm;padding:2mm}
       .notes span{display:block;font-size:6pt;font-weight:900;text-transform:uppercase;margin-bottom:1.5mm}.notes div{font-size:7pt}
-      .total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;align-items:center;font-size:9pt}.total strong{font-size:12pt}
+      .total-stack{display:grid;gap:2mm}.total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;align-items:center;font-size:9pt}.total strong{font-size:12pt}.balance{border-top:1px solid #111;padding-top:2mm;display:flex;justify-content:space-between;align-items:center;font-size:7pt}.balance strong{font-size:10pt}
       .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}
       .signatures>div{text-align:center}.line{border-top:1px solid #111;margin-bottom:1mm}.signatures span{font-size:6.5pt;font-weight:700}
       @page{size:A4 portrait;margin:0}
@@ -4112,6 +4110,7 @@ function buildRemitoCanvas(){
 
   const first=currentRemitoItems[0];
   const total=currentRemitoItems.reduce((sum,item)=>sum+Number(item.total||0),0);
+  const updatedBalance=remitoUpdatedBalance(currentRemitoItems);
   const remitoNo=remitoSequence(currentRemitoItems);
 
   const drawCopy=(top,label)=>{
@@ -4180,8 +4179,10 @@ function buildRemitoCanvas(){
     });
 
     const totalY=top+h-135;
-    canvasText(ctx,"TOTAL",right-330,totalY,130,"19px Arial","bold");
-    canvasText(ctx,moneyPlain(total),right-20,totalY-4,200,"25px Arial","bold","right");
+    canvasText(ctx,"TOTAL REMITO",right-390,totalY-14,190,"18px Arial","bold");
+    canvasText(ctx,moneyPlain(total),right-20,totalY-18,230,"24px Arial","bold","right");
+    canvasText(ctx,"SALDO ACTUALIZADO",right-390,totalY+23,190,"14px Arial","bold");
+    canvasText(ctx,moneyPlain(updatedBalance),right-20,totalY+18,230,"20px Arial","bold","right");
 
     const sigY=top+h-55;
     ["ENTREGÓ","RECIBIÓ CONFORME","ACLARACIÓN / DNI"].forEach((lab,i)=>{
