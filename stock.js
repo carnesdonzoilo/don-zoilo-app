@@ -160,10 +160,59 @@
     const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`Don_Zoilo_Stock_${new Date().toISOString().slice(0,10)}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);
   }
 
+  function exportPdfA4(){
+    const rows=stockRows.filter(r=>r.product?.trim()).sort((a,b)=>String(a.product).localeCompare(String(b.product),"es",{sensitivity:"base"}));
+    if(!rows.length)return alert("No hay productos cargados en Stock para exportar.");
+    const totalKg=rows.reduce((s,r)=>s+num(r.kg),0);
+    const totalValue=rows.reduce((s,r)=>s+amountOf(r),0);
+    const generated=new Date();
+    const win=window.open("","_blank");
+    if(!win)return alert("El navegador bloqueó la ventana de impresión. Habilitá las ventanas emergentes e intentá nuevamente.");
+    const rowHtml=rows.map((r,i)=>`
+      <tr>
+        <td class="n">${i+1}</td>
+        <td class="product">${esc(r.product)}</td>
+        <td>${esc(r.detail_status||"")}</td>
+        <td>${esc(r.category||"")}</td>
+        <td>${esc(r.unit||"")}</td>
+        <td class="num">${decimal(r.quantity)}</td>
+        <td class="num kg"><strong>${decimal(r.kg)}</strong></td>
+        <td class="num">${cash(r.unit_cost)}</td>
+        <td class="num">${cash(amountOf(r))}</td>
+      </tr>`).join("");
+    const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Stock Don Zoilo</title>
+      <style>
+        @page{size:A4 landscape;margin:8mm}
+        *{box-sizing:border-box}
+        body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:8px}
+        .head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:4px;margin-bottom:6px}
+        h1{font-size:18px;margin:0;letter-spacing:.2px}
+        .sub{font-size:8px;margin-top:2px}
+        .meta{text-align:right;font-size:8px;line-height:1.35}
+        table{width:100%;border-collapse:collapse;table-layout:fixed}
+        thead{display:table-header-group}
+        th,td{border:1px solid #777;padding:2.2px 3px;vertical-align:middle;line-height:1.15;overflow-wrap:anywhere}
+        th{background:#eee;font-size:7.5px;text-transform:uppercase}
+        tr{break-inside:avoid}
+        .n{width:4%;text-align:center}.product{width:19%;font-weight:700}.detail{width:15%}.cat{width:10%}.unit{width:7%}.qty{width:8%}.kg{width:8%}.price{width:12%}.amount{width:13%}
+        .num{text-align:right;white-space:nowrap}
+        .summary{display:flex;justify-content:flex-end;gap:18px;margin-top:6px;font-size:10px;font-weight:700}
+        .foot{margin-top:5px;font-size:7px;text-align:right;color:#444}
+        @media print{.no-print{display:none!important}}
+      </style></head><body>
+      <div class="head"><div><h1>STOCK ACTUAL - DON ZOILO</h1><div class="sub">Listado general de mercadería</div></div><div class="meta">${generated.toLocaleDateString("es-AR")}<br>${generated.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</div></div>
+      <table><thead><tr><th class="n">#</th><th class="product">Producto</th><th class="detail">Detalle</th><th class="cat">Categoría</th><th class="unit">Unidad</th><th class="qty">Cantidad</th><th class="kg">Kg</th><th class="price">Precio</th><th class="amount">Importe</th></tr></thead><tbody>${rowHtml}</tbody></table>
+      <div class="summary"><span>Productos: ${rows.length}</span><span>Total kilos: ${decimal(totalKg)} kg</span><span>Valor stock: ${cash(totalValue)}</span></div>
+      <div class="foot">Don Zoilo - Stock generado desde la app</div>
+      <script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script>
+      </body></html>`;
+    win.document.open();win.document.write(html);win.document.close();
+  }
+
   function bind(){
     byId("stockNewBtn")?.addEventListener("click",addInlineRow);byId("stockCloseBtn")?.addEventListener("click",closeForm);byId("stockForm")?.addEventListener("submit",saveRow);byId("stockDeleteBtn")?.addEventListener("click",deleteRow);
     ["stockQuantity","stockKg","stockUnitCost"].forEach(id=>byId(id)?.addEventListener("input",updatePreview));
-    byId("stockSearch")?.addEventListener("input",()=>renderStock());byId("stockCategoryFilter")?.addEventListener("change",()=>renderStock());byId("stockRefreshBtn")?.addEventListener("click",()=>loadStock(true));byId("stockExportBtn")?.addEventListener("click",exportCsv);
+    byId("stockSearch")?.addEventListener("input",()=>renderStock());byId("stockCategoryFilter")?.addEventListener("change",()=>renderStock());byId("stockRefreshBtn")?.addEventListener("click",()=>loadStock(true));byId("stockExportBtn")?.addEventListener("click",exportCsv);byId("stockPdfBtn")?.addEventListener("click",exportPdfA4);
     const body=byId("stockTableBody");
     body?.addEventListener("input",e=>{if(e.target.matches(".stock-cell-input"))updateRowFromCell(e.target);});
     body?.addEventListener("change",e=>{if(e.target.matches("select.stock-cell-input")){const row=updateRowFromCell(e.target);persistRow(row,e.target);}});
