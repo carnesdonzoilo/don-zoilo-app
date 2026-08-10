@@ -1117,3 +1117,8 @@ dialog::backdrop{background:#0009}
 .price-catalog-state{font-size:.86rem;font-weight:700;padding:7px 10px;border-radius:10px;background:#eef3f6;color:#42515b;align-self:center}
 .price-catalog-state.is-visible{background:#edf7ef;color:#246638}
 .price-catalog-state.is-hidden{background:#f5f1e8;color:#755c25}
+
+/* V35.3.16 — Ranking de clientes */
+.stats-client-ranking-panel{margin-top:14px}
+.stats-client-table{min-width:620px}
+.stats-client-table th:nth-child(4),.stats-client-table td:nth-child(4){text-align:center}
