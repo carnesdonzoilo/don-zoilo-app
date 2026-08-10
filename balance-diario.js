@@ -1,4 +1,4 @@
-/* DON ZOILO V35.3.12 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
+/* DON ZOILO V35.3.13 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
 (function(){
 'use strict';
 const TABLE='daily_balances';
@@ -249,6 +249,16 @@ function showIncomeDetail(key,title){
     <div class="income-detail-total"><span>Total ${esc(title)}</span><strong>${money(total)}</strong></div>`;
   $('incomeDetailClose')?.addEventListener('click',()=>box.hidden=true);
 }
+// V35.3.13 — Ajuste histórico excepcional del Estado de Resultados.
+// Solo julio 2026: margen real antes de gastos acumulado del 01/07 al 23/07.
+// No crea cierres, no modifica patrimonio y no toca Supabase.
+const HISTORICAL_MARGIN_ADJUSTMENTS=Object.freeze({
+  "2026-07":15418004
+});
+function historicalMarginAdjustment(month){
+  return Number(HISTORICAL_MARGIN_ADJUSTMENTS[String(month||"")]||0);
+}
+
 function renderIncomeStatement(){
   const rowsBox=$('incomeStatementRows');
   if(!rowsBox)return;
@@ -257,7 +267,10 @@ function renderIncomeStatement(){
 
   const monthClosings=closings.filter(r=>String(r.balance_date||'').slice(0,7)===month);
   // Definición acordada: suma mensual de "Resultado antes de gastos" de cada cierre diario.
-  const margin=monthClosings.reduce((s,r)=>s+num(r.result_before_expenses),0);
+  // Para julio 2026 se agrega, una sola vez, el margen histórico real 01/07–23/07.
+  const closingMargin=monthClosings.reduce((s,r)=>s+num(r.result_before_expenses),0);
+  const historicalAdjustment=historicalMarginAdjustment(month);
+  const margin=closingMargin+historicalAdjustment;
   const expenses=incomeExpenses(month);
   const reparto=groupExpenseTotal(expenses,INCOME_GROUPS.reparto);
   const impuestos=groupExpenseTotal(expenses,INCOME_GROUPS.impuestos);
@@ -267,7 +280,12 @@ function renderIncomeStatement(){
   const result=clean-casa;
 
   const meta=$('incomeStatementMeta');
-  if(meta)meta.textContent=`Balances registrados: ${monthClosings.length} día${monthClosings.length===1?'':'s'} · Gastos cargados: ${expenses.length}`;
+  if(meta){
+    const adjustmentText=historicalAdjustment
+      ?` · Ajuste histórico 01/07–23/07: ${money(historicalAdjustment)}`
+      :"";
+    meta.textContent=`Balances registrados: ${monthClosings.length} día${monthClosings.length===1?'':'s'} · Gastos cargados: ${expenses.length}${adjustmentText}`;
+  }
 
   rowsBox.innerHTML=`
     <div class="income-row major"><span>Margen total antes de gastos</span><strong class="${margin>=0?'positive':'negative'}">${money(margin)}</strong></div>

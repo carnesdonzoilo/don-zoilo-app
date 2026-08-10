@@ -1,4 +1,4 @@
-DON ZOILO V35.3.12 — ESTADO DE RESULTADOS MENSUAL
+DON ZOILO V35.3.13 — ESTADO DE RESULTADOS MENSUAL
 
 NUEVO EN BALANCE DIARIO
 Se agregó un Estado de Resultados por mes completo.
@@ -40,5 +40,5 @@ INSTALACIÓN
 1. Subir todos los archivos a GitHub reemplazando los actuales.
 2. Esperar el deploy de Vercel.
 3. Actualizar la app / Ctrl+F5.
-4. Verificar Versión 35.3.12.
+4. Verificar Versión 35.3.13.
 5. Entrar en Balance Diario y bajar hasta Estado de resultados.

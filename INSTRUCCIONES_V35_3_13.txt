@@ -1,0 +1,45 @@
+DON ZOILO V35.3.13 — AJUSTE HISTÓRICO JULIO 2026
+
+BASE
+Esta versión parte de la V35.3.12 actual descargada de GitHub.
+
+ÚNICO CAMBIO FUNCIONAL
+Completa el Estado de Resultados de JULIO 2026 con un ajuste histórico de margen antes de gastos.
+
+DATO ACORDADO
+Período: 01/07/2026 al 23/07/2026
+Margen real antes de gastos: $ 15.418.004
+
+CÁLCULO EN JULIO
+Margen total antes de gastos =
+$ 15.418.004
++ suma de "Resultado antes de gastos" de los cierres diarios de julio ya cargados.
+
+Luego el sistema descuenta normalmente:
+- Gastos de reparto
+- Impuestos
+- Gastos del local
+- Gastos de casa
+
+Y calcula:
+- Ganancia limpia
+- Resultado del período
+
+NO MODIFICA
+- Patrimonio
+- Historial de cierres
+- Balances diarios existentes
+- Gastos existentes
+- Supabase
+- Otros meses
+
+CONTROL VISUAL
+Al seleccionar julio 2026, el Estado de Resultados muestra:
+"Ajuste histórico 01/07–23/07: $ 15.418.004"
+
+INSTALACIÓN
+1. Subir los archivos a GitHub reemplazando los actuales.
+2. Esperar el deploy de Vercel.
+3. Actualizar la app.
+4. Verificar Versión 35.3.13.
+5. Balance > Estado de resultados > Julio 2026.
