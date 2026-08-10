@@ -1,0 +1,14 @@
+DON ZOILO V35.3.15 — EXPORTAR STOCK A PDF A4
+
+Cambio implementado:
+- Se mantiene el botón Exportar CSV.
+- Se agrega en el módulo Stock el botón "Exportar PDF A4".
+- Genera una vista de impresión A4 horizontal, compacta, con el stock actual.
+- Incluye producto, detalle, categoría, unidad, cantidad, kilos, precio e importe.
+- Al final muestra cantidad de productos, kilos totales y valor total del stock.
+- Abre directamente el diálogo de impresión para elegir "Guardar como PDF".
+- Si el listado no entra físicamente en una hoja, continúa automáticamente en páginas A4 adicionales.
+- No requiere cambios en Supabase ni ejecutar SQL.
+
+VERSIÓN
+35.3.15
