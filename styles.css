@@ -1119,3 +1119,5 @@ dialog::backdrop{background:#0009}
 .price-catalog-state{font-size:.86rem;font-weight:700;padding:7px 10px;border-radius:10px;background:#eef3f6;color:#42515b;align-self:center}
 .price-catalog-state.is-visible{background:#edf7ef;color:#246638}
 .price-catalog-state.is-hidden{background:#f5f1e8;color:#755c25}
+
+.stats-total-row td{font-weight:700;border-top:2px solid currentColor;}
