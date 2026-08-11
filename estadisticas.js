@@ -1,4 +1,4 @@
-// DON ZOILO V35.3.24 — ESTADÍSTICAS
+// DON ZOILO V35.3.25 — ESTADÍSTICAS
 // Ranking de productos + ranking de clientes a partir de remitos ENTREGADOS.
 (() => {
   const byId = id => document.getElementById(id);
@@ -39,7 +39,7 @@
   }
 
 
-  // V35.3.24: unificación de nombres equivalentes SOLO para el ranking de clientes.
+  // V35.3.25: unificación de nombres equivalentes SOLO para el ranking de clientes.
   function clientKey(value){
     return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   }
@@ -141,6 +141,22 @@
 
   function uniqueRemitoKey(o){ return String(o.batch_id || o.id || ''); }
 
+  // V35.3.25: una única fuente de cálculo para Resumen y rankings.
+  function lineKg(o){
+    return equivalentKg(o?.product, o?.unit, o?.quantity);
+  }
+
+  function lineBilling(o){
+    const quantity=Number(o?.quantity);
+    const unitPrice=Number(o?.unit_price);
+    if(Number.isFinite(quantity) && Number.isFinite(unitPrice) && quantity>=0 && unitPrice>=0){
+      return quantity * unitPrice;
+    }
+    const savedTotal=Number(o?.total);
+    return Number.isFinite(savedTotal) ? savedTotal : 0;
+  }
+
+
   function aggregate(rows){
     const map=new Map();
     for(const o of rows){
@@ -150,13 +166,13 @@
       const item=map.get(key);
       const q=Number(o.quantity||0);
       const u=String(o.unit||'kg').toLowerCase();
-      const kg=equivalentKg(o.product,u,q);
+      const kg=lineKg(o);
       if(kg>0) item.kg+=kg;
       if(u!=='kg') {
         const label=unitLabel(u);
         item.units[label]=(item.units[label]||0)+q;
       }
-      item.billing+=Number(o.total||0);
+      item.billing+=lineBilling(o);
       item.remitos.add(uniqueRemitoKey(o));
     }
     return [...map.values()].map(x=>({...x,remitoCount:x.remitos.size}));
@@ -170,8 +186,8 @@
       const key=clientKey(client) || 'sin cliente';
       if(!map.has(key)) map.set(key,{client,kg:0,billing:0,remitos:new Set()});
       const item=map.get(key);
-      item.kg+=equivalentKg(o.product,o.unit,o.quantity);
-      item.billing+=Number(o.total||0);
+      item.kg+=lineKg(o);
+      item.billing+=lineBilling(o);
       const remitoKey=uniqueRemitoKey(o);
       if(remitoKey) item.remitos.add(remitoKey);
     }
@@ -197,13 +213,22 @@
       return;
     }
     if(empty) empty.classList.add('hidden');
+    const totalClientKg=ranking.reduce((sum,r)=>sum+Number(r.kg||0),0);
+    const totalClientBilling=ranking.reduce((sum,r)=>sum+Number(r.billing||0),0);
+    const totalClientOrders=new Set(rows.map(uniqueRemitoKey).filter(Boolean)).size;
     body.innerHTML=ranking.map((r,i)=>`<tr>
       <td class="stats-rank">${i+1}</td>
       <td><strong>${escapeHtmlStats(r.client)}</strong></td>
       <td>${numFmt.format(r.kg)} kg</td>
       <td>${r.orderCount}</td>
       <td class="stats-money">${moneyFmt.format(r.billing)}</td>
-    </tr>`).join('');
+    </tr>`).join('') + `<tr class="stats-total-row">
+      <td></td>
+      <td><strong>TOTAL</strong></td>
+      <td><strong>${numFmt.format(totalClientKg)} kg</strong></td>
+      <td><strong>${totalClientOrders}</strong></td>
+      <td class="stats-money"><strong>${moneyFmt.format(totalClientBilling)}</strong></td>
+    </tr>`;
   }
 
   function renderStatistics(){
@@ -240,8 +265,10 @@
       return b.kg-a.kg || b.billing-a.billing || alpha(a,b);
     });
 
-    const totalKg=rows.reduce((sum,o)=>sum+equivalentKg(o.product,o.unit,o.quantity),0);
-    const totalBilling=rows.reduce((sum,o)=>sum+Number(o.total||0),0);
+    // Los totales del Resumen salen de la MISMA agregación que alimenta el ranking.
+    // De esta forma, la suma visible del ranking y los KPIs siempre coinciden.
+    const totalKg=ranking.reduce((sum,item)=>sum+Number(item.kg||0),0);
+    const totalBilling=ranking.reduce((sum,item)=>sum+Number(item.billing||0),0);
     const remitos=new Set(rows.map(uniqueRemitoKey).filter(Boolean));
 
     byId('statsTotalKg').textContent=`${numFmt.format(totalKg)} kg`;
@@ -269,7 +296,14 @@
         <td>${r.remitoCount}</td>
         <td class="stats-money">${moneyFmt.format(r.billing)}</td>
       </tr>`;
-    }).join('');
+    }).join('') + `<tr class="stats-total-row">
+      <td></td>
+      <td><strong>TOTAL</strong></td>
+      <td><strong>${numFmt.format(totalKg)} kg</strong></td>
+      <td>—</td>
+      <td><strong>${remitos.size}</strong></td>
+      <td class="stats-money"><strong>${moneyFmt.format(totalBilling)}</strong></td>
+    </tr>`;
   }
 
   function initStatistics(){
