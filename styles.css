@@ -56,6 +56,7 @@ textarea{resize:vertical}
 .balance-row{display:grid;grid-template-columns:1fr auto;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
 .balance-row:first-child{border-top:0}
 .balance-row-supplier,.balance-row-supplier strong,.balance-row-supplier small{color:#c62828}
+.balance-client-number{font-weight:800;margin-right:4px;color:var(--text)}
 .muted{color:var(--muted)}
 .small{font-size:.75rem}
 .empty{text-align:center;color:var(--muted);padding:26px 10px}
