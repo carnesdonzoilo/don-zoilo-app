@@ -1,0 +1,7 @@
+DON ZOILO V35.3.18
+
+CAMBIO:
+- En el módulo Saldos, los proveedores se muestran en color rojo.
+- Se colorean nombre, leyenda "Saldo proveedor" y monto.
+- Los clientes mantienen su visualización actual.
+- No requiere cambios en Supabase ni SQL.
