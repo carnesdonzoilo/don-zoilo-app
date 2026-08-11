@@ -1,4 +1,4 @@
-// DON ZOILO V35.3.23 — ESTADÍSTICAS
+// DON ZOILO V35.3.24 — ESTADÍSTICAS
 // Ranking de productos + ranking de clientes a partir de remitos ENTREGADOS.
 (() => {
   const byId = id => document.getElementById(id);
@@ -39,7 +39,7 @@
   }
 
 
-  // V35.3.23: unificación de nombres equivalentes SOLO para el ranking de clientes.
+  // V35.3.24: unificación de nombres equivalentes SOLO para el ranking de clientes.
   function clientKey(value){
     return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   }
@@ -73,7 +73,7 @@
   addProductGroup('Matambrito', ['matambrito de cerdo']);
   addProductGroup('Suprema', ['suprema caja','suprema congelada']);
   addProductGroup('Nalga sin tapa', ['nalgas sin tapa']);
-  addProductGroup('Bife de chorizo', ['bife chorizo']);
+  addProductGroup('Bife de chorizo', ['bife chorizo','bife de chorizo fresco']);
   addProductGroup('Chorizo', ['chorizo atado']);
   addProductGroup('Vacío fresco', ['vacio fresco']);
   addProductGroup('Pollo 8', ['pollo de 8']);
