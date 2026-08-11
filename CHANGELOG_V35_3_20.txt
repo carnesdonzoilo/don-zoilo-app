@@ -1,0 +1,7 @@
+DON ZOILO V35.3.20 — Agrupación GUATEMALA + DUMPLING
+
+- En Cuentas Corrientes, GUATEMALA se agrupa bajo DUMPLING.
+- También se mantiene agrupado GUATEMALA 4450 bajo DUMPLING.
+- Los movimientos históricos no se modifican ni se borran: la app los consolida al mostrar y calcular la cuenta corriente.
+- Se mantienen las agrupaciones existentes de DUMPLING (Pringles 1272 y Gorriti 56xx).
+- Sin cambios de base de datos ni Supabase.
