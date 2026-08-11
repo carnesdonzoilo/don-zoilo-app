@@ -1,4 +1,4 @@
-// DON ZOILO V35.3.16 — ESTADÍSTICAS
+// DON ZOILO V35.3.21 — ESTADÍSTICAS
 // Ranking de productos + ranking de clientes a partir de remitos ENTREGADOS.
 (() => {
   const byId = id => document.getElementById(id);
@@ -36,6 +36,25 @@
   }
   function titleCase(value){
     return String(value||'').trim().replace(/\s+/g,' ').replace(/(^|\s)\S/g,m=>m.toLocaleUpperCase('es-AR'));
+  }
+
+
+  // V35.3.21: unificación de nombres equivalentes SOLO para el ranking de clientes.
+  function clientKey(value){
+    return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  }
+  const CLIENT_GROUPS = new Map();
+  function addClientGroup(canonical, variants){
+    [canonical,...variants].forEach(v=>CLIENT_GROUPS.set(clientKey(v), canonical));
+  }
+  addClientGroup('ITUZAINGÓ', ['ITUZAINGO']);
+  addClientGroup('MORÓN', ['MORON']);
+  addClientGroup('DUMPLING', ['GORRITI 5612','PRINGLES 1272']);
+  addClientGroup('GARCÍA DEL RIO', ['GARCIA DEL RIO']);
+
+  function canonicalClient(value){
+    const raw=String(value||'').trim();
+    return CLIENT_GROUPS.get(clientKey(raw)) || raw || 'Sin cliente';
   }
 
   // V35.2.6: unificación ampliada de nombres equivalentes para el ranking.
@@ -140,8 +159,8 @@
   function aggregateClients(rows){
     const map=new Map();
     for(const o of rows){
-      const client=String(o.client||'').trim() || 'Sin cliente';
-      const key=norm(client) || 'sin cliente';
+      const client=canonicalClient(o.client);
+      const key=clientKey(client) || 'sin cliente';
       if(!map.has(key)) map.set(key,{client,kg:0,billing:0,remitos:new Set()});
       const item=map.get(key);
       item.kg+=equivalentKg(o.product,o.unit,o.quantity);
