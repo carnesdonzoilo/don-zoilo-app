@@ -1,4 +1,4 @@
-// DON ZOILO V35.3.21 — ESTADÍSTICAS
+// DON ZOILO V35.3.23 — ESTADÍSTICAS
 // Ranking de productos + ranking de clientes a partir de remitos ENTREGADOS.
 (() => {
   const byId = id => document.getElementById(id);
@@ -39,7 +39,7 @@
   }
 
 
-  // V35.3.21: unificación de nombres equivalentes SOLO para el ranking de clientes.
+  // V35.3.23: unificación de nombres equivalentes SOLO para el ranking de clientes.
   function clientKey(value){
     return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   }
@@ -65,13 +65,20 @@
   function addProductGroup(canonical, variants){
     [canonical,...variants].forEach(v=>PRODUCT_GROUPS.set(productKey(v), canonical));
   }
-  addProductGroup('Paleta', ['paleta de oferta','paleta churrasco','paleta picada','paleta entera']);
+  addProductGroup('Paleta', ['paleta churrasco','paleta picada','paleta entera']);
+  addProductGroup('Paleta oferta', ['paleta de oferta','paleta envasada']);
   addProductGroup('Tapa de asado', ['tapa asado','tapa de asado oferta','tapa','tapa asado oferta','tapa de asado envasada', 'tapa asado envasada','tapa de asado envasado']);
   addProductGroup('Lomo', ['lomos']);
+  addProductGroup('Bife', ['bife con lomo']);
+  addProductGroup('Matambrito', ['matambrito de cerdo']);
+  addProductGroup('Suprema', ['suprema caja','suprema congelada']);
+  addProductGroup('Nalga sin tapa', ['nalgas sin tapa']);
+  addProductGroup('Bife de chorizo', ['bife chorizo']);
+  addProductGroup('Chorizo', ['chorizo atado']);
   addProductGroup('Vacío fresco', ['vacio fresco']);
   addProductGroup('Pollo 8', ['pollo de 8']);
   addProductGroup('Chorizo con morrón', ['chorizo con morron','chorizo con morronº']);
-  addProductGroup('Nalga sin tapa', ['nalga sin tapa envasada']);
+  addProductGroup('Nalga sin tapa', ['nalga sin tapa envasada','nalgas sin tapa']);
   addProductGroup('Carré', ['carre','carre cortado']);
   addProductGroup('Cuadril', ['cuadril sin tapa']);
   addProductGroup('Riñón', ['riñon']);
