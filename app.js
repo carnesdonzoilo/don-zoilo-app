@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.18";
+const APP_VERSION = "35.3.19";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2718,9 +2718,11 @@ function renderBalances(){
     return;
   }
 
+  let activeClientNumber=0;
   rows.forEach(row=>{
     const item=document.createElement("div");
     const isClient=Math.abs(row.client)>0.001;
+    if(isClient) activeClientNumber+=1;
     item.className=isClient ? "balance-row" : "balance-row balance-row-supplier";
 
 
@@ -2730,7 +2732,7 @@ function renderBalances(){
     item.innerHTML=`
       <div>
         ${isClient
-          ? `<button type="button" class="balance-client-link" data-client="${escapeHtml(row.name)}">${escapeHtml(row.name)}</button>`
+          ? `<span class="balance-client-number">${activeClientNumber}.</span> <button type="button" class="balance-client-link" data-client="${escapeHtml(row.name)}">${escapeHtml(row.name)}</button>`
           : `<strong>${escapeHtml(row.name)}</strong>`}
         <small>${label}</small>
       </div>

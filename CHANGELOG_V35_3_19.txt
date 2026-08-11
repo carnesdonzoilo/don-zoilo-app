@@ -1,0 +1,5 @@
+DON ZOILO V35.3.19 — Numeración de clientes en Saldos
+
+- Numera en forma correlativa únicamente los clientes con saldo activo en el módulo Saldos.
+- Los proveedores permanecen identificados en rojo y no consumen números de la secuencia.
+- Sin cambios de base de datos ni Supabase.
