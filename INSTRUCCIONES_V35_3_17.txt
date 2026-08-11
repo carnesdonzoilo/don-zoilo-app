@@ -1,0 +1,17 @@
+DON ZOILO V35.3.17 — IMPUTACIÓN MANUAL DE COBRANZAS
+
+CAMBIO
+- En Cuentas Corrientes > Cobranza rápida se agrega selector "Imputar a comprobante pendiente".
+- Al elegir cliente, se listan sus comprobantes pendientes ordenados del más antiguo al más nuevo.
+- Por defecto queda seleccionado el comprobante pendiente más antiguo.
+- El usuario puede elegir cualquier otro remito/comprobante pendiente antes de guardar.
+- La cobranza se aplica primero al comprobante elegido.
+- Si el importe supera el saldo pendiente de ese comprobante, el excedente se aplica por antigüedad al resto.
+- Cobranzas históricas sin selección continúan usando FIFO, por lo que no cambia el cálculo anterior.
+
+BASE DE DATOS
+- No requiere SQL ni nuevas columnas en Supabase.
+- La referencia técnica de imputación se guarda en notes del movimiento de cobranza y no se muestra en el historial.
+
+VERSIÓN
+- Versión visible y cache-busting actualizados a 35.3.17.

@@ -1877,7 +1877,7 @@ function renderAccountHistory(client){
       <div>${fmtDate(m.date)}</div>
       <div class="history-main">
         <strong>${label} · ${escapeHtml(m.concept||"")}</strong>
-        <small>${escapeHtml(m.payment_method||"")} ${m.notes?`· ${escapeHtml(m.notes.replace("SALDO_INICIAL","").replace("|","").trim())}`:""}</small>
+        <small>${escapeHtml(m.payment_method||"")} ${cleanAccountMovementNotes(m)?`· ${escapeHtml(cleanAccountMovementNotes(m))}`:""}</small>
       </div>
       <div class="history-amount">${sign}${money(m.amount||0)}</div>`;
     box.append(row);
@@ -1893,6 +1893,9 @@ function renderAccounts(){
   if($("accountTotalCollected")) $("accountTotalCollected").textContent=money(totals.collected);
   if($("accountOpeningBalance")) $("accountOpeningBalance").textContent=money(totals.opening);
   renderAccountHistory(client);
+  const collectionClient=$("collectionClient")?.value||"";
+  const currentTarget=$("collectionTarget")?.value||"";
+  fillCollectionPendingTargets(collectionClient,currentTarget);
 }
 
 async function saveOpeningBalance(event){
@@ -1937,6 +1940,65 @@ async function saveOpeningBalance(event){
   }
 }
 
+function collectionTargetMovementId(movement){
+  const notes=String(movement?.notes||"");
+  const match=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
+  return match ? String(match[1]||"").trim() : "";
+}
+
+function cleanAccountMovementNotes(movement){
+  let notes=String(movement?.notes||"");
+  notes=notes.replace(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:[^|]+(?=\||$)/g,"");
+  notes=notes.replace(/SALDO_INICIAL/g,"");
+  notes=notes.replace(/^\s*\|\s*|\s*\|\s*$/g,"");
+  notes=notes.replace(/\s*\|\s*/g," · ");
+  return notes.trim();
+}
+
+function fillCollectionPendingTargets(client,preferredId=""){
+  const select=$("collectionTarget");
+  if(!select) return;
+
+  select.innerHTML="";
+  if(!client){
+    const option=document.createElement("option");
+    option.value="";
+    option.textContent="Elegí primero un cliente";
+    select.append(option);
+    select.disabled=true;
+    return;
+  }
+
+  const pending=pendingAccountDebtsFor(client)
+    .slice()
+    .sort((a,b)=>{
+      const da=`${String(a.movement?.date||"")} ${String(a.movement?.created_at||"")}`;
+      const db=`${String(b.movement?.date||"")} ${String(b.movement?.created_at||"")}`;
+      return da.localeCompare(db);
+    });
+  if(!pending.length){
+    const option=document.createElement("option");
+    option.value="";
+    option.textContent="Sin comprobantes pendientes";
+    select.append(option);
+    select.disabled=true;
+    return;
+  }
+
+  select.disabled=false;
+  pending.forEach((debt,index)=>{
+    const m=debt.movement;
+    const option=document.createElement("option");
+    option.value=String(m.id||"");
+    const type=isOpeningBalanceMovement(m)?"Saldo anterior":String(m.concept||"Remito");
+    option.textContent=`${index===0?"Más antiguo · ":""}${fmtDate(m.date)} · ${type} · Pendiente ${money(debt.remaining)}`;
+    select.append(option);
+  });
+
+  const validPreferred=preferredId && pending.some(d=>String(d.movement.id||"")===String(preferredId));
+  select.value=validPreferred ? String(preferredId) : String(pending[0].movement.id||"");
+}
+
 async function saveCollection(event){
   event.preventDefault();
   const client=$("collectionClient")?.value||"";
@@ -1945,6 +2007,7 @@ async function saveCollection(event){
   const method=$("collectionMethod")?.value||"efectivo";
   const detail=String($("collectionDetail")?.value||"").trim();
   const reference=String($("collectionReference")?.value||"").trim();
+  const targetMovementId=String($("collectionTarget")?.value||"").trim();
 
   if(!client) return alert("Elegí un cliente.");
   if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
@@ -1960,7 +2023,10 @@ async function saveCollection(event){
     amount,
     payment_method:method,
     status:"confirmado",
-    notes:reference?`REFERENCIA: ${reference}`:"",
+    notes:[
+      targetMovementId?`IMPUTA_MOVEMENT_ID:${targetMovementId}`:"",
+      reference?`REFERENCIA: ${reference}`:""
+    ].filter(Boolean).join(" | "),
     source_order_id:null,
     created_at:new Date().toISOString()
   };
@@ -1977,6 +2043,7 @@ async function saveCollection(event){
     $("collectionAmount").value="";
     $("collectionDetail").value="";
     $("collectionReference").value="";
+    fillCollectionPendingTargets(client);
     showDeliveryToast("Cobranza guardada.");
   }catch(error){
     alert("No se pudo guardar la cobranza: "+error.message);
@@ -1989,6 +2056,7 @@ function collectFullBalance(){
   const balance=accountTotals(client).balance;
   if(balance<=0) return alert("El cliente no tiene saldo pendiente.");
   $("collectionClient").value=client;
+  fillCollectionPendingTargets(client);
   $("collectionAmount").value=balance.toFixed(2);
   document.querySelector('.tab[data-view="accounts"]')?.click();
   $("collectionDetail").value="Cancelación total";
@@ -2076,8 +2144,19 @@ function pendingAccountDebtsFor(client){
 
     if(m.type==="cobro"){
       let payment=Math.max(0,Number(m.amount||0));
+      const targetId=collectionTargetMovementId(m);
 
-      // Primero cancela las deudas más antiguas.
+      // Si la cobranza fue imputada manualmente, primero cancela ese comprobante.
+      if(targetId && payment>0){
+        const target=debts.find(d=>String(d.movement.id||"")===targetId && d.remaining>0);
+        if(target){
+          const applied=Math.min(payment,target.remaining);
+          target.remaining-=applied;
+          payment-=applied;
+        }
+      }
+
+      // El remanente (o las cobranzas históricas sin imputación) sigue por antigüedad.
       for(const debt of debts){
         if(payment<=0) break;
         if(debt.remaining<=0) continue;
@@ -2158,7 +2237,7 @@ function printPendingAccountStatement(){
       <div class="final"><span>Total pendiente</span><strong>${money(totalPending)}</strong></div>
     </div>
 
-    <div class="note">Las cobranzas se imputan por antigüedad a los comprobantes más antiguos para calcular el saldo pendiente de cada uno.</div>
+    <div class="note">Las cobranzas se imputan al comprobante elegido. Si no hubo selección histórica o queda un excedente, se aplica por antigüedad.</div>
 
     <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script>
   </body></html>`);
@@ -4423,6 +4502,7 @@ on("repairDeliveredMovements","click",async()=>{
 on("closeBalanceDetail","click",()=>{ const d=$("balanceDetailDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
 on("openingBalanceForm","submit",saveOpeningBalance);
 on("collectionForm","submit",saveCollection);
+on("collectionClient","change",()=>fillCollectionPendingTargets($("collectionClient")?.value||""));
 on("accountClientSelect","change",renderAccounts);
 on("refreshAccounts","click",renderAccounts);
 on("collectFullBalance","click",collectFullBalance);
