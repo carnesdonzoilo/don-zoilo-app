@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.26";
+const APP_VERSION = "35.3.27";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -836,6 +836,7 @@ function showDeliveryToast(message){
 }
 
 function deliveryMovementId(batchKey){ return `delivery-${batchKey}`; }
+function deliveryPaymentMovementId(batchKey){ return `delivery-payment-${batchKey}`; }
 function orderBatchTotal(items){ return items.reduce((s,i)=>s+Number(i.total||0),0); }
 function orderBatchKg(items){ return items.reduce((s,i)=>s+(((i.unit||"kg")==="kg")?Number(i.quantity||0):0),0); }
 
@@ -846,6 +847,7 @@ function openDeliveryConfirmation(batchKey,items){
   $("deliveryConfirmNumber").textContent=`N.º ${remitoSequence(items)}`;
   $("deliveryConfirmTotal").textContent=money(orderBatchTotal(items));
   $("deliveryConfirmDate").textContent=fmtDate(items[0].delivery_date);
+  if($("deliveryPaidCash")) $("deliveryPaidCash").checked=false;
   const d=$("deliveryConfirmDialog");
   if(typeof d.showModal==="function") d.showModal(); else d.setAttribute("open","");
 }
@@ -856,6 +858,7 @@ async function confirmBatchDelivery(){
   if(items.every(i=>i.delivered)) return alert("Este pedido ya fue entregado.");
 
   const btn=$("confirmDeliveryBtn");
+  const paidCash=Boolean($("deliveryPaidCash")?.checked);
   btn.disabled=true;
   try{
     const deliveredAt=new Date().toISOString();
@@ -876,41 +879,70 @@ async function confirmBatchDelivery(){
     buildOrderSheet();
 
     const movementId=deliveryMovementId(batchKey);
-    const exists=movements.some(m=>m.id===movementId);
-    if(!exists){
-      const movement={
+    const paymentMovementId=deliveryPaymentMovementId(batchKey);
+    const batchTotal=orderBatchTotal(items);
+    const saleExists=movements.some(m=>m.id===movementId);
+    const paymentExists=movements.some(m=>m.id===paymentMovementId);
+
+    const newMovements=[];
+    if(!saleExists){
+      newMovements.push({
         id:movementId,
         date:items[0].delivery_date||todayISO(),
         type:"venta",
         party:items[0].client||"",
         concept:`Remito ${remitoSequence(items)}`,
         kg:orderBatchKg(items),
-        amount:orderBatchTotal(items),
+        amount:batchTotal,
         payment_method:items[0].payment_method||"cuenta_corriente",
         status:"confirmado",
         notes:`Entrega confirmada ${new Date(deliveredAt).toLocaleString("es-AR")}`,
         source_order_id:batchKey,
         created_at:deliveredAt
-      };
+      });
+    }
 
+    if(paidCash && !paymentExists){
+      const paymentCreatedAt=new Date(new Date(deliveredAt).getTime()+1).toISOString();
+      newMovements.push({
+        id:paymentMovementId,
+        date:items[0].delivery_date||todayISO(),
+        type:"cobro",
+        party:items[0].client||"",
+        concept:`Cobro contado · Remito ${remitoSequence(items)}`,
+        kg:0,
+        amount:batchTotal,
+        payment_method:"efectivo",
+        status:"confirmado",
+        notes:`IMPUTA_MOVEMENT_IDS:${movementId} | PAGADO_CONTADO_AL_ENTREGAR`,
+        source_order_id:batchKey,
+        created_at:paymentCreatedAt
+      });
+    }
+
+    if(newMovements.length){
       try{
         if(supabaseClient){
-          const {error}=await supabaseClient.from("movements").insert(movement);
+          const {error}=await supabaseClient.from("movements").insert(newMovements);
           if(error && error.code!=="23505") throw error;
         }
-        if(!movements.some(m=>m.id===movementId)) movements.unshift(movement);
+        newMovements.forEach(m=>{
+          if(!movements.some(existing=>existing.id===m.id)) movements.unshift(m);
+        });
         localSave();
         renderDashboard();
         renderMovements();
+        renderBalances();
+        renderAccounts();
       }catch(movementError){
-        console.error("No se pudo registrar la actividad de entrega:",movementError);
-        showDeliveryToast("Pedido entregado. La actividad se reintentará al actualizar.");
+        console.error("No se pudo registrar la actividad de entrega/cobro:",movementError);
+        showDeliveryToast("Pedido entregado. Revisá la cuenta corriente y actualizá si hace falta.");
       }
     }
     const d=$("deliveryConfirmDialog");
     if(typeof d.close==="function") d.close(); else d.removeAttribute("open");
     pendingDeliveryBatch=null;
-    showDeliveryToast("Pedido entregado correctamente.");
+    showDeliveryToast(paidCash ? "Pedido entregado y cobrado de contado." : "Pedido entregado correctamente.");
   }catch(e){
     alert("No se pudo confirmar la entrega: "+e.message);
   }finally{
@@ -1953,7 +1985,7 @@ function collectionTargetMovementIds(movement){
       .filter(Boolean);
   }
 
-  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.26.
+  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.27.
   const single=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
   return single ? [String(single[1]||"").trim()].filter(Boolean) : [];
 }
