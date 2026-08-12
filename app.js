@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.25";
+const APP_VERSION = "35.3.26";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1895,8 +1895,8 @@ function renderAccounts(){
   if($("accountOpeningBalance")) $("accountOpeningBalance").textContent=money(totals.opening);
   renderAccountHistory(client);
   const collectionClient=$("collectionClient")?.value||"";
-  const currentTarget=$("collectionTarget")?.value||"";
-  fillCollectionPendingTargets(collectionClient,currentTarget);
+  const currentTargets=selectedCollectionTargetIds();
+  fillCollectionPendingTargets(collectionClient,currentTargets);
 }
 
 async function saveOpeningBalance(event){
@@ -1941,32 +1941,53 @@ async function saveOpeningBalance(event){
   }
 }
 
-function collectionTargetMovementId(movement){
+function collectionTargetMovementIds(movement){
   const notes=String(movement?.notes||"");
-  const match=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
-  return match ? String(match[1]||"").trim() : "";
+
+  // Formato nuevo: varios comprobantes en el orden elegido.
+  const multi=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_IDS:([^|]+?)(?:\s*\||$)/);
+  if(multi){
+    return String(multi[1]||"")
+      .split(",")
+      .map(x=>x.trim())
+      .filter(Boolean);
+  }
+
+  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.26.
+  const single=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
+  return single ? [String(single[1]||"").trim()].filter(Boolean) : [];
+}
+
+function collectionTargetMovementId(movement){
+  return collectionTargetMovementIds(movement)[0] || "";
 }
 
 function cleanAccountMovementNotes(movement){
   let notes=String(movement?.notes||"");
-  notes=notes.replace(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:[^|]+(?=\||$)/g,"");
+  notes=notes.replace(/(?:^|\|)\s*IMPUTA_MOVEMENT_IDS?:[^|]+(?=\||$)/g,"");
   notes=notes.replace(/SALDO_INICIAL/g,"");
   notes=notes.replace(/^\s*\|\s*|\s*\|\s*$/g,"");
   notes=notes.replace(/\s*\|\s*/g," · ");
   return notes.trim();
 }
 
-function fillCollectionPendingTargets(client,preferredId=""){
-  const select=$("collectionTarget");
-  if(!select) return;
+function selectedCollectionTargetIds(){
+  return [...document.querySelectorAll('#collectionTargets input[type="checkbox"]:checked')]
+    .map(input=>String(input.value||"").trim())
+    .filter(Boolean);
+}
 
-  select.innerHTML="";
+function fillCollectionPendingTargets(client,preferredIds=[]){
+  const box=$("collectionTargets");
+  if(!box) return;
+
+  const preferred=Array.isArray(preferredIds)
+    ? preferredIds.map(String)
+    : String(preferredIds||"").split(",").map(x=>x.trim()).filter(Boolean);
+
+  box.innerHTML="";
   if(!client){
-    const option=document.createElement("option");
-    option.value="";
-    option.textContent="Elegí primero un cliente";
-    select.append(option);
-    select.disabled=true;
+    box.innerHTML='<div class="muted small">Elegí primero un cliente</div>';
     return;
   }
 
@@ -1977,27 +1998,34 @@ function fillCollectionPendingTargets(client,preferredId=""){
       const db=`${String(b.movement?.date||"")} ${String(b.movement?.created_at||"")}`;
       return da.localeCompare(db);
     });
+
   if(!pending.length){
-    const option=document.createElement("option");
-    option.value="";
-    option.textContent="Sin comprobantes pendientes";
-    select.append(option);
-    select.disabled=true;
+    box.innerHTML='<div class="muted small">Sin comprobantes pendientes</div>';
     return;
   }
 
-  select.disabled=false;
+  const validPreferred=preferred.filter(id=>
+    pending.some(d=>String(d.movement.id||"")===String(id))
+  );
+  const selectedIds=new Set(validPreferred.length
+    ? validPreferred
+    : [String(pending[0].movement.id||"")]
+  );
+
   pending.forEach((debt,index)=>{
     const m=debt.movement;
-    const option=document.createElement("option");
-    option.value=String(m.id||"");
+    const id=String(m.id||"");
     const type=isOpeningBalanceMovement(m)?"Saldo anterior":String(m.concept||"Remito");
-    option.textContent=`${index===0?"Más antiguo · ":""}${fmtDate(m.date)} · ${type} · Pendiente ${money(debt.remaining)}`;
-    select.append(option);
+    const row=document.createElement("label");
+    row.className="collection-target-option";
+    row.innerHTML=`
+      <input type="checkbox" value="${escapeHtml(id)}" ${selectedIds.has(id)?"checked":""}>
+      <span>
+        <strong>${index===0?"Más antiguo · ":""}${fmtDate(m.date)} · ${escapeHtml(type)}</strong>
+        <small>Pendiente ${money(debt.remaining)}</small>
+      </span>`;
+    box.append(row);
   });
-
-  const validPreferred=preferredId && pending.some(d=>String(d.movement.id||"")===String(preferredId));
-  select.value=validPreferred ? String(preferredId) : String(pending[0].movement.id||"");
 }
 
 async function saveCollection(event){
@@ -2008,7 +2036,7 @@ async function saveCollection(event){
   const method=$("collectionMethod")?.value||"efectivo";
   const detail=String($("collectionDetail")?.value||"").trim();
   const reference=String($("collectionReference")?.value||"").trim();
-  const targetMovementId=String($("collectionTarget")?.value||"").trim();
+  const targetMovementIds=selectedCollectionTargetIds();
 
   if(!client) return alert("Elegí un cliente.");
   if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
@@ -2025,7 +2053,7 @@ async function saveCollection(event){
     payment_method:method,
     status:"confirmado",
     notes:[
-      targetMovementId?`IMPUTA_MOVEMENT_ID:${targetMovementId}`:"",
+      targetMovementIds.length?`IMPUTA_MOVEMENT_IDS:${targetMovementIds.join(",")}`:"",
       reference?`REFERENCIA: ${reference}`:""
     ].filter(Boolean).join(" | "),
     source_order_id:null,
@@ -2145,16 +2173,17 @@ function pendingAccountDebtsFor(client){
 
     if(m.type==="cobro"){
       let payment=Math.max(0,Number(m.amount||0));
-      const targetId=collectionTargetMovementId(m);
+      const targetIds=collectionTargetMovementIds(m);
 
-      // Si la cobranza fue imputada manualmente, primero cancela ese comprobante.
-      if(targetId && payment>0){
-        const target=debts.find(d=>String(d.movement.id||"")===targetId && d.remaining>0);
-        if(target){
-          const applied=Math.min(payment,target.remaining);
-          target.remaining-=applied;
-          payment-=applied;
-        }
+      // Si la cobranza fue imputada manualmente, aplica primero a TODOS los
+      // comprobantes seleccionados, respetando el orden guardado.
+      for(const targetId of targetIds){
+        if(payment<=0) break;
+        const target=debts.find(d=>String(d.movement.id||"")===String(targetId) && d.remaining>0);
+        if(!target) continue;
+        const applied=Math.min(payment,target.remaining);
+        target.remaining-=applied;
+        payment-=applied;
       }
 
       // El remanente (o las cobranzas históricas sin imputación) sigue por antigüedad.
@@ -2238,7 +2267,7 @@ function printPendingAccountStatement(){
       <div class="final"><span>Total pendiente</span><strong>${money(totalPending)}</strong></div>
     </div>
 
-    <div class="note">Las cobranzas se imputan al comprobante elegido. Si no hubo selección histórica o queda un excedente, se aplica por antigüedad.</div>
+    <div class="note">Las cobranzas se imputan primero a los comprobantes elegidos. Si no hubo selección histórica o queda un excedente, se aplica por antigüedad.</div>
 
     <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script>
   </body></html>`);
