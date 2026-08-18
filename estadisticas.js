@@ -1,4 +1,4 @@
-// DON ZOILO V35.3.28 — ESTADÍSTICAS
+// DON ZOILO V35.3.29 — ESTADÍSTICAS
 // Ranking de productos + ranking de clientes a partir de remitos ENTREGADOS.
 (() => {
   const byId = id => document.getElementById(id);
@@ -39,7 +39,7 @@
   }
 
 
-  // V35.3.28: unificación de nombres equivalentes SOLO para el ranking de clientes.
+  // V35.3.29: unificación de nombres equivalentes SOLO para el ranking de clientes.
   function clientKey(value){
     return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   }
@@ -119,8 +119,9 @@
   function fillClients(){
     const select=byId('statsClientFilter');
     if(!select) return;
-    const current=select.value;
-    const clients=[...new Set(deliveredRows().map(x=>String(x.client||'').trim()).filter(Boolean))]
+    const current=canonicalClient(select.value);
+    // El selector usa los mismos nombres unificados que el Ranking de clientes.
+    const clients=[...new Set(deliveredRows().map(x=>canonicalClient(x.client)).filter(Boolean))]
       .sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}));
     select.innerHTML='<option value="">Todos los clientes</option>'+clients.map(c=>`<option value="${escapeHtmlStats(c)}">${escapeHtmlStats(c)}</option>`).join('');
     if(clients.includes(current)) select.value=current;
@@ -141,7 +142,7 @@
 
   function uniqueRemitoKey(o){ return String(o.batch_id || o.id || ''); }
 
-  // V35.3.28: una única fuente de cálculo para Resumen y rankings.
+  // V35.3.29: una única fuente de cálculo para Resumen y rankings.
   function lineKg(o){
     return equivalentKg(o?.product, o?.unit, o?.quantity);
   }
