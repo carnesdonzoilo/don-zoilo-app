@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.30";
+const APP_VERSION = "35.3.31";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1985,7 +1985,7 @@ function collectionTargetMovementIds(movement){
       .filter(Boolean);
   }
 
-  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.30.
+  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.31.
   const single=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
   return single ? [String(single[1]||"").trim()].filter(Boolean) : [];
 }
@@ -2232,15 +2232,21 @@ function pendingAccountDebtsFor(client){
     }
   });
 
-  return debts.filter(d=>d.remaining>0.009);
+  // La app muestra importes en pesos enteros: un residuo menor a $0,50
+  // debe considerarse cancelado para pendientes y conteos.
+  return debts.filter(d=>Math.round(Number(d.remaining||0))>0);
 }
 
 function printPendingAccountStatement(){
   const client=$("accountClientSelect")?.value||"";
   if(!client) return alert("Elegí un cliente.");
 
-  const pending=pendingAccountDebtsFor(client);
-  const totalPending=pending.reduce((sum,d)=>sum+d.remaining,0);
+  // V35.3.31: el detalle impreso trabaja con la misma precisión visible ($ enteros).
+  // Evita listar residuos de centavos que money() muestra como $ 0 y que antes
+  // incrementaban incorrectamente el contador de comprobantes pendientes.
+  const pending=pendingAccountDebtsFor(client)
+    .filter(d=>Math.round(Number(d.remaining||0))>0);
+  const totalPending=pending.reduce((sum,d)=>sum+Number(d.remaining||0),0);
   const currentBalance=accountTotals(client).balance;
 
   if(!pending.length){
