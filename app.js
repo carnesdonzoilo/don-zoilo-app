@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.31";
+const APP_VERSION = "35.3.32";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1880,6 +1880,77 @@ function fillClientSelects(){
   });
 }
 
+function movementDocumentMeta(movement){
+  const notes=String(movement?.notes||"");
+  const remitoMatch=notes.match(/(?:^|\|)\s*REMITO_FISICO:([^|]*?)(?=\s*\||$)/);
+  const invoiceMatch=notes.match(/(?:^|\|)\s*FACTURA:([^|]*?)(?=\s*\||$)/);
+  return {
+    remito: remitoMatch ? String(remitoMatch[1]||"").trim() : "",
+    invoice: invoiceMatch ? String(invoiceMatch[1]||"").trim() : ""
+  };
+}
+
+function setMovementDocumentMetaNotes(notes,remito,invoice){
+  let clean=String(notes||"")
+    .replace(/(?:^|\|)\s*REMITO_FISICO:[^|]*(?=\||$)/g,"")
+    .replace(/(?:^|\|)\s*FACTURA:[^|]*(?=\||$)/g,"")
+    .replace(/^\s*\|\s*|\s*\|\s*$/g,"")
+    .replace(/\s*\|\s*/g," | ")
+    .trim();
+
+  const parts=[];
+  if(clean) parts.push(clean);
+  if(String(remito||"").trim()) parts.push(`REMITO_FISICO:${String(remito).trim()}`);
+  if(String(invoice||"").trim()) parts.push(`FACTURA:${String(invoice).trim()}`);
+  return parts.join(" | ");
+}
+
+function movementDisplayDocument(movement){
+  const meta=movementDocumentMeta(movement);
+  const parts=[];
+  if(meta.remito) parts.push(`Remito ${meta.remito}`);
+  if(meta.invoice) parts.push(`Factura ${meta.invoice}`);
+  return parts.join(" · ");
+}
+
+function openAccountDocumentEdit(movement){
+  if(!movement || movement.type!=="venta") return;
+  const meta=movementDocumentMeta(movement);
+  $("accountDocumentMovementId").value=String(movement.id||"");
+  $("accountDocumentRemito").value=meta.remito;
+  $("accountDocumentInvoice").value=meta.invoice;
+  $("accountDocumentEditInfo").textContent=`${fmtDate(movement.date)} · ${movement.party||""} · ${movement.concept||"Venta"}`;
+  const d=$("accountDocumentEditDialog");
+  if(typeof d?.showModal==="function") d.showModal(); else d?.setAttribute("open","");
+}
+
+async function saveAccountDocumentEdit(event){
+  event.preventDefault();
+  const id=String($("accountDocumentMovementId")?.value||"").trim();
+  const movement=movements.find(m=>String(m.id||"")===id);
+  if(!movement) return alert("No se encontró el movimiento.");
+  if(movement.type!=="venta") return alert("Solo se pueden editar datos de ventas/remitos.");
+
+  const remito=String($("accountDocumentRemito")?.value||"").trim();
+  const invoice=String($("accountDocumentInvoice")?.value||"").trim();
+  const notes=setMovementDocumentMetaNotes(movement.notes,remito,invoice);
+
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").update({notes}).eq("id",movement.id);
+      if(error) throw error;
+    }
+    movement.notes=notes;
+    localSave();
+    const d=$("accountDocumentEditDialog");
+    if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open");
+    renderAccounts();
+    showDeliveryToast("Datos del comprobante guardados.");
+  }catch(error){
+    alert("No se pudieron guardar los datos del comprobante: "+error.message);
+  }
+}
+
 function renderAccountHistory(client){
   const box=$("accountHistoryList");
   if(!box) return;
@@ -1906,13 +1977,19 @@ function renderAccountHistory(client){
       ? "Saldo anterior"
       : m.type==="venta" ? "Venta" : "Cobranza";
     const sign=debit?"+":"−";
+    const documentInfo=m.type==="venta" ? movementDisplayDocument(m) : "";
     row.innerHTML=`
       <div>${fmtDate(m.date)}</div>
       <div class="history-main">
         <strong>${label} · ${escapeHtml(m.concept||"")}</strong>
+        ${documentInfo?`<small class="account-document-meta">${escapeHtml(documentInfo)}</small>`:""}
         <small>${escapeHtml(m.payment_method||"")} ${cleanAccountMovementNotes(m)?`· ${escapeHtml(cleanAccountMovementNotes(m))}`:""}</small>
       </div>
-      <div class="history-amount">${sign}${money(m.amount||0)}</div>`;
+      <div class="history-amount">${sign}${money(m.amount||0)}</div>
+      ${m.type==="venta"?'<button type="button" class="secondary account-edit-document-btn">✏️ Comprobante</button>':""}`;
+    if(m.type==="venta"){
+      row.querySelector(".account-edit-document-btn")?.addEventListener("click",()=>openAccountDocumentEdit(m));
+    }
     box.append(row);
   });
 }
@@ -1985,7 +2062,7 @@ function collectionTargetMovementIds(movement){
       .filter(Boolean);
   }
 
-  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.31.
+  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.32.
   const single=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
   return single ? [String(single[1]||"").trim()].filter(Boolean) : [];
 }
@@ -1998,6 +2075,8 @@ function cleanAccountMovementNotes(movement){
   let notes=String(movement?.notes||"");
   notes=notes.replace(/(?:^|\|)\s*IMPUTA_MOVEMENT_IDS?:[^|]+(?=\||$)/g,"");
   notes=notes.replace(/SALDO_INICIAL/g,"");
+  notes=notes.replace(/(?:^|\|)\s*REMITO_FISICO:[^|]*(?=\||$)/g,"");
+  notes=notes.replace(/(?:^|\|)\s*FACTURA:[^|]*(?=\||$)/g,"");
   notes=notes.replace(/^\s*\|\s*|\s*\|\s*$/g,"");
   notes=notes.replace(/\s*\|\s*/g," · ");
   return notes.trim();
@@ -2134,10 +2213,12 @@ function printAccountStatement(){
     .map(m=>{
       const debit=m.type==="venta"||isOpeningBalanceMovement(m);
       const label=isOpeningBalanceMovement(m)?"Saldo anterior":m.type==="venta"?"Venta":"Cobranza";
+      const meta=m.type==="venta" ? movementDocumentMeta(m) : {remito:"",invoice:""};
       return `<tr>
         <td>${fmtDate(m.date)}</td>
         <td>${escapeHtml(label)}</td>
-        <td>${escapeHtml(m.concept||"")}</td>
+        <td>${escapeHtml(meta.remito || m.concept || "")}</td>
+        <td>${escapeHtml(meta.invoice || "—")}</td>
         <td class="num">${debit?money(m.amount):""}</td>
         <td class="num">${!debit?money(m.amount):""}</td>
       </tr>`;
@@ -2153,7 +2234,7 @@ function printAccountStatement(){
   @page{size:A4 portrait;margin:10mm}@media print{body{padding:0}}
   </style></head><body>
   <div class="head"><div><h1>DON ZOILO</h1><div>Estado de cuenta</div></div><div><strong>${escapeHtml(client)}</strong><br>${new Date().toLocaleDateString("es-AR")}</div></div>
-  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${rows}</tbody></table>
+  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Remito</th><th>Factura</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="summary">
     <div><span>Saldo anterior</span><strong>${money(totals.opening)}</strong></div>
     <div><span>Ventas</span><strong>${money(totals.sales)}</strong></div>
@@ -2241,7 +2322,7 @@ function printPendingAccountStatement(){
   const client=$("accountClientSelect")?.value||"";
   if(!client) return alert("Elegí un cliente.");
 
-  // V35.3.31: el detalle impreso trabaja con la misma precisión visible ($ enteros).
+  // V35.3.32: el detalle impreso trabaja con la misma precisión visible ($ enteros).
   // Evita listar residuos de centavos que money() muestra como $ 0 y que antes
   // incrementaban incorrectamente el contador de comprobantes pendientes.
   const pending=pendingAccountDebtsFor(client)
@@ -2259,10 +2340,12 @@ function printPendingAccountStatement(){
   const rows=pending.map(d=>{
     const m=d.movement;
     const label=isOpeningBalanceMovement(m)?"Saldo anterior":"Venta";
+    const meta=movementDocumentMeta(m);
     return `<tr>
       <td>${fmtDate(m.date)}</td>
       <td>${escapeHtml(label)}</td>
-      <td>${escapeHtml(m.concept||"")}</td>
+      <td>${escapeHtml(meta.remito || m.concept || "")}</td>
+      <td>${escapeHtml(meta.invoice || "—")}</td>
       <td class="num">${money(d.original)}</td>
       <td class="num strong">${money(d.remaining)}</td>
     </tr>`;
@@ -2296,7 +2379,7 @@ function printPendingAccountStatement(){
     </div>
 
     <table>
-      <thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Importe original</th><th>Pendiente</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Remito</th><th>Factura</th><th>Importe original</th><th>Pendiente</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
 
@@ -3264,6 +3347,18 @@ function remitoSequence(items){
   return raw ? raw.slice(-8).toUpperCase() : "—";
 }
 
+function saleMovementForItems(items){
+  if(!items?.length) return null;
+  const batchKey=items[0]?.batch_id||items[0]?.id;
+  return movements.find(m=>m.type==="venta" && movementMatchesBatch(m,batchKey,items)) || null;
+}
+
+function remitoDisplayNumber(items){
+  const sale=saleMovementForItems(items);
+  const physical=sale ? movementDocumentMeta(sale).remito : "";
+  return physical || remitoSequence(items);
+}
+
 // V35.3.14 — El remito muestra el saldo que queda luego de sumar ese comprobante.
 // Si la venta ya fue registrada al confirmar la entrega, accountTotals() ya la incluye
 // y no se vuelve a sumar.
@@ -3291,7 +3386,7 @@ function openRemito(items){
   const first=items[0];
   const total=items.reduce((sum,item)=>sum+Number(item.total||0),0);
 
-  $("remitoNumber").textContent=`N.º ${remitoSequence(items)}`;
+  $("remitoNumber").textContent=`N.º ${remitoDisplayNumber(items)}`;
   $("remitoDate").textContent=fmtDate(first.delivery_date);
   $("remitoClient").textContent=first.client||"";
   $("remitoPayment").textContent=(first.payment_method||"").replace("_"," ");
@@ -3335,7 +3430,7 @@ $("printRemito").addEventListener("click",()=>{
   const total=currentRemitoItems.reduce((sum,item)=>sum+Number(item.total||0),0);
   const updatedBalance=remitoUpdatedBalance(currentRemitoItems);
   const notes=remitoVisibleNotes(currentRemitoItems).join(" · ") || "—";
-  const remitoNo=remitoSequence(currentRemitoItems);
+  const remitoNo=remitoDisplayNumber(currentRemitoItems);
 
   const rows=currentRemitoItems.map(item=>`
     <tr>
@@ -4571,6 +4666,9 @@ on("repairDeliveredMovements","click",async()=>{
 
 
 on("closeBalanceDetail","click",()=>{ const d=$("balanceDetailDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
+on("accountDocumentEditForm","submit",saveAccountDocumentEdit);
+on("closeAccountDocumentEdit","click",()=>{ const d=$("accountDocumentEditDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
+on("cancelAccountDocumentEdit","click",()=>{ const d=$("accountDocumentEditDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
 on("openingBalanceForm","submit",saveOpeningBalance);
 on("collectionForm","submit",saveCollection);
 on("collectionClient","change",()=>fillCollectionPendingTargets($("collectionClient")?.value||""));

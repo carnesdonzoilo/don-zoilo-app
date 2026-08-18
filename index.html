@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <title>Don Zoilo | Operaciones</title>
-  <link rel="stylesheet" href="styles.css?v=35.3.31" />
+  <link rel="stylesheet" href="styles.css?v=35.3.32" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 35.3.31 · Cuentas Corrientes · Estadísticas y vencimientos</div>
+      <div class="subtitle">Control de operaciones · Versión 35.3.32 · Cuentas Corrientes · Estadísticas y vencimientos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -1101,6 +1101,31 @@
     </div>
   </dialog>
 
+
+  <dialog id="accountDocumentEditDialog">
+    <form id="accountDocumentEditForm" class="dialog-card account-document-edit-card">
+      <div class="balance-detail-head">
+        <div>
+          <h2>Editar comprobante</h2>
+          <p id="accountDocumentEditInfo" class="muted small">Completar datos administrativos del remito.</p>
+        </div>
+        <button type="button" id="closeAccountDocumentEdit" class="secondary">Cerrar</button>
+      </div>
+      <input type="hidden" id="accountDocumentMovementId">
+      <label>N.º remito físico
+        <input id="accountDocumentRemito" placeholder="Ej.: 0001-00001234" autocomplete="off">
+      </label>
+      <label>N.º factura
+        <input id="accountDocumentInvoice" placeholder="Ej.: A 0003-00004567" autocomplete="off">
+      </label>
+      <p class="muted small">Estos datos no modifican importes, cobranzas ni saldos.</p>
+      <div class="dialog-actions">
+        <button type="button" id="cancelAccountDocumentEdit" class="secondary">Cancelar</button>
+        <button type="submit" class="primary">Guardar datos</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="deliveryConfirmDialog">
     <div class="dialog-card delivery-confirm-card">
       <h2>Confirmar entrega</h2>
@@ -1209,14 +1234,14 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=35.3.31"></script>
-  <script src="app.js?v=35.3.31"></script>
+  <script src="cloud-config.js?v=35.3.32"></script>
+  <script src="app.js?v=35.3.32"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=35.3.31"></script>
-  <script src="stock-ocr.js?v=35.3.31"></script>
-  <script src="caja-activos.js?v=35.3.31"></script>
-  <script src="balance-diario.js?v=35.3.31"></script>
-  <script src="vencimientos.js?v=35.3.31"></script>
-  <script src="estadisticas.js?v=35.3.31"></script>
+  <script src="stock.js?v=35.3.32"></script>
+  <script src="stock-ocr.js?v=35.3.32"></script>
+  <script src="caja-activos.js?v=35.3.32"></script>
+  <script src="balance-diario.js?v=35.3.32"></script>
+  <script src="vencimientos.js?v=35.3.32"></script>
+  <script src="estadisticas.js?v=35.3.32"></script>
 </body>
 </html>
