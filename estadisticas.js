@@ -1,4 +1,4 @@
-// DON ZOILO V35.3.29 — ESTADÍSTICAS
+// DON ZOILO V35.3.30 — ESTADÍSTICAS
 // Ranking de productos + ranking de clientes a partir de remitos ENTREGADOS.
 (() => {
   const byId = id => document.getElementById(id);
@@ -39,7 +39,7 @@
   }
 
 
-  // V35.3.29: unificación de nombres equivalentes SOLO para el ranking de clientes.
+  // V35.3.30: unificación de nombres equivalentes SOLO para el ranking de clientes.
   function clientKey(value){
     return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   }
@@ -142,7 +142,7 @@
 
   function uniqueRemitoKey(o){ return String(o.batch_id || o.id || ''); }
 
-  // V35.3.29: una única fuente de cálculo para Resumen y rankings.
+  // V35.3.30: una única fuente de cálculo para Resumen y rankings.
   function lineKg(o){
     return equivalentKg(o?.product, o?.unit, o?.quantity);
   }
@@ -255,7 +255,7 @@
       const date=String(o.delivery_date||'');
       return date>=from && date<=to;
     });
-    const rows=periodRows.filter(o=>!client || o.client===client);
+    const rows=periodRows.filter(o=>!client || clientKey(canonicalClient(o.client))===clientKey(canonicalClient(client)));
     renderClientRanking(periodRows,from,to);
     const ranking=aggregate(rows);
     ranking.sort((a,b)=>{
