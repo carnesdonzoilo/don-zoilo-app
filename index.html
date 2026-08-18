@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <title>Don Zoilo | Operaciones</title>
-  <link rel="stylesheet" href="styles.css?v=35.3.32" />
+  <link rel="stylesheet" href="styles.css?v=35.3.33" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 35.3.32 · Cuentas Corrientes · Estadísticas y vencimientos</div>
+      <div class="subtitle">Control de operaciones · Versión 35.3.33 · Cuentas Corrientes · Estadísticas y vencimientos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -274,6 +274,9 @@
               <option value="efectivo">Efectivo</option>
               <option value="transferencia">Transferencia</option>
             </select>
+          </label>
+          <label>N.º de remito
+            <input id="orderRemitoNumber" placeholder="Opcional · si queda vacío se genera automático">
           </label>
           <label class="full">Observaciones<textarea id="orderNotes" rows="2"></textarea></label>
           <div class="order-total full">Total estimado: <strong id="orderTotalPreview">$ 0</strong></div>
@@ -1234,14 +1237,14 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=35.3.32"></script>
-  <script src="app.js?v=35.3.32"></script>
+  <script src="cloud-config.js?v=35.3.33"></script>
+  <script src="app.js?v=35.3.33"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=35.3.32"></script>
-  <script src="stock-ocr.js?v=35.3.32"></script>
-  <script src="caja-activos.js?v=35.3.32"></script>
-  <script src="balance-diario.js?v=35.3.32"></script>
-  <script src="vencimientos.js?v=35.3.32"></script>
-  <script src="estadisticas.js?v=35.3.32"></script>
+  <script src="stock.js?v=35.3.33"></script>
+  <script src="stock-ocr.js?v=35.3.33"></script>
+  <script src="caja-activos.js?v=35.3.33"></script>
+  <script src="balance-diario.js?v=35.3.33"></script>
+  <script src="vencimientos.js?v=35.3.33"></script>
+  <script src="estadisticas.js?v=35.3.33"></script>
 </body>
 </html>

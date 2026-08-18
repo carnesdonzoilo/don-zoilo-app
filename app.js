@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.32";
+const APP_VERSION = "35.3.33";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -493,6 +493,7 @@ async function saveEditedOrderGroup(items, card){
 
   const client=card.querySelector(".edit-client").value.trim();
   const payment=card.querySelector(".edit-payment").value;
+  const remitoNumber=String(card.querySelector(".edit-remito-number")?.value||"").trim();
   const rows=[...card.querySelectorAll(".edit-item-row")];
   const batchId=items[0]?.batch_id||items[0]?.id;
 
@@ -544,7 +545,7 @@ async function saveEditedOrderGroup(items, card){
         unit_price:row.unit_price,
         total:row.total,
         payment_method:payment,
-        notes:first.notes||"",
+        notes:setOrderRemitoNumberNotes(first.notes||"",remitoNumber),
         delivered:false,
         delivered_at:null,
         created_at:existing?.created_at||now
@@ -896,7 +897,11 @@ async function confirmBatchDelivery(){
         amount:batchTotal,
         payment_method:items[0].payment_method||"cuenta_corriente",
         status:"confirmado",
-        notes:`Entrega confirmada ${new Date(deliveredAt).toLocaleString("es-AR")}`,
+        notes:setMovementDocumentMetaNotes(
+          `Entrega confirmada ${new Date(deliveredAt).toLocaleString("es-AR")}`,
+          orderRemitoNumberFromNotes(items[0]),
+          ""
+        ),
         source_order_id:batchKey,
         created_at:deliveredAt
       });
@@ -987,7 +992,11 @@ async function reconcileDeliveredOrders(){
       amount:orderBatchTotal(items),
       payment_method:items[0].payment_method||"cuenta_corriente",
       status:"confirmado",
-      notes:"Movimiento reconstruido automáticamente desde pedido entregado.",
+      notes:setMovementDocumentMetaNotes(
+        "Movimiento reconstruido automáticamente desde pedido entregado.",
+        orderRemitoNumberFromNotes(items[0]),
+        ""
+      ),
       source_order_id:batchKey,
       created_at:deliveredAt
     };
@@ -1458,7 +1467,7 @@ function renderOrders(){
       <div class="order-group-head"><div>${items.every(i=>i.delivered)?`<span class="delivered-stamp">✅ ENTREGADO</span><div class="delivery-time">${items[0].delivered_at?new Date(items[0].delivered_at).toLocaleString("es-AR"):""}</div>`:""}</div>
         <div>
           <div class="order-client">${escapeHtml(first.client)}</div>
-          <div class="order-info">${fmtDate(first.delivery_date)} · ${escapeHtml((first.payment_method||"").replace("_"," "))}</div>
+          <div class="order-info">${fmtDate(first.delivery_date)} · ${escapeHtml((first.payment_method||"").replace("_"," "))} · Remito ${escapeHtml(remitoDisplayNumber(items))}</div>
         </div>
         <label class="delivery-check"><input type="checkbox" class="delivery-checkbox" ${allDelivered?"checked":""} ${allDelivered?"disabled":""}>Entregado</label>
       </div>
@@ -1492,6 +1501,9 @@ function renderOrders(){
       <div class="edit-group hidden">
         <div class="edit-client-row">
           <label>Cliente<input class="edit-client" value="${escapeHtml(first.client)}"></label>
+          <label>N.º de remito
+            <input class="edit-remito-number" value="${escapeHtml(orderRemitoNumberFromNotes(first))}" placeholder="Vacío = automático">
+          </label>
           <label>Forma de cobro
             <select class="edit-payment">
               ${["cuenta_corriente","efectivo","transferencia"].map(p=>`<option value="${p}" ${p===first.payment_method?"selected":""}>${p.replace("_"," ")}</option>`).join("")}
@@ -2062,7 +2074,7 @@ function collectionTargetMovementIds(movement){
       .filter(Boolean);
   }
 
-  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.32.
+  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.33.
   const single=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
   return single ? [String(single[1]||"").trim()].filter(Boolean) : [];
 }
@@ -2322,7 +2334,7 @@ function printPendingAccountStatement(){
   const client=$("accountClientSelect")?.value||"";
   if(!client) return alert("Elegí un cliente.");
 
-  // V35.3.32: el detalle impreso trabaja con la misma precisión visible ($ enteros).
+  // V35.3.33: el detalle impreso trabaja con la misma precisión visible ($ enteros).
   // Evita listar residuos de centavos que money() muestra como $ 0 y que antes
   // incrementaban incorrectamente el contador de comprobantes pendientes.
   const pending=pendingAccountDebtsFor(client)
@@ -3312,10 +3324,12 @@ $("ordersFilterDate").addEventListener("change",renderOrders);
 $("orderForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const quantity=Number($("orderQty").value||0), unit_price=Number($("orderUnitPrice").value||0);
+  const manualRemitoNumber=String($("orderRemitoNumber")?.value||"").trim();
   const order={
     id:uid(),delivery_date:$("orderDate").value,client:$("orderClient").value.trim(),
     product:$("orderProduct").value.trim(),quantity,unit:$("orderUnit").value,unit_price,total:quantity*unit_price,
-    payment_method:$("orderPayment").value,notes:$("orderNotes").value.trim(),
+    payment_method:$("orderPayment").value,
+    notes:setOrderRemitoNumberNotes($("orderNotes").value.trim(),manualRemitoNumber),
     batch_id:uid(),delivered:false,delivered_at:null,created_at:new Date().toISOString()
   };
   try{
@@ -3354,9 +3368,11 @@ function saleMovementForItems(items){
 }
 
 function remitoDisplayNumber(items){
+  const orderPhysical=orderRemitoNumberFromNotes(items?.[0]);
+  if(orderPhysical) return orderPhysical;
   const sale=saleMovementForItems(items);
-  const physical=sale ? movementDocumentMeta(sale).remito : "";
-  return physical || remitoSequence(items);
+  const movementPhysical=sale ? movementDocumentMeta(sale).remito : "";
+  return movementPhysical || remitoSequence(items);
 }
 
 // V35.3.14 — El remito muestra el saldo que queda luego de sumar ese comprobante.
@@ -3374,9 +3390,30 @@ function remitoUpdatedBalance(items){
   return current + (alreadyPosted?0:total);
 }
 
+function orderRemitoNumberFromNotes(item){
+  const notes=String(item?.notes||"");
+  const match=notes.match(/(?:^|\|)\s*REMITO_FISICO:([^|]*?)(?=\s*\||$)/);
+  return match ? String(match[1]||"").trim() : "";
+}
+
+function setOrderRemitoNumberNotes(notes,number){
+  let clean=String(notes||"")
+    .replace(/(?:^|\|)\s*REMITO_FISICO:[^|]*(?=\||$)/g,"")
+    .replace(/^\s*\|\s*|\s*\|\s*$/g,"")
+    .replace(/\s*\|\s*/g," | ")
+    .trim();
+  const value=String(number||"").trim();
+  if(value) clean=[clean,`REMITO_FISICO:${value}`].filter(Boolean).join(" | ");
+  return clean;
+}
+
 function remitoVisibleNotes(items){
   return [...new Set(items
-    .map(i=>String(i.notes||"").trim())
+    .map(i=>String(i.notes||"")
+      .replace(/(?:^|\|)\s*REMITO_FISICO:[^|]*(?=\||$)/g,"")
+      .replace(/^\s*\|\s*|\s*\|\s*$/g,"")
+      .replace(/\s*\|\s*/g," · ")
+      .trim())
     .filter(note=>note && note.toLowerCase()!=="importado desde texto"))];
 }
 
