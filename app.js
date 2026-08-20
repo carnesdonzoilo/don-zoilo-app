@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.33";
+const APP_VERSION = "35.3.34";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2028,13 +2028,22 @@ async function saveOpeningBalance(event){
   const detail=String($("openingDetail")?.value||"").trim();
 
   if(!client) return alert("Elegí un cliente.");
-  if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
+  if(!Number.isFinite(amount) || amount<0) return alert("Ingresá un importe válido. Para anular el saldo anterior usá 0.");
 
-  const movement={
+  // V35.3.34: el saldo anterior es ÚNICO por cliente.
+  // Antes cada corrección agregaba otro movimiento SALDO_INICIAL y podía dejar
+  // cuentas desajustadas. Ahora reemplaza exclusivamente los saldos anteriores
+  // del cliente seleccionado. Un importe 0 los anula sin tocar otros clientes.
+  const previousOpeningIds=accountMovementsFor(client)
+    .filter(isOpeningBalanceMovement)
+    .map(m=>m.id)
+    .filter(Boolean);
+
+  const movement=amount>0 ? {
     id:uid(),
     date,
     type:"ajuste",
-    party:client,
+    party:canonicalClientDisplayName(client),
     concept:"Saldo anterior",
     kg:0,
     amount,
@@ -2043,22 +2052,30 @@ async function saveOpeningBalance(event){
     notes:`SALDO_INICIAL${detail?` | ${detail}`:""}`,
     source_order_id:null,
     created_at:new Date().toISOString()
-  };
+  } : null;
 
   try{
-    if(supabaseClient){
+    if(supabaseClient && previousOpeningIds.length){
+      const {error}=await supabaseClient.from("movements").delete().in("id",previousOpeningIds);
+      if(error) throw error;
+    }
+    if(supabaseClient && movement){
       const {error}=await supabaseClient.from("movements").insert(movement);
       if(error) throw error;
     }
-    movements.unshift(movement);
+
+    const removeIds=new Set(previousOpeningIds.map(String));
+    movements=movements.filter(m=>!removeIds.has(String(m.id||"")));
+    if(movement) movements.unshift(movement);
     localSave();
-    $("accountClientSelect").value=client;
+
+    $("accountClientSelect").value=canonicalClientDisplayName(client);
     renderAll();
     $("openingAmount").value="";
     $("openingDetail").value="";
-    showDeliveryToast("Saldo anterior guardado.");
+    showDeliveryToast(movement?"Saldo anterior reemplazado solo para este cliente.":"Saldo anterior anulado solo para este cliente.");
   }catch(error){
-    alert("No se pudo guardar el saldo anterior: "+error.message);
+    alert("No se pudo actualizar el saldo anterior: "+error.message);
   }
 }
 

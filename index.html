@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <title>Don Zoilo | Operaciones</title>
-  <link rel="stylesheet" href="styles.css?v=35.3.33" />
+  <link rel="stylesheet" href="styles.css?v=35.3.34" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 35.3.33 · Cuentas Corrientes · Estadísticas y vencimientos</div>
+      <div class="subtitle">Control de operaciones · Versión 35.3.34 · Cuentas Corrientes · Estadísticas y vencimientos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -601,7 +601,7 @@
 
         <div class="account-side">
           <div class="panel">
-            <h3>Cargar saldo anterior</h3>
+            <h3>Establecer saldo anterior</h3>
             <form id="openingBalanceForm" class="account-form">
               <label>Cliente
                 <select id="openingClient" required>
@@ -610,6 +610,7 @@
               </label>
               <label>Importe
                 <input id="openingAmount" type="number" min="0" step="0.01" inputmode="decimal" required>
+                <small class="muted">Reemplaza el saldo anterior de ESTE cliente. Ingresá 0 para anularlo.</small>
               </label>
               <label>Fecha
                 <input id="openingDate" type="date" required>
@@ -617,7 +618,7 @@
               <label>Detalle opcional
                 <input id="openingDetail" placeholder="Ej.: Saldo pendiente anterior al sistema">
               </label>
-              <button type="submit" class="primary">Guardar saldo anterior</button>
+              <button type="submit" class="primary">Guardar / reemplazar saldo anterior</button>
             </form>
           </div>
 
@@ -1237,14 +1238,14 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=35.3.33"></script>
-  <script src="app.js?v=35.3.33"></script>
+  <script src="cloud-config.js?v=35.3.34"></script>
+  <script src="app.js?v=35.3.34"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=35.3.33"></script>
-  <script src="stock-ocr.js?v=35.3.33"></script>
-  <script src="caja-activos.js?v=35.3.33"></script>
-  <script src="balance-diario.js?v=35.3.33"></script>
-  <script src="vencimientos.js?v=35.3.33"></script>
-  <script src="estadisticas.js?v=35.3.33"></script>
+  <script src="stock.js?v=35.3.34"></script>
+  <script src="stock-ocr.js?v=35.3.34"></script>
+  <script src="caja-activos.js?v=35.3.34"></script>
+  <script src="balance-diario.js?v=35.3.34"></script>
+  <script src="vencimientos.js?v=35.3.34"></script>
+  <script src="estadisticas.js?v=35.3.34"></script>
 </body>
 </html>

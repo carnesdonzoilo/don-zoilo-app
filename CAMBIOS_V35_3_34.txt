@@ -1,0 +1,11 @@
+DON ZOILO V35.3.34
+
+CORRECCION CUENTAS CORRIENTES
+- El saldo anterior ahora es unico por cliente.
+- Guardar un nuevo saldo anterior reemplaza el anterior del cliente seleccionado.
+- Ingresar 0 anula el saldo anterior de ese cliente.
+- La operacion elimina por ID solamente movimientos SALDO_INICIAL del cliente elegido.
+- No modifica saldos anteriores ni movimientos de otros clientes.
+- Mantiene la logica de cobranzas y pendientes de V35.3.33.
+
+Objetivo: impedir que las correcciones manuales acumulen saldos anteriores o afecten cuentas ajenas.
