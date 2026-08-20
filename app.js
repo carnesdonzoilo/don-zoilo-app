@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.34";
+const APP_VERSION = "35.3.35";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1800,6 +1800,17 @@ function isOpeningBalanceMovement(m){
   return m.type==="ajuste" && String(m.notes||"").includes("SALDO_INICIAL");
 }
 
+// V35.3.35: las correcciones usadas para cuadrar una cuenta no deben
+// reemplazar visualmente a los remitos pendientes reales.
+// Se mantienen en el saldo matemático, pero se ocultan del listado operativo.
+function isBalanceCorrectionMovement(m){
+  if(!isOpeningBalanceMovement(m)) return false;
+  const text=`${m.concept||""} ${m.notes||""}`.toUpperCase();
+  return text.includes("AJUSTE SALDO REAL") ||
+         text.includes("CORRECCION SALDO REAL") ||
+         text.includes("CORRECCIÓN SALDO REAL");
+}
+
 
 function normalizeClientName(name){
   return String(name||"")
@@ -1985,9 +1996,11 @@ function renderAccountHistory(client){
     const row=document.createElement("div");
     const debit=m.type==="venta" || isOpeningBalanceMovement(m);
     row.className=`account-history-row ${debit?"positive":"negative"}`;
-    const label=isOpeningBalanceMovement(m)
-      ? "Saldo anterior"
-      : m.type==="venta" ? "Venta" : "Cobranza";
+    const label=isBalanceCorrectionMovement(m)
+      ? "Ajuste de saldo"
+      : isOpeningBalanceMovement(m)
+        ? "Saldo anterior"
+        : m.type==="venta" ? "Venta" : "Cobranza";
     const sign=debit?"+":"−";
     const documentInfo=m.type==="venta" ? movementDisplayDocument(m) : "";
     row.innerHTML=`
@@ -2030,7 +2043,7 @@ async function saveOpeningBalance(event){
   if(!client) return alert("Elegí un cliente.");
   if(!Number.isFinite(amount) || amount<0) return alert("Ingresá un importe válido. Para anular el saldo anterior usá 0.");
 
-  // V35.3.34: el saldo anterior es ÚNICO por cliente.
+  // V35.3.35: el saldo anterior es ÚNICO por cliente.
   // Antes cada corrección agregaba otro movimiento SALDO_INICIAL y podía dejar
   // cuentas desajustadas. Ahora reemplaza exclusivamente los saldos anteriores
   // del cliente seleccionado. Un importe 0 los anula sin tocar otros clientes.
@@ -2132,6 +2145,7 @@ function fillCollectionPendingTargets(client,preferredIds=[]){
   }
 
   const pending=pendingAccountDebtsFor(client)
+    .filter(d=>!isBalanceCorrectionMovement(d.movement))
     .slice()
     .sort((a,b)=>{
       const da=`${String(a.movement?.date||"")} ${String(a.movement?.created_at||"")}`;
@@ -2354,16 +2368,21 @@ function printPendingAccountStatement(){
   // V35.3.33: el detalle impreso trabaja con la misma precisión visible ($ enteros).
   // Evita listar residuos de centavos que money() muestra como $ 0 y que antes
   // incrementaban incorrectamente el contador de comprobantes pendientes.
-  const pending=pendingAccountDebtsFor(client)
+  const allPending=pendingAccountDebtsFor(client)
     .filter(d=>Math.round(Number(d.remaining||0))>0);
+
+  // Mostrar solo remitos/saldos anteriores históricos reales.
+  // Las correcciones de cuadratura siguen formando parte del saldo actual,
+  // pero no desplazan el último remito pendiente en este informe.
+  const pending=allPending.filter(d=>!isBalanceCorrectionMovement(d.movement));
   const totalPending=pending.reduce((sum,d)=>sum+Number(d.remaining||0),0);
+  const correctionPending=allPending
+    .filter(d=>isBalanceCorrectionMovement(d.movement))
+    .reduce((sum,d)=>sum+Number(d.remaining||0),0);
   const currentBalance=accountTotals(client).balance;
 
-  if(!pending.length){
-    if(currentBalance<=0){
-      return alert("Este cliente no tiene comprobantes pendientes.");
-    }
-    return alert("Hay saldo pendiente, pero no se pudo asociar a ventas individuales. Revisá los movimientos de ajuste.");
+  if(!pending.length && currentBalance<=0){
+    return alert("Este cliente no tiene comprobantes pendientes.");
   }
 
   const rows=pending.map(d=>{
@@ -2414,10 +2433,12 @@ function printPendingAccountStatement(){
 
     <div class="summary">
       <div><span>Comprobantes pendientes</span><strong>${pending.length}</strong></div>
-      <div class="final"><span>Total pendiente</span><strong>${money(totalPending)}</strong></div>
+      <div class="final"><span>Total remitos pendientes</span><strong>${money(totalPending)}</strong></div>
+      ${Math.round(correctionPending)!==0?`<div><span>Ajuste de regularización</span><strong>${money(correctionPending)}</strong></div>`:""}
+      <div><span>Saldo actual de cuenta</span><strong>${money(currentBalance)}</strong></div>
     </div>
 
-    <div class="note">Las cobranzas se imputan primero a los comprobantes elegidos. Si no hubo selección histórica o queda un excedente, se aplica por antigüedad.</div>
+    <div class="note">Los ajustes usados para regularizar el saldo no reemplazan ni ocultan los remitos pendientes reales.</div>
 
     <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script>
   </body></html>`);
