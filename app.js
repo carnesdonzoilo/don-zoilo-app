@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.41";
+const APP_VERSION = "35.3.42";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -214,25 +214,42 @@ function getCloudConfig(){
   return null;
 }
 
+async function fetchAllCloudRows(table, select="*", orderColumns=[]){
+  // Supabase limita por defecto la cantidad de filas devueltas.
+  // Leer por páginas evita que movimientos históricos desaparezcan del cálculo
+  // cuando la tabla supera las 1000 filas. Esta función es SOLO LECTURA.
+  const pageSize=1000;
+  const all=[];
+  for(let from=0;;from+=pageSize){
+    let query=supabaseClient.from(table).select(select);
+    orderColumns.forEach(({column,ascending=false})=>{
+      query=query.order(column,{ascending});
+    });
+    const {data,error}=await query.range(from,from+pageSize-1);
+    if(error) throw error;
+    const rows=data||[];
+    all.push(...rows);
+    if(rows.length<pageSize) break;
+    if(all.length>100000) throw new Error("Protección activada: demasiadas filas al sincronizar "+table+".");
+  }
+  return all;
+}
+
 async function fetchCloudPayload(){
-  const {data: movementData, error: movementError} = await supabaseClient
-    .from("movements").select("*")
-    .order("date",{ascending:false})
-    .order("created_at",{ascending:false});
-  if(movementError) throw movementError;
+  const movementData=await fetchAllCloudRows("movements","*",[
+    {column:"date",ascending:false},
+    {column:"created_at",ascending:false}
+  ]);
 
-  const {data: orderData, error: orderError} = await supabaseClient
-    .from("orders").select("*")
-    .order("delivery_date",{ascending:false})
-    .order("created_at",{ascending:false});
-  if(orderError) throw orderError;
+  const orderData=await fetchAllCloudRows("orders","*",[
+    {column:"delivery_date",ascending:false},
+    {column:"created_at",ascending:false}
+  ]);
 
-  const {data: priceData, error: priceError} = await supabaseClient
-    .from("product_prices").select("*");
-  if(priceError) throw priceError;
+  const priceData=await fetchAllCloudRows("product_prices","*",[]);
 
-  validateCloudPayload(movementData||[],orderData||[],priceData||[]);
-  return {movementData:movementData||[],orderData:orderData||[],priceData:priceData||[]};
+  validateCloudPayload(movementData,orderData,priceData);
+  return {movementData,orderData,priceData};
 }
 
 function applyCloudPayload(payload,reason="sincronización correcta"){
@@ -1800,7 +1817,7 @@ function isOpeningBalanceMovement(m){
   return m.type==="ajuste" && String(m.notes||"").includes("SALDO_INICIAL");
 }
 
-// V35.3.41: las correcciones usadas para cuadrar una cuenta no deben
+// V35.3.42: las correcciones usadas para cuadrar una cuenta no deben
 // reemplazar visualmente a los remitos pendientes reales.
 // Se mantienen en el saldo matemático, pero se ocultan del listado operativo.
 function isBalanceCorrectionMovement(m){
@@ -2069,7 +2086,7 @@ async function repairAccounts1908(){
   if(btn){btn.disabled=true;btn.textContent="Recuperando…";}
 
   try{
-    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.41");
+    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.42");
 
     if(!supabaseClient){
       const connected=await initCloud();
@@ -2150,7 +2167,7 @@ async function repairAccounts1908(){
     buildOrderSheet();
 
     if(failures.length){
-      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.41");
+      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.42");
       throw new Error(
         "La reparación terminó pero estas cuentas no cerraron:\n\n"+
         failures.join("\n")+
@@ -2158,7 +2175,7 @@ async function repairAccounts1908(){
       );
     }
 
-    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.41 VERIFICADA");
+    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.42 VERIFICADA");
 
     alert(
       "RECUPERACIÓN COMPLETA Y VERIFICADA ✅\n\n"+
@@ -2184,7 +2201,7 @@ async function saveOpeningBalance(event){
   if(!client) return alert("Elegí un cliente.");
   if(!Number.isFinite(amount) || amount<0) return alert("Ingresá un importe válido. Para anular el saldo anterior usá 0.");
 
-  // V35.3.41: el saldo anterior es ÚNICO por cliente.
+  // V35.3.42: el saldo anterior es ÚNICO por cliente.
   // Antes cada corrección agregaba otro movimiento SALDO_INICIAL y podía dejar
   // cuentas desajustadas. Ahora reemplaza exclusivamente los saldos anteriores
   // del cliente seleccionado. Un importe 0 los anula sin tocar otros clientes.
@@ -2615,7 +2632,7 @@ window.DonZoiloFinancialTotals = window.DonZoiloFinancialTotals || {};
 
 window.DonZoiloFinancialTotals.clientCurrentAccounts = totalClientCurrentAccounts;
 
-// V35.3.41 — SOLO LECTURA.
+// V35.3.42 — SOLO LECTURA.
 // Expone al Balance Diario el detalle de cuentas corrientes sin crear,
 // modificar, borrar ni recalcular movimientos.
 window.DonZoiloFinancialTotals.clientAccountDetail = function(){
