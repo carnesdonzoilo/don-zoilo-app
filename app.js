@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.38";
+const APP_VERSION = "35.3.39";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1800,7 +1800,7 @@ function isOpeningBalanceMovement(m){
   return m.type==="ajuste" && String(m.notes||"").includes("SALDO_INICIAL");
 }
 
-// V35.3.38: las correcciones usadas para cuadrar una cuenta no deben
+// V35.3.39: las correcciones usadas para cuadrar una cuenta no deben
 // reemplazar visualmente a los remitos pendientes reales.
 // Se mantienen en el saldo matemático, pero se ocultan del listado operativo.
 function isBalanceCorrectionMovement(m){
@@ -2069,7 +2069,7 @@ async function repairAccounts1908(){
   if(btn){btn.disabled=true;btn.textContent="Recuperando…";}
 
   try{
-    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.38");
+    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.39");
 
     if(!supabaseClient){
       const connected=await initCloud();
@@ -2150,7 +2150,7 @@ async function repairAccounts1908(){
     buildOrderSheet();
 
     if(failures.length){
-      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.38");
+      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.39");
       throw new Error(
         "La reparación terminó pero estas cuentas no cerraron:\n\n"+
         failures.join("\n")+
@@ -2158,7 +2158,7 @@ async function repairAccounts1908(){
       );
     }
 
-    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.38 VERIFICADA");
+    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.39 VERIFICADA");
 
     alert(
       "RECUPERACIÓN COMPLETA Y VERIFICADA ✅\n\n"+
@@ -2184,7 +2184,7 @@ async function saveOpeningBalance(event){
   if(!client) return alert("Elegí un cliente.");
   if(!Number.isFinite(amount) || amount<0) return alert("Ingresá un importe válido. Para anular el saldo anterior usá 0.");
 
-  // V35.3.38: el saldo anterior es ÚNICO por cliente.
+  // V35.3.39: el saldo anterior es ÚNICO por cliente.
   // Antes cada corrección agregaba otro movimiento SALDO_INICIAL y podía dejar
   // cuentas desajustadas. Ahora reemplaza exclusivamente los saldos anteriores
   // del cliente seleccionado. Un importe 0 los anula sin tocar otros clientes.
@@ -2612,7 +2612,54 @@ function totalClientCurrentAccounts(){
 
 // Fuente única para que Balance Diario muestre exactamente el mismo total que Saldos.
 window.DonZoiloFinancialTotals = window.DonZoiloFinancialTotals || {};
+
 window.DonZoiloFinancialTotals.clientCurrentAccounts = totalClientCurrentAccounts;
+
+// V35.3.39 — SOLO LECTURA.
+// Expone al Balance Diario el detalle de cuentas corrientes sin crear,
+// modificar, borrar ni recalcular movimientos.
+window.DonZoiloFinancialTotals.clientAccountDetail = function(){
+  return clientNames()
+    .map(client=>{
+      const totals=accountTotals(client);
+      const allPending=pendingAccountDebtsFor(client)
+        .filter(d=>Math.round(Number(d.remaining||0))>0);
+
+      const operational=allPending.filter(d=>!isBalanceCorrectionMovement(d.movement));
+      const corrections=allPending.filter(d=>isBalanceCorrectionMovement(d.movement));
+
+      const pending=operational.map(d=>{
+        const m=d.movement;
+        const meta=movementDocumentMeta(m);
+        return {
+          date:String(m.date||""),
+          type:isOpeningBalanceMovement(m)?"Saldo anterior":"Venta",
+          remito:String(meta.remito || m.concept || "").trim(),
+          invoice:String(meta.invoice || "").trim(),
+          original:Number(d.original||0),
+          remaining:Number(d.remaining||0)
+        };
+      });
+
+      const correctionPending=corrections.reduce((sum,d)=>sum+Number(d.remaining||0),0);
+      const pendingTotal=pending.reduce((sum,d)=>sum+Number(d.remaining||0),0);
+      const balance=Number(totals.balance||0);
+
+      return {
+        client,
+        balance,
+        pending,
+        pendingTotal,
+        correctionPending,
+        // Diferencia informativa para que el PDF pueda cerrar exactamente
+        // contra el saldo del cliente sin alterar la cuenta.
+        reconciliation: balance-pendingTotal-correctionPending
+      };
+    })
+    .filter(row=>Math.abs(Number(row.balance||0))>=0.5)
+    .sort((a,b)=>Number(b.balance||0)-Number(a.balance||0));
+};
+
 
 function openBalanceDetail(client){
   const totals=accountTotals(client);

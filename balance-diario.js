@@ -1,4 +1,4 @@
-/* V35.3.38: CIERRE DE BALANCE SOLO LECTURA respecto de movements. No crea, edita ni elimina cuentas corrientes. */
+/* V35.3.39: CIERRE DE BALANCE SOLO LECTURA respecto de movements. No crea, edita ni elimina cuentas corrientes. */
 /* DON ZOILO V35.3.13 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
 (function(){
 'use strict';
@@ -313,11 +313,117 @@ async function save(){
   const record={id:existing?.id||uid(),balance_date:current.date,...current,notes:$('balanceNotes').value.trim(),created_at:existing?.created_at||new Date().toISOString(),updated_at:new Date().toISOString()};delete record.date;
   try{if(cloud()){const {data,error}=await cloud().from(TABLE).upsert(record,{onConflict:'balance_date'}).select().single();if(error)throw error;Object.assign(record,data)}closings=closings.filter(r=>r.balance_date!==record.balance_date);closings.push(record);localWrite();renderHistory();renderIncomeStatement();alert('Cierre diario guardado correctamente.')}catch(e){alert('No se pudo guardar el cierre: '+(e.message||e))}
 }
-function reportLines(){const d=new Date(current.date+'T12:00:00').toLocaleDateString('es-AR');return['DON ZOILO','BALANCE DIARIO - '+d,'','ACTIVOS','Caja y activos: '+money(current.current_assets),'Cuentas corrientes clientes: '+money(current.client_accounts),'Stock valorizado: '+money(current.stock_value),'TOTAL ACTIVOS: '+money(current.total_assets),'','PASIVOS','Deudas con proveedores: '+money(current.supplier_debt),'TOTAL PASIVOS: '+money(current.total_liabilities),'','Patrimonio anterior: '+money(current.previous_equity),'PATRIMONIO FINAL: '+money(current.final_equity),'Gastos del dia: '+money(current.daily_expenses),'Resultado antes de gastos: '+money(current.result_before_expenses),'RESULTADO NETO: '+money(current.net_result),'Variacion: '+pct(current.variation_pct),'','Observaciones: '+($('balanceNotes').value.trim()||'-')]}
+function accountDetailLines(){
+  const getDetail=window.DonZoiloFinancialTotals?.clientAccountDetail;
+  if(typeof getDetail!=='function') return [];
+  const rows=getDetail()||[];
+  const lines=['','DETALLE CUENTAS CORRIENTES DE CLIENTES'];
+
+  rows.forEach(row=>{
+    lines.push('');
+    lines.push(String(row.client||'CLIENTE'));
+
+    const pending=Array.isArray(row.pending)?row.pending:[];
+    if(pending.length){
+      pending.forEach(p=>{
+        const doc=p.invoice
+          ? `Factura ${p.invoice}`
+          : (p.remito||'Comprobante pendiente');
+        const remito=p.invoice&&p.remito ? ` / ${p.remito}` : '';
+        lines.push(`  ${doc}${remito}: ${money(p.remaining)}`);
+      });
+    }else if(Number(row.balance||0)>0){
+      lines.push('  Sin remitos/facturas pendientes individualizados');
+    }
+
+    if(Math.round(Number(row.correctionPending||0))!==0){
+      lines.push(`  Saldo anterior / regularizacion: ${money(row.correctionPending)}`);
+    }
+
+    const recon=Number(row.reconciliation||0);
+    if(Math.abs(recon)>=0.5){
+      lines.push(`${recon<0?'  Saldo a favor / excedente':'  Diferencia de cuenta'}: ${money(recon)}`);
+    }
+
+    lines.push(`  TOTAL ${String(row.client||'').toUpperCase()}: ${money(row.balance)}`);
+  });
+
+  lines.push('');
+  lines.push(`TOTAL CUENTAS CORRIENTES: ${money(current.client_accounts)}`);
+  return lines;
+}
+
+function reportLines(){
+  const d=new Date(current.date+'T12:00:00').toLocaleDateString('es-AR');
+  return [
+    'DON ZOILO',
+    'BALANCE DIARIO - '+d,
+    '',
+    'ACTIVOS',
+    'Caja y activos: '+money(current.current_assets),
+    ...accountDetailLines(),
+    'Stock valorizado: '+money(current.stock_value),
+    'TOTAL ACTIVOS: '+money(current.total_assets),
+    '',
+    'PASIVOS',
+    'Deudas con proveedores: '+money(current.supplier_debt),
+    'TOTAL PASIVOS: '+money(current.total_liabilities),
+    '',
+    'Patrimonio anterior: '+money(current.previous_equity),
+    'PATRIMONIO FINAL: '+money(current.final_equity),
+    'Gastos del dia: '+money(current.daily_expenses),
+    'Resultado antes de gastos: '+money(current.result_before_expenses),
+    'RESULTADO NETO: '+money(current.net_result),
+    'Variacion: '+pct(current.variation_pct),
+    '',
+    'Observaciones: '+($('balanceNotes').value.trim()||'-')
+  ];
+}
+
 function simplePdfBlob(lines){
   const clean=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'').replace(/([\\()])/g,'\\$1');
-  let content='BT\n/F1 12 Tf\n50 790 Td\n';lines.forEach((line,i)=>{if(i)content+='0 -20 Td\n';content+=`(${clean(line)}) Tj\n`});content+='ET';
-  const objs=[];objs[1]='<< /Type /Catalog /Pages 2 0 R >>';objs[2]='<< /Type /Pages /Kids [3 0 R] /Count 1 >>';objs[3]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>';objs[4]=`<< /Length ${content.length} >>\nstream\n${content}\nendstream`;objs[5]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';let pdf='%PDF-1.4\n',offsets=[0];for(let i=1;i<=5;i++){offsets[i]=pdf.length;pdf+=`${i} 0 obj\n${objs[i]}\nendobj\n`}const xref=pdf.length;pdf+='xref\n0 6\n0000000000 65535 f \n';for(let i=1;i<=5;i++)pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';pdf+=`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;return new Blob([pdf],{type:'application/pdf'})}
+
+  const lineHeight=14;
+  const maxLines=52;
+  const pages=[];
+  for(let i=0;i<lines.length;i+=maxLines) pages.push(lines.slice(i,i+maxLines));
+  if(!pages.length) pages.push([]);
+
+  // Object layout:
+  // 1 Catalog, 2 Pages, 3 Font, then 2 objects per page (Page + Contents)
+  const objs=[];
+  const pageIds=[];
+  for(let i=0;i<pages.length;i++) pageIds.push(4+i*2);
+
+  objs[1]='<< /Type /Catalog /Pages 2 0 R >>';
+  objs[2]=`<< /Type /Pages /Kids [${pageIds.map(id=>id+' 0 R').join(' ')}] /Count ${pages.length} >>`;
+  objs[3]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+
+  pages.forEach((pageLines,i)=>{
+    const pageId=4+i*2;
+    const contentId=pageId+1;
+    let content='BT\n/F1 9 Tf\n42 800 Td\n';
+    pageLines.forEach((line,j)=>{
+      if(j) content+=`0 -${lineHeight} Td\n`;
+      content+=`(${clean(line)}) Tj\n`;
+    });
+    content+='ET';
+    objs[pageId]=`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`;
+    objs[contentId]=`<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+  });
+
+  const maxId=3+pages.length*2;
+  let pdf='%PDF-1.4\n',offsets=[0];
+  for(let i=1;i<=maxId;i++){
+    offsets[i]=pdf.length;
+    pdf+=`${i} 0 obj\n${objs[i]}\nendobj\n`;
+  }
+  const xref=pdf.length;
+  pdf+=`xref\n0 ${maxId+1}\n0000000000 65535 f \n`;
+  for(let i=1;i<=maxId;i++) pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
+  pdf+=`trailer\n<< /Size ${maxId+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([pdf],{type:'application/pdf'});
+}
 function pdfFile(){return new File([simplePdfBlob(reportLines())],`Balance_Don_Zoilo_${current.date}.pdf`,{type:'application/pdf'})}
 function downloadPdf(){const file=pdfFile();const url=URL.createObjectURL(file);const a=document.createElement('a');a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
 async function sharePdf(){const file=pdfFile();try{if(navigator.canShare?.({files:[file]})&&navigator.share){await navigator.share({title:'Balance diario Don Zoilo',text:`Balance diario ${current.date}`,files:[file]})}else{downloadPdf();alert('Se descargó el PDF. Abrilo desde Descargas y compartilo por WhatsApp.')}}catch(e){if(e.name!=='AbortError')alert('No se pudo compartir: '+e.message)} }
