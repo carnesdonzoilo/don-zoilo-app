@@ -1,4 +1,4 @@
-/* V35.3.39: CIERRE DE BALANCE SOLO LECTURA respecto de movements. No crea, edita ni elimina cuentas corrientes. */
+/* V35.3.40: CIERRE DE BALANCE SOLO LECTURA respecto de movements. No crea, edita ni elimina cuentas corrientes. */
 /* DON ZOILO V35.3.13 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
 (function(){
 'use strict';
@@ -383,45 +383,46 @@ function reportLines(){
 function simplePdfBlob(lines){
   const clean=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'').replace(/([\\()])/g,'\\$1');
 
-  const lineHeight=14;
-  const maxLines=52;
-  const pages=[];
-  for(let i=0;i<lines.length;i+=maxLines) pages.push(lines.slice(i,i+maxLines));
-  if(!pages.length) pages.push([]);
+  // V35.3.40: aprovechar A4 completo y mantener el cierre en UNA sola hoja.
+  // El tamaño y el interlineado se adaptan únicamente a la cantidad de líneas.
+  const count=Math.max(1,lines.length);
+  const top=808;
+  const bottom=32;
+  const usable=top-bottom;
+  let fontSize=9;
+  let lineHeight=12;
 
-  // Object layout:
-  // 1 Catalog, 2 Pages, 3 Font, then 2 objects per page (Page + Contents)
-  const objs=[];
-  const pageIds=[];
-  for(let i=0;i<pages.length;i++) pageIds.push(4+i*2);
+  if(count>58){ fontSize=8; lineHeight=10.5; }
+  if(count>70){ fontSize=7; lineHeight=9.2; }
+  if(count>82){ fontSize=6.2; lineHeight=8.1; }
 
-  objs[1]='<< /Type /Catalog /Pages 2 0 R >>';
-  objs[2]=`<< /Type /Pages /Kids [${pageIds.map(id=>id+' 0 R').join(' ')}] /Count ${pages.length} >>`;
-  objs[3]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+  // Garantiza que todas las líneas entren en el alto útil de A4.
+  lineHeight=Math.min(lineHeight,usable/Math.max(count-1,1));
+  fontSize=Math.min(fontSize,Math.max(5.2,lineHeight*0.78));
 
-  pages.forEach((pageLines,i)=>{
-    const pageId=4+i*2;
-    const contentId=pageId+1;
-    let content='BT\n/F1 9 Tf\n42 800 Td\n';
-    pageLines.forEach((line,j)=>{
-      if(j) content+=`0 -${lineHeight} Td\n`;
-      content+=`(${clean(line)}) Tj\n`;
-    });
-    content+='ET';
-    objs[pageId]=`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`;
-    objs[contentId]=`<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+  let content=`BT\n/F1 ${fontSize.toFixed(2)} Tf\n32 ${top} Td\n`;
+  lines.forEach((line,i)=>{
+    if(i) content+=`0 -${lineHeight.toFixed(2)} Td\n`;
+    content+=`(${clean(line)}) Tj\n`;
   });
+  content+='ET';
 
-  const maxId=3+pages.length*2;
+  const objs=[];
+  objs[1]='<< /Type /Catalog /Pages 2 0 R >>';
+  objs[2]='<< /Type /Pages /Kids [4 0 R] /Count 1 >>';
+  objs[3]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+  objs[4]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>';
+  objs[5]=`<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+
   let pdf='%PDF-1.4\n',offsets=[0];
-  for(let i=1;i<=maxId;i++){
+  for(let i=1;i<=5;i++){
     offsets[i]=pdf.length;
     pdf+=`${i} 0 obj\n${objs[i]}\nendobj\n`;
   }
   const xref=pdf.length;
-  pdf+=`xref\n0 ${maxId+1}\n0000000000 65535 f \n`;
-  for(let i=1;i<=maxId;i++) pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
-  pdf+=`trailer\n<< /Size ${maxId+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  pdf+='xref\n0 6\n0000000000 65535 f \n';
+  for(let i=1;i<=5;i++) pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
+  pdf+=`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return new Blob([pdf],{type:'application/pdf'});
 }
 function pdfFile(){return new File([simplePdfBlob(reportLines())],`Balance_Don_Zoilo_${current.date}.pdf`,{type:'application/pdf'})}

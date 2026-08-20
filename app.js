@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.39";
+const APP_VERSION = "35.3.40";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1800,7 +1800,7 @@ function isOpeningBalanceMovement(m){
   return m.type==="ajuste" && String(m.notes||"").includes("SALDO_INICIAL");
 }
 
-// V35.3.39: las correcciones usadas para cuadrar una cuenta no deben
+// V35.3.40: las correcciones usadas para cuadrar una cuenta no deben
 // reemplazar visualmente a los remitos pendientes reales.
 // Se mantienen en el saldo matemático, pero se ocultan del listado operativo.
 function isBalanceCorrectionMovement(m){
@@ -2069,7 +2069,7 @@ async function repairAccounts1908(){
   if(btn){btn.disabled=true;btn.textContent="Recuperando…";}
 
   try{
-    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.39");
+    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.40");
 
     if(!supabaseClient){
       const connected=await initCloud();
@@ -2150,7 +2150,7 @@ async function repairAccounts1908(){
     buildOrderSheet();
 
     if(failures.length){
-      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.39");
+      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.40");
       throw new Error(
         "La reparación terminó pero estas cuentas no cerraron:\n\n"+
         failures.join("\n")+
@@ -2158,7 +2158,7 @@ async function repairAccounts1908(){
       );
     }
 
-    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.39 VERIFICADA");
+    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.40 VERIFICADA");
 
     alert(
       "RECUPERACIÓN COMPLETA Y VERIFICADA ✅\n\n"+
@@ -2184,7 +2184,7 @@ async function saveOpeningBalance(event){
   if(!client) return alert("Elegí un cliente.");
   if(!Number.isFinite(amount) || amount<0) return alert("Ingresá un importe válido. Para anular el saldo anterior usá 0.");
 
-  // V35.3.39: el saldo anterior es ÚNICO por cliente.
+  // V35.3.40: el saldo anterior es ÚNICO por cliente.
   // Antes cada corrección agregaba otro movimiento SALDO_INICIAL y podía dejar
   // cuentas desajustadas. Ahora reemplaza exclusivamente los saldos anteriores
   // del cliente seleccionado. Un importe 0 los anula sin tocar otros clientes.
@@ -2615,7 +2615,7 @@ window.DonZoiloFinancialTotals = window.DonZoiloFinancialTotals || {};
 
 window.DonZoiloFinancialTotals.clientCurrentAccounts = totalClientCurrentAccounts;
 
-// V35.3.39 — SOLO LECTURA.
+// V35.3.40 — SOLO LECTURA.
 // Expone al Balance Diario el detalle de cuentas corrientes sin crear,
 // modificar, borrar ni recalcular movimientos.
 window.DonZoiloFinancialTotals.clientAccountDetail = function(){
