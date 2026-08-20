@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <title>Don Zoilo | Operaciones</title>
-  <link rel="stylesheet" href="styles.css?v=35.3.33" />
+  <link rel="stylesheet" href="styles.css?v=35.3.35" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 35.3.33 · Cuentas Corrientes · Estadísticas y vencimientos</div>
+      <div class="subtitle">Control de operaciones · Versión 35.3.35 · Cuentas Corrientes · Estadísticas y vencimientos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -594,6 +594,7 @@
             <button type="button" id="collectFullBalance" class="primary">Cobrar saldo total</button>
             <button type="button" id="printAccountStatement" class="secondary">🖨️ Imprimir estado de cuenta</button>
             <button type="button" id="printPendingAccountStatement" class="secondary">📋 Imprimir solo pendientes</button>
+            <button type="button" id="openAccountDiagnostics" class="secondary">🧪 Diagnóstico de saldos</button>
           </div>
 
           <div id="accountHistoryList" class="account-history-list"></div>
@@ -1105,6 +1106,21 @@
   </dialog>
 
 
+
+  <dialog id="accountDiagnosticsDialog">
+    <div class="dialog-card account-diagnostics-card">
+      <div class="balance-detail-head">
+        <div>
+          <h2>Diagnóstico de saldos</h2>
+          <p class="muted small">Solo lectura. No modifica ningún movimiento ni saldo.</p>
+        </div>
+        <button type="button" id="closeAccountDiagnostics" class="secondary">Cerrar</button>
+      </div>
+      <div id="accountDiagnosticsSummary" class="account-diagnostics-summary"></div>
+      <div id="accountDiagnosticsList" class="account-diagnostics-list"></div>
+    </div>
+  </dialog>
+
   <dialog id="accountDocumentEditDialog">
     <form id="accountDocumentEditForm" class="dialog-card account-document-edit-card">
       <div class="balance-detail-head">
@@ -1237,14 +1253,14 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=35.3.33"></script>
-  <script src="app.js?v=35.3.33"></script>
+  <script src="cloud-config.js?v=35.3.35"></script>
+  <script src="app.js?v=35.3.35"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=35.3.33"></script>
-  <script src="stock-ocr.js?v=35.3.33"></script>
-  <script src="caja-activos.js?v=35.3.33"></script>
-  <script src="balance-diario.js?v=35.3.33"></script>
-  <script src="vencimientos.js?v=35.3.33"></script>
-  <script src="estadisticas.js?v=35.3.33"></script>
+  <script src="stock.js?v=35.3.35"></script>
+  <script src="stock-ocr.js?v=35.3.35"></script>
+  <script src="caja-activos.js?v=35.3.35"></script>
+  <script src="balance-diario.js?v=35.3.35"></script>
+  <script src="vencimientos.js?v=35.3.35"></script>
+  <script src="estadisticas.js?v=35.3.35"></script>
 </body>
 </html>
