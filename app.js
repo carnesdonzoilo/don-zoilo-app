@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.46";
+const APP_VERSION = "35.3.47";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2871,6 +2871,9 @@ function allSuppliersDebt(){
   // Usar la misma fuente de verdad que la pantalla de cada proveedor.
   return supplierNames().reduce((sum,name)=>sum+Number(supplierTotals(name).balance||0),0);
 }
+
+// V35.3.47 — Balance Diario usa exactamente el mismo total que Proveedores.
+window.DonZoiloFinancialTotals.supplierDebt = allSuppliersDebt;
 
 function fillSupplierSelectors(){
   const names=supplierNames();

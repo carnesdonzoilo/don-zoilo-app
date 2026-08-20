@@ -75,7 +75,12 @@ function calculations(date,previousOverride,assetsRows=cachedAssets){
         return s;
       },0);
   const inventory=stockValue(stock);
-  const supplierDebt=movements.filter(m=>m.status!=='pendiente'&&['compra','pago'].includes(m.type)).reduce((s,m)=>s+(m.type==='compra'?num(m.amount):-num(m.amount)),0);
+  // V35.3.47: usa la misma fuente protegida que Proveedores (incluye checkpoints conciliados).
+  const sharedSupplierDebt=window.DonZoiloFinancialTotals?.supplierDebt;
+  const sharedSupplierValue=typeof sharedSupplierDebt==='function'?sharedSupplierDebt():null;
+  const supplierDebt=typeof sharedSupplierValue==='number'&&Number.isFinite(sharedSupplierValue)
+    ? sharedSupplierValue
+    : movements.filter(m=>m.status!=='pendiente'&&['compra','pago'].includes(m.type)).reduce((s,m)=>s+(m.type==='compra'?num(m.amount):-num(m.amount)),0);
   const expenses=movements.filter(m=>m.type==='gasto'&&m.status!=='pendiente'&&m.date===date).reduce((s,m)=>s+num(m.amount),0);
   const totalAssets=currentAssets+clientAccounts+inventory;
   const finalEquity=totalAssets-supplierDebt;
