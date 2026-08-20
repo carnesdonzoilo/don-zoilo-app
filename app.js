@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.34";
+const APP_VERSION = "35.3.35";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1868,7 +1868,7 @@ function accountMovementsFor(client){
 }
 
 function accountTotals(client){
-  // V35.3.34: el saldo general NO depende de a qué remito se imputó una cobranza.
+  // V35.3.35: el saldo general NO depende de a qué remito se imputó una cobranza.
   // Fórmula única: saldo anterior + ventas - cobranzas.
   const list=accountMovementsFor(client);
   const opening=list.filter(isOpeningBalanceMovement).reduce((s,m)=>s+Number(m.amount||0),0);
@@ -2076,7 +2076,7 @@ function collectionTargetMovementIds(movement){
       .filter(Boolean);
   }
 
-  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.34.
+  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.35.
   const single=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
   return single ? [String(single[1]||"").trim()].filter(Boolean) : [];
 }
@@ -2221,12 +2221,22 @@ function printAccountStatement(){
   const client=$("accountClientSelect")?.value||"";
   if(!client) return alert("Elegí un cliente.");
   const totals=accountTotals(client);
+  // V35.3.35: el Estado de cuenta usa EXACTAMENTE accountTotals(),
+  // la misma fuente que la pantalla de Cuentas Corrientes.
+  // "Saldo anterior" es un arrastre previo: se muestra en el resumen,
+  // pero NO se vuelve a sumar como una venta dentro de la tabla.
   const rows=accountMovementsFor(client)
+    .filter(m=>!isOpeningBalanceMovement(m))
     .slice()
-    .sort((a,b)=>String(a.date).localeCompare(String(b.date)))
+    .sort((a,b)=>{
+      const ad=String(a.date||"");
+      const bd=String(b.date||"");
+      if(ad!==bd) return ad.localeCompare(bd);
+      return String(a.created_at||"").localeCompare(String(b.created_at||""));
+    })
     .map(m=>{
-      const debit=m.type==="venta"||isOpeningBalanceMovement(m);
-      const label=isOpeningBalanceMovement(m)?"Saldo anterior":m.type==="venta"?"Venta":"Cobranza";
+      const debit=m.type==="venta";
+      const label=m.type==="venta"?"Venta":"Cobranza";
       const meta=m.type==="venta" ? movementDocumentMeta(m) : {remito:"",invoice:""};
       return `<tr>
         <td>${fmtDate(m.date)}</td>
@@ -2251,8 +2261,8 @@ function printAccountStatement(){
   <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Remito</th><th>Factura</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="summary">
     <div><span>Saldo anterior</span><strong>${money(totals.opening)}</strong></div>
-    <div><span>Ventas</span><strong>${money(totals.sales)}</strong></div>
-    <div><span>Cobranzas</span><strong>${money(totals.collected)}</strong></div>
+    <div><span>Ventas posteriores</span><strong>${money(totals.sales)}</strong></div>
+    <div><span>Cobranzas posteriores</span><strong>${money(totals.collected)}</strong></div>
     <div class="final"><span>Saldo actual</span><strong>${money(totals.balance)}</strong></div>
   </div>
   <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script>
@@ -2341,7 +2351,7 @@ function printPendingAccountStatement(){
   const client=$("accountClientSelect")?.value||"";
   if(!client) return alert("Elegí un cliente.");
 
-  // V35.3.34: el detalle impreso trabaja con la misma precisión visible ($ enteros).
+  // V35.3.35: el detalle impreso trabaja con la misma precisión visible ($ enteros).
   // Evita listar residuos de centavos que money() muestra como $ 0 y que antes
   // incrementaban incorrectamente el contador de comprobantes pendientes.
   const pending=pendingAccountDebtsFor(client)
@@ -4781,7 +4791,7 @@ on("refreshOrders","click",async()=>{
   }finally{
     if(btn) btn.disabled=false;
   }
-  // V35.3.34: Actualizar pedidos solo sincroniza.
+  // V35.3.35: Actualizar pedidos solo sincroniza.
   // Nunca reconstruye ni crea movimientos contables automáticamente.
 });
 
