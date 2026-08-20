@@ -1,0 +1,13 @@
+DON ZOILO V35.3.45 — PROVEEDORES CON PUNTO DE CORTE PROTEGIDO
+
+Corrección puntual sobre V35.3.44.
+- NO modifica ni elimina movimientos existentes.
+- NO modifica la lógica de saldos de clientes.
+- Jorge: base conciliada al 19/08/2026 = $6.192.165.
+  Desde el 20/08 aplica solo movimientos nuevos. Con compra $1.073.825 y pago $2.000.000 => $5.265.990.
+- Tito: base conciliada al 19/08/2026 = $6.964.750.
+  Desde el 20/08 aplica solo movimientos nuevos. Con compras $791.490 + $38.700 => $7.794.940.
+- Los demás proveedores conservan la lógica anterior.
+- El total de deuda con proveedores ahora usa la misma fuente de verdad que el saldo individual.
+
+Antes de actualizar, conservar el respaldo JSON actual.
