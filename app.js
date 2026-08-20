@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.34";
+const APP_VERSION = "35.3.35";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1868,7 +1868,7 @@ function accountMovementsFor(client){
 }
 
 function accountTotals(client){
-  // V35.3.34: el saldo general NO depende de a qué remito se imputó una cobranza.
+  // V35.3.35: el saldo general NO depende de a qué remito se imputó una cobranza.
   // Fórmula única: saldo anterior + ventas - cobranzas.
   const list=accountMovementsFor(client);
   const opening=list.filter(isOpeningBalanceMovement).reduce((s,m)=>s+Number(m.amount||0),0);
@@ -2076,7 +2076,7 @@ function collectionTargetMovementIds(movement){
       .filter(Boolean);
   }
 
-  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.34.
+  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.35.
   const single=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
   return single ? [String(single[1]||"").trim()].filter(Boolean) : [];
 }
@@ -2119,9 +2119,14 @@ function fillCollectionPendingTargets(client,preferredIds=[]){
   const pending=pendingAccountDebtsFor(client)
     .slice()
     .sort((a,b)=>{
-      const da=`${String(a.movement?.date||"")} ${String(a.movement?.created_at||"")}`;
-      const db=`${String(b.movement?.date||"")} ${String(b.movement?.created_at||"")}`;
-      return da.localeCompare(db);
+      if(a.kind!==b.kind){
+        if(a.kind==="saldo_anterior") return -1;
+        if(b.kind==="saldo_anterior") return 1;
+      }
+      const ad=String(a.movement?.date||"");
+      const bd=String(b.movement?.date||"");
+      if(ad!==bd) return ad.localeCompare(bd);
+      return String(a.movement?.created_at||"").localeCompare(String(b.movement?.created_at||""));
     });
 
   if(!pending.length){
@@ -2140,7 +2145,9 @@ function fillCollectionPendingTargets(client,preferredIds=[]){
   pending.forEach((debt,index)=>{
     const m=debt.movement;
     const id=String(m.id||"");
-    const type=isOpeningBalanceMovement(m)?"Saldo anterior":String(m.concept||"Remito");
+    const type=isOpeningBalanceMovement(m)
+      ? "SALDO ANTERIOR"
+      : String(m.concept||"Remito");
     const row=document.createElement("label");
     row.className="collection-target-option";
     row.innerHTML=`
@@ -2268,9 +2275,17 @@ function pendingAccountDebtsFor(client){
   const list=accountMovementsFor(client)
     .slice()
     .sort((a,b)=>{
-      const da=String(a.created_at||a.date||"");
-      const db=String(b.created_at||b.date||"");
-      return da.localeCompare(db);
+      // V35.3.35: "Saldo anterior" representa deuda previa a los remitos del sistema.
+      // Se procesa primero aunque haya sido cargado técnicamente después.
+      const aOpening=isOpeningBalanceMovement(a);
+      const bOpening=isOpeningBalanceMovement(b);
+      if(aOpening!==bOpening) return aOpening ? -1 : 1;
+
+      // Después se respeta la fecha contable y created_at solo desempata.
+      const ad=String(a.date||"");
+      const bd=String(b.date||"");
+      if(ad!==bd) return ad.localeCompare(bd);
+      return String(a.created_at||"").localeCompare(String(b.created_at||""));
     });
 
   const debts=[];
@@ -2291,7 +2306,8 @@ function pendingAccountDebtsFor(client){
       const debt={
         movement:m,
         original,
-        remaining:original
+        remaining:original,
+        kind:isOpeningBalanceMovement(m) ? "saldo_anterior" : "remito"
       };
       applyCreditToDebt(debt);
       debts.push(debt);
@@ -2341,7 +2357,7 @@ function printPendingAccountStatement(){
   const client=$("accountClientSelect")?.value||"";
   if(!client) return alert("Elegí un cliente.");
 
-  // V35.3.34: el detalle impreso trabaja con la misma precisión visible ($ enteros).
+  // V35.3.35: el detalle impreso trabaja con la misma precisión visible ($ enteros).
   // Evita listar residuos de centavos que money() muestra como $ 0 y que antes
   // incrementaban incorrectamente el contador de comprobantes pendientes.
   const pending=pendingAccountDebtsFor(client)
@@ -4781,7 +4797,7 @@ on("refreshOrders","click",async()=>{
   }finally{
     if(btn) btn.disabled=false;
   }
-  // V35.3.34: Actualizar pedidos solo sincroniza.
+  // V35.3.35: Actualizar pedidos solo sincroniza.
   // Nunca reconstruye ni crea movimientos contables automáticamente.
 });
 
