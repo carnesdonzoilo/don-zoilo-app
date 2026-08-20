@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.35";
+const APP_VERSION = "35.3.34";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1859,112 +1859,17 @@ function clientNames(){
   return [...byKey.values()].sort((a,b)=>a.localeCompare(b,"es"));
 }
 
-// V35.3.35 — LIBRO MAYOR SEGURO DE CLIENTES
-// Las ventas de cuenta corriente se calculan desde la fuente real: pedidos ENTREGADOS.
-// No inserta, borra ni reconstruye movimientos en Supabase.
-// Las cobranzas y ajustes continúan saliendo de movements y se contabilizan una sola vez.
-function effectiveClientMovements(){
-  const result=[];
-
-  // 1) Cobranzas y ajustes reales: se conservan exactamente como están guardados.
-  movements
-    .filter(m=>m.status!=="pendiente" && ["cobro","ajuste"].includes(m.type))
-    .forEach(m=>result.push(m));
-
-  // 2) Ventas correspondientes a pedidos entregados: una sola venta por remito/batch.
-  const batches=new Map();
-  orders.filter(o=>o && o.delivered===true).forEach(order=>{
-    const batchKey=String(order.batch_id||order.id||"");
-    if(!batchKey) return;
-    if(!batches.has(batchKey)) batches.set(batchKey,[]);
-    batches.get(batchKey).push(order);
-  });
-
-  const consumedSaleIds=new Set();
-
-  batches.forEach((items,batchKey)=>{
-    const existing=movements
-      .filter(m=>m.type==="venta" && m.status!=="pendiente" && movementMatchesBatch(m,batchKey,items))
-      .slice()
-      .sort((a,b)=>{
-        const ac=String(a.id||"")===deliveryMovementId(batchKey)?0:1;
-        const bc=String(b.id||"")===deliveryMovementId(batchKey)?0:1;
-        if(ac!==bc) return ac-bc;
-        return String(a.created_at||a.date||"").localeCompare(String(b.created_at||b.date||""));
-      });
-
-    existing.forEach(m=>consumedSaleIds.add(String(m.id||"")));
-    const backing=existing[0]||null;
-    const deliveredAt=items.find(i=>i.delivered_at)?.delivered_at ||
-      backing?.created_at || items[0]?.created_at || new Date().toISOString();
-
-    // IDs aceptados para imputaciones históricas y nuevas.
-    const aliases=new Set([
-      deliveryMovementId(batchKey),
-      batchKey,
-      ...items.map(i=>String(i.id||"")),
-      ...existing.map(m=>String(m.id||""))
-    ].filter(Boolean));
-
-    result.push({
-      ...(backing||{}),
-      id:backing?.id || deliveryMovementId(batchKey),
-      date:items[0]?.delivery_date || backing?.date || todayISO(),
-      type:"venta",
-      party:items[0]?.client || backing?.party || "",
-      concept:backing?.concept || `Remito ${remitoDisplayNumber(items)}`,
-      kg:orderBatchKg(items),
-      amount:orderBatchTotal(items),
-      payment_method:items[0]?.payment_method || backing?.payment_method || "cuenta_corriente",
-      status:"confirmado",
-      notes:backing?.notes || "Venta calculada desde pedido entregado.",
-      source_order_id:batchKey,
-      created_at:deliveredAt,
-      _effective:true,
-      _synthetic:!backing,
-      _targetAliases:[...aliases]
-    });
-  });
-
-  // 3) Ventas históricas que no tienen un pedido entregado disponible.
-  // Se conservan para no perder movimientos anteriores al módulo de Pedidos.
-  // Si hubiese duplicados con el mismo source_order_id, se toma uno solo.
-  const orphanGroups=new Map();
-  movements
-    .filter(m=>m.type==="venta" && m.status!=="pendiente" && !consumedSaleIds.has(String(m.id||"")))
-    .forEach(m=>{
-      const source=String(m.source_order_id||"").trim();
-      const key=source ? `source:${source}` : `id:${String(m.id||"")}`;
-      if(!orphanGroups.has(key)) orphanGroups.set(key,[]);
-      orphanGroups.get(key).push(m);
-    });
-
-  orphanGroups.forEach(group=>{
-    const chosen=group.slice().sort((a,b)=>
-      String(a.created_at||a.date||"").localeCompare(String(b.created_at||b.date||""))
-    )[0];
-    if(!chosen) return;
-    const aliases=[...new Set(group.map(x=>String(x.id||"")).filter(Boolean))];
-    result.push({
-      ...chosen,
-      _effective:true,
-      _synthetic:false,
-      _targetAliases:aliases
-    });
-  });
-
-  return result;
-}
-
 function accountMovementsFor(client){
-  const key=canonicalClientKey(client);
-  return effectiveClientMovements().filter(m=>
-    canonicalClientKey(m.party)===key &&
+  return movements.filter(m=>
+    m.status!=="pendiente" &&
+    canonicalClientKey(m.party)===canonicalClientKey(client) &&
     ["venta","cobro","ajuste"].includes(m.type)
   );
 }
 
 function accountTotals(client){
+  // V35.3.34: el saldo general NO depende de a qué remito se imputó una cobranza.
+  // Fórmula única: saldo anterior + ventas - cobranzas.
   const list=accountMovementsFor(client);
   const opening=list.filter(isOpeningBalanceMovement).reduce((s,m)=>s+Number(m.amount||0),0);
   const sales=list.filter(m=>m.type==="venta").reduce((s,m)=>s+Number(m.amount||0),0);
@@ -2060,107 +1965,6 @@ async function saveAccountDocumentEdit(event){
   }
 }
 
-
-function movementDiagnosticFlags(m){
-  const notes=String(m?.notes||"");
-  const flags=[];
-
-  if(notes.includes("Movimiento reconstruido automáticamente desde pedido entregado.")){
-    flags.push({level:"high",label:"Venta reconstruida automáticamente"});
-  }
-  if(/IMPUTA_MOVEMENT_IDS?:/i.test(notes)){
-    flags.push({level:"info",label:"Cobranza imputada a remito(s)"});
-  }
-  if(String(m?.id||"").startsWith("delivery-")){
-    flags.push({level:"info",label:"Movimiento generado desde entrega"});
-  }
-  if(m?._synthetic){
-    flags.push({level:"info",label:"Venta recuperada para el saldo desde pedido entregado"});
-  }
-  if(String(m?.source_order_id||"").trim()){
-    const sameSource=movements.filter(x=>
-      x!==m &&
-      x.type===m.type &&
-      String(x.source_order_id||"")===String(m.source_order_id||"")
-    );
-    if(sameSource.length){
-      flags.push({level:"high",label:`Posible duplicado · mismo remito (${sameSource.length+1} movimientos)`});
-    }
-  }
-  return flags;
-}
-
-function buildAccountDiagnostics(client){
-  const list=accountMovementsFor(client)
-    .slice()
-    .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)));
-
-  const suspicious=[];
-  const allRows=[];
-
-  list.forEach(m=>{
-    const flags=movementDiagnosticFlags(m);
-    const row={movement:m,flags};
-    allRows.push(row);
-    if(flags.some(f=>f.level==="high") || flags.some(f=>f.label.includes("imputada"))){
-      suspicious.push(row);
-    }
-  });
-
-  const duplicateGroups=new Map();
-  list.filter(m=>m.type==="venta" && String(m.source_order_id||"").trim()).forEach(m=>{
-    const key=String(m.source_order_id);
-    if(!duplicateGroups.has(key)) duplicateGroups.set(key,[]);
-    duplicateGroups.get(key).push(m);
-  });
-
-  const duplicateSales=[...duplicateGroups.entries()].filter(([,rows])=>rows.length>1);
-  const reconstructed=list.filter(m=>String(m.notes||"").includes("Movimiento reconstruido automáticamente desde pedido entregado."));
-  const allocatedCollections=list.filter(m=>m.type==="cobro" && /IMPUTA_MOVEMENT_IDS?:/i.test(String(m.notes||"")));
-
-  return {list,suspicious,duplicateSales,reconstructed,allocatedCollections};
-}
-
-function openAccountDiagnostics(){
-  const client=$("accountClientSelect")?.value||"";
-  if(!client) return alert("Elegí primero un cliente.");
-
-  const data=buildAccountDiagnostics(client);
-  const summary=$("accountDiagnosticsSummary");
-  const box=$("accountDiagnosticsList");
-  if(!summary || !box) return;
-
-  summary.innerHTML=`
-    <article><span>Cliente</span><strong>${escapeHtml(client)}</strong></article>
-    <article><span>Movimientos</span><strong>${data.list.length}</strong></article>
-    <article><span>Reconstruidos</span><strong>${data.reconstructed.length}</strong></article>
-    <article><span>Cobranzas imputadas</span><strong>${data.allocatedCollections.length}</strong></article>
-    <article><span>Grupos duplicados</span><strong>${data.duplicateSales.length}</strong></article>`;
-
-  const rows=data.suspicious;
-  if(!rows.length){
-    box.innerHTML='<div class="account-empty">No se detectaron movimientos marcados como sospechosos para este cliente.</div>';
-  }else{
-    box.innerHTML=rows.map(({movement:m,flags})=>{
-      const sign=(m.type==="venta"||isOpeningBalanceMovement(m))?"+":"−";
-      return `<div class="account-diagnostic-row">
-        <div class="diag-date">${fmtDate(m.date)}</div>
-        <div class="diag-main">
-          <strong>${escapeHtml(m.type==="venta"?"Venta":m.type==="cobro"?"Cobranza":m.type)} · ${escapeHtml(m.concept||"")}</strong>
-          <small>${escapeHtml(m.payment_method||"")} · ID: ${escapeHtml(m.id||"")}</small>
-          ${m.source_order_id?`<small>Remito origen: ${escapeHtml(m.source_order_id)}</small>`:""}
-          <div class="diag-flags">${flags.map(f=>`<span class="diag-flag ${f.level}">${escapeHtml(f.label)}</span>`).join("")}</div>
-          ${m.notes?`<small class="diag-notes">${escapeHtml(m.notes)}</small>`:""}
-        </div>
-        <div class="diag-amount">${sign}${money(m.amount||0)}</div>
-      </div>`;
-    }).join("");
-  }
-
-  const d=$("accountDiagnosticsDialog");
-  if(typeof d?.showModal==="function") d.showModal(); else d?.setAttribute("open","");
-}
-
 function renderAccountHistory(client){
   const box=$("accountHistoryList");
   if(!box) return;
@@ -2196,8 +2000,8 @@ function renderAccountHistory(client){
         <small>${escapeHtml(m.payment_method||"")} ${cleanAccountMovementNotes(m)?`· ${escapeHtml(cleanAccountMovementNotes(m))}`:""}</small>
       </div>
       <div class="history-amount">${sign}${money(m.amount||0)}</div>
-      ${m.type==="venta" && !m._synthetic?'<button type="button" class="secondary account-edit-document-btn">✏️ Comprobante</button>':""}`;
-    if(m.type==="venta" && !m._synthetic){
+      ${m.type==="venta"?'<button type="button" class="secondary account-edit-document-btn">✏️ Comprobante</button>':""}`;
+    if(m.type==="venta"){
       row.querySelector(".account-edit-document-btn")?.addEventListener("click",()=>openAccountDocumentEdit(m));
     }
     box.append(row);
@@ -2272,7 +2076,7 @@ function collectionTargetMovementIds(movement){
       .filter(Boolean);
   }
 
-  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.35.
+  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.34.
   const single=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
   return single ? [String(single[1]||"").trim()].filter(Boolean) : [];
 }
@@ -2502,13 +2306,12 @@ function pendingAccountDebtsFor(client){
       // comprobantes seleccionados, respetando el orden guardado.
       for(const targetId of targetIds){
         if(payment<=0) break;
-        const target=debts.find(d=>{
-          const aliases=new Set([
-            String(d.movement.id||""),
-            ...(Array.isArray(d.movement._targetAliases)?d.movement._targetAliases.map(String):[])
-          ]);
-          return aliases.has(String(targetId)) && d.remaining>0;
-        });
+        // La imputación solo distribuye esta cobranza entre comprobantes existentes.
+        // Si un ID histórico ya no existe, se ignora: jamás se reconstruye una venta.
+        const target=debts.find(d=>
+          String(d.movement.id||"")===String(targetId) &&
+          Number(d.remaining||0)>0
+        );
         if(!target) continue;
         const applied=Math.min(payment,target.remaining);
         target.remaining-=applied;
@@ -2538,7 +2341,7 @@ function printPendingAccountStatement(){
   const client=$("accountClientSelect")?.value||"";
   if(!client) return alert("Elegí un cliente.");
 
-  // V35.3.35: el detalle impreso trabaja con la misma precisión visible ($ enteros).
+  // V35.3.34: el detalle impreso trabaja con la misma precisión visible ($ enteros).
   // Evita listar residuos de centavos que money() muestra como $ 0 y que antes
   // incrementaban incorrectamente el contador de comprobantes pendientes.
   const pending=pendingAccountDebtsFor(client)
@@ -2615,8 +2418,8 @@ function printPendingAccountStatement(){
 function totalClientCurrentAccounts(){
   const totals=new Map();
 
-  effectiveClientMovements()
-    .filter(m=>["venta","cobro","ajuste"].includes(m.type))
+  movements
+    .filter(m=>m.status!=="pendiente" && ["venta","cobro","ajuste"].includes(m.type))
     .forEach(m=>{
       const raw=String(m.party||"").trim();
       if(!raw) return;
@@ -3036,36 +2839,36 @@ function renderBalances(){
 
   const map=new Map();
 
-  // Clientes: usa el mismo libro mayor seguro que Cuentas Corrientes.
-  effectiveClientMovements().forEach(m=>{
-    const rawName=(m.party||"Sin nombre").trim();
-    const key=canonicalClientKey(rawName);
-    if(!map.has(key)){
-      map.set(key,{
-        name:canonicalClientDisplayName(rawName),
-        client:0,
-        supplier:0
-      });
-    }
-    const record=map.get(key);
-    const amount=Number(m.amount||0);
-    if(m.type==="venta" || isOpeningBalanceMovement(m)) record.client+=amount;
-    else if(m.type==="cobro") record.client-=amount;
-  });
-
-  // Proveedores: conservan la lógica actual e independiente.
   movements
-    .filter(m=>m.status!=="pendiente" && ["compra","pago"].includes(m.type))
+    .filter(m=>m.status!=="pendiente")
     .forEach(m=>{
       const rawName=(m.party||"Sin nombre").trim();
-      const key=`SUPPLIER:${normalizeClientName(rawName)}`;
+      const isClientMovement=["venta","cobro","ajuste"].includes(m.type);
+
+      const key=isClientMovement
+        ? canonicalClientKey(rawName)
+        : normalizeClientName(rawName);
+
       if(!map.has(key)){
-        map.set(key,{name:rawName,client:0,supplier:0});
+        map.set(key,{
+          name:isClientMovement ? canonicalClientDisplayName(rawName) : rawName,
+          client:0,
+          supplier:0
+        });
       }
+
       const record=map.get(key);
       const amount=Number(m.amount||0);
-      if(m.type==="compra") record.supplier+=amount;
-      else if(m.type==="pago") record.supplier-=amount;
+
+      if(m.type==="venta" || isOpeningBalanceMovement(m)){
+        record.client+=amount;
+      }else if(m.type==="cobro"){
+        record.client-=amount;
+      }else if(m.type==="compra"){
+        record.supplier+=amount;
+      }else if(m.type==="pago"){
+        record.supplier-=amount;
+      }
     });
 
   const list=$("balanceList");
@@ -3091,6 +2894,7 @@ function renderBalances(){
     const isClient=Math.abs(row.client)>0.001;
     if(isClient) activeClientNumber+=1;
     item.className=isClient ? "balance-row" : "balance-row balance-row-supplier";
+
 
     const balance=isClient ? row.client : row.supplier;
     const label=isClient ? "Saldo cliente" : "Saldo proveedor";
@@ -4890,13 +4694,11 @@ on("confirmDeliveryBtn","click",confirmBatchDelivery);
 
 
 on("repairDeliveredMovements","click",()=>{
-  alert("Desde V35.3.35 las cuentas corrientes se calculan directamente desde los pedidos entregados. Ya no es necesario reconstruir movimientos ni modificar el historial.");
+  alert("La reparación automática de movimientos está desactivada para proteger los saldos. Actualizar pedidos solo sincroniza datos.");
 });
 
 
 on("closeBalanceDetail","click",()=>{ const d=$("balanceDetailDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
-on("openAccountDiagnostics","click",openAccountDiagnostics);
-on("closeAccountDiagnostics","click",()=>{ const d=$("accountDiagnosticsDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
 on("accountDocumentEditForm","submit",saveAccountDocumentEdit);
 on("closeAccountDocumentEdit","click",()=>{ const d=$("accountDocumentEditDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
 on("cancelAccountDocumentEdit","click",()=>{ const d=$("accountDocumentEditDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
@@ -4979,7 +4781,8 @@ on("refreshOrders","click",async()=>{
   }finally{
     if(btn) btn.disabled=false;
   }
-  // V35.3.35: actualizar pedidos SOLO sincroniza. Nunca crea movimientos contables.
+  // V35.3.34: Actualizar pedidos solo sincroniza.
+  // Nunca reconstruye ni crea movimientos contables automáticamente.
 });
 
 on("syncNow","click",synchronizeNow);
