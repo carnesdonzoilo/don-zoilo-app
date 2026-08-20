@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.36";
+const APP_VERSION = "35.3.33";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -377,72 +377,21 @@ async function addMovement(item){
 }
 
 async function removeMovement(id){
-  const safeId=String(id??"").trim();
-
-  // V35.3.36: nunca eliminar por una referencia vacía/indefinida.
-  if(!safeId){
-    return alert("Este movimiento no tiene un ID válido. No se eliminó nada para proteger las cuentas corrientes.");
+  if(!confirm("¿Eliminar este movimiento?")) return;
+  if(supabaseClient){
+    const {error} = await supabaseClient.from("movements").delete().eq("id", id);
+    if(error) return alert("No se pudo eliminar: " + error.message);
   }
-
-  const matches=movements.filter(m=>String(m.id??"").trim()===safeId);
-  if(matches.length!==1){
-    return alert(
-      matches.length===0
-        ? "No se encontró exactamente el movimiento a eliminar. Actualizá y volvé a intentarlo."
-        : "Se detectó un ID duplicado. No se eliminó nada para proteger los saldos."
-    );
-  }
-
-  const movement=matches[0];
-  const isOpening=isOpeningBalanceMovement(movement);
-  const label=isOpening ? "SALDO ANTERIOR" : String(movement.type||"movimiento").toUpperCase();
-  const party=String(movement.party||"Sin cliente");
-  const amount=money(movement.amount||0);
-
-  const message=isOpening
-    ? `ATENCIÓN: vas a eliminar únicamente el SALDO ANTERIOR de ${party} por ${amount}.\n\nEsto debe modificar solo la cuenta de ${party}. ¿Continuar?`
-    : `¿Eliminar únicamente este ${label} de ${party} por ${amount}?`;
-
-  if(!confirm(message)) return;
-
-  try{
-    if(supabaseClient){
-      // Borrado estricto por ID y verificación de que Supabase eliminó UNA sola fila.
-      const {data,error}=await supabaseClient
-        .from("movements")
-        .delete()
-        .eq("id",safeId)
-        .select("id,party,type");
-
-      if(error) throw error;
-      if(!Array.isArray(data) || data.length!==1){
-        throw new Error(`La base devolvió ${Array.isArray(data)?data.length:0} registros eliminados; se esperaba exactamente 1.`);
-      }
-
-      // La nube vuelve a ser la fuente de verdad. No se filtran movimientos localmente.
-      await reloadCloudData();
-    }else{
-      // Sin conexión: también se elimina exclusivamente la coincidencia ya validada.
-      const index=movements.findIndex(m=>String(m.id??"").trim()===safeId);
-      if(index<0) throw new Error("El movimiento ya no está disponible.");
-      movements.splice(index,1);
-      localSave();
-    }
-
-    if($("expenseDate")) $("expenseDate").value=todayISO();
-    if($("supplierOpeningDate")) $("supplierOpeningDate").value="2026-07-16";
-    if($("supplierPurchaseDate")) $("supplierPurchaseDate").value=todayISO();
-    if($("supplierPaymentDate")) $("supplierPaymentDate").value=todayISO();
-    if($("openingDate")) $("openingDate").value=todayISO();
-    if($("collectionDate")) $("collectionDate").value=todayISO();
-    if($("expenseMonth")) $("expenseMonth").value=todayISO().slice(0,7);
-
-    renderAll();
-    buildOrderSheet();
-    showDeliveryToast(`${label} eliminado solo de ${party}.`);
-  }catch(error){
-    alert("No se eliminó nada: "+error.message);
-  }
+  movements = movements.filter(m => m.id !== id);
+  localSave();
+  if($("expenseDate")) $("expenseDate").value=todayISO();
+if($("supplierOpeningDate")) $("supplierOpeningDate").value="2026-07-16";
+if($("supplierPurchaseDate")) $("supplierPurchaseDate").value=todayISO();
+if($("supplierPaymentDate")) $("supplierPaymentDate").value=todayISO();
+if($("openingDate")) $("openingDate").value=todayISO();
+if($("collectionDate")) $("collectionDate").value=todayISO();
+if($("expenseMonth")) $("expenseMonth").value=todayISO().slice(0,7);
+renderAll();
 }
 
 
@@ -1281,16 +1230,11 @@ async function editExpenseMovement(movement){
 async function deleteExpenseMovement(movement){
   if(!confirm(`¿Eliminar ${movement.concept||"este gasto"} por ${money(movement.amount||0)}?`)) return;
   try{
-    const safeId=String(movement?.id??"").trim();
-    if(!safeId) throw new Error("Movimiento sin ID válido.");
     if(supabaseClient){
-      const {data,error}=await supabaseClient.from("movements").delete().eq("id",safeId).select("id");
+      const {error}=await supabaseClient.from("movements").delete().eq("id",movement.id);
       if(error) throw error;
-      if(!Array.isArray(data) || data.length!==1) throw new Error("La eliminación no afectó exactamente un movimiento.");
-      await reloadCloudData();
-    }else{
-      movements=movements.filter(m=>String(m.id??"").trim()!==safeId);
     }
+    movements=movements.filter(m=>m.id!==movement.id);
     localSave();
     renderAll();
     showDeliveryToast("Gasto eliminado.");
@@ -1692,9 +1636,9 @@ function movementCard(m){
       <div class="movement-meta">${m.kg ? `${Number(m.kg).toLocaleString("es-AR")} kg · ` : ""}${escapeHtml(m.payment_method || "")} · ${escapeHtml(m.status || "")}</div>
     </div>
     <div class="amount ${signClass}">${money(m.amount)}</div>
-    <button class="delete-btn" title="Eliminar" ${String(m.id??"").trim()?"":"disabled"}>✕</button>
+    <button class="delete-btn" title="Eliminar">✕</button>
   `;
-  div.querySelector(".delete-btn").addEventListener("click", () => removeMovement(String(m.id??"").trim()));
+  div.querySelector(".delete-btn").addEventListener("click", () => removeMovement(m.id));
   return div;
 }
 
@@ -1924,8 +1868,6 @@ function accountMovementsFor(client){
 }
 
 function accountTotals(client){
-  // V35.3.36: seguridad por ID exacto. El saldo general NO depende de a qué remito se imputó una cobranza.
-  // Fórmula única: saldo anterior + ventas - cobranzas.
   const list=accountMovementsFor(client);
   const opening=list.filter(isOpeningBalanceMovement).reduce((s,m)=>s+Number(m.amount||0),0);
   const sales=list.filter(m=>m.type==="venta").reduce((s,m)=>s+Number(m.amount||0),0);
@@ -2132,7 +2074,7 @@ function collectionTargetMovementIds(movement){
       .filter(Boolean);
   }
 
-  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.36.
+  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.33.
   const single=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
   return single ? [String(single[1]||"").trim()].filter(Boolean) : [];
 }
@@ -2362,12 +2304,7 @@ function pendingAccountDebtsFor(client){
       // comprobantes seleccionados, respetando el orden guardado.
       for(const targetId of targetIds){
         if(payment<=0) break;
-        // La imputación solo distribuye esta cobranza entre comprobantes existentes.
-        // Si un ID histórico ya no existe, se ignora: jamás se reconstruye una venta.
-        const target=debts.find(d=>
-          String(d.movement.id||"")===String(targetId) &&
-          Number(d.remaining||0)>0
-        );
+        const target=debts.find(d=>String(d.movement.id||"")===String(targetId) && d.remaining>0);
         if(!target) continue;
         const applied=Math.min(payment,target.remaining);
         target.remaining-=applied;
@@ -2397,7 +2334,7 @@ function printPendingAccountStatement(){
   const client=$("accountClientSelect")?.value||"";
   if(!client) return alert("Elegí un cliente.");
 
-  // V35.3.36: el detalle impreso trabaja con la misma precisión visible ($ enteros).
+  // V35.3.33: el detalle impreso trabaja con la misma precisión visible ($ enteros).
   // Evita listar residuos de centavos que money() muestra como $ 0 y que antes
   // incrementaban incorrectamente el contador de comprobantes pendientes.
   const pending=pendingAccountDebtsFor(client)
@@ -2708,16 +2645,11 @@ async function editSupplierMovement(movement){
 async function deleteSupplierMovement(movement){
   if(!confirm(`¿Eliminar este movimiento por ${money(movement.amount||0)}?`)) return;
   try{
-    const safeId=String(movement?.id??"").trim();
-    if(!safeId) throw new Error("Movimiento sin ID válido.");
     if(supabaseClient){
-      const {data,error}=await supabaseClient.from("movements").delete().eq("id",safeId).select("id");
+      const {error}=await supabaseClient.from("movements").delete().eq("id",movement.id);
       if(error) throw error;
-      if(!Array.isArray(data) || data.length!==1) throw new Error("La eliminación no afectó exactamente un movimiento.");
-      await reloadCloudData();
-    }else{
-      movements=movements.filter(m=>String(m.id??"").trim()!==safeId);
     }
+    movements=movements.filter(m=>m.id!==movement.id);
     localSave(); renderAll(); showDeliveryToast("Movimiento eliminado.");
   }catch(error){ alert("No se pudo eliminar: "+error.message); }
 }
@@ -4754,8 +4686,19 @@ on("cancelDeliveryConfirm","click",()=>{
 on("confirmDeliveryBtn","click",confirmBatchDelivery);
 
 
-on("repairDeliveredMovements","click",()=>{
-  alert("La reparación automática de movimientos está desactivada para proteger los saldos. Actualizar pedidos solo sincroniza datos.");
+on("repairDeliveredMovements","click",async()=>{
+  const btn=$("repairDeliveredMovements");
+  if(btn) btn.disabled=true;
+  try{
+    const created=await reconcileDeliveredOrders();
+    alert(created
+      ? `Se recuperaron ${created} movimiento${created===1?"":"s"} faltante${created===1?"":"s"}.`
+      : "No había movimientos faltantes.");
+  }catch(e){
+    alert("No se pudieron reparar los movimientos: "+e.message);
+  }finally{
+    if(btn) btn.disabled=false;
+  }
 });
 
 
@@ -4842,8 +4785,7 @@ on("refreshOrders","click",async()=>{
   }finally{
     if(btn) btn.disabled=false;
   }
-  // V35.3.36: Actualizar pedidos solo sincroniza.
-  // Nunca reconstruye ni crea movimientos contables automáticamente.
+  await reconcileDeliveredOrders();
 });
 
 on("syncNow","click",synchronizeNow);
