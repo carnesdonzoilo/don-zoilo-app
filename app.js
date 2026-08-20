@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.37";
+const APP_VERSION = "35.3.38";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1800,7 +1800,7 @@ function isOpeningBalanceMovement(m){
   return m.type==="ajuste" && String(m.notes||"").includes("SALDO_INICIAL");
 }
 
-// V35.3.37: las correcciones usadas para cuadrar una cuenta no deben
+// V35.3.38: las correcciones usadas para cuadrar una cuenta no deben
 // reemplazar visualmente a los remitos pendientes reales.
 // Se mantienen en el saldo matemático, pero se ocultan del listado operativo.
 function isBalanceCorrectionMovement(m){
@@ -2034,147 +2034,141 @@ function renderAccounts(){
 }
 
 
+
 const MASTER_ACCOUNT_TARGETS_1908 = Object.freeze({"BELGRANO": 2656700, "CLINICA HAEDO": 1713270, "RAMOS": 772150, "HAEDO": 769980, "INTENDENCIA": 629650, "ARDENTE": 502500, "NOI": 185000, "CASEROS": 922500, "CONGRESO 1111": 149770, "GINO": 0, "ITUZAINGÓ": 333250, "SIFÓN": 981500, "VILLA DEL PARQUE": 965000, "SIMPLE": 602420, "DUMPLING": -568243, "SENDERO": 856750, "PALERMO": 7870150, "MORON PLAZA": 10736775, "VITTORINO": 2127523});
+const MASTER_OPENINGS_1908 = Object.freeze({"CLINICA HAEDO": 5417050, "RAMOS": 1464250, "HAEDO": 6643565, "INTENDENCIA": 4174600, "ARDENTE": 2688100, "NOI": 2393392, "SIFÓN": 1381400, "VILLA DEL PARQUE": 1035000, "SIMPLE": 1024035, "DUMPLING": 5944452, "SENDERO": 1071800, "PALERMO": 4612750, "MORON PLAZA": 10814920, "VITTORINO": 2127523});
 const MASTER_BAD_MOVEMENT_IDS_1908 = Object.freeze(["530a086f-6a55-47b2-96e9-b016f735faea", "72f37988-fd79-4972-8ee9-60d4fe97ce5e", "08e1a495-5c3f-4fb0-b078-9442a0961f15", "a17aeb1b-3740-4420-929c-feeff5bd9a4c", "884e5f03-1fb0-4861-a871-cffb937af890", "4a439a19-73cd-4e03-8ce8-7824714fa238"]);
 
 function repairClientCanonicalName1908(name){
   return canonicalClientDisplayName(String(name||"").trim());
 }
 
+function repairOpeningId1908(display){
+  // No depende de funciones auxiliares externas.
+  const slug=String(display||"CLIENTE")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"") || "cliente";
+  return `repair-opening-2026-08-19-${slug}`;
+}
+
 async function repairAccounts1908(){
   if(!confirm(
-    "REPARACIÓN CONTROLADA 19/08/2026\n\n"+
-    "Se hará una copia de seguridad, se eliminarán únicamente 6 movimientos artificiales ya identificados y se reconstruirá un solo Saldo anterior por cliente para coincidir con las hojas impresas.\n\n"+
-    "No se borran ventas ni cobranzas históricas reales. ¿Continuar?"
+    "RECUPERACIÓN MAESTRA 19/08/2026\n\n"+
+    "Esta versión está preparada para continuar incluso si la reparación anterior quedó a mitad de camino.\n\n"+
+    "1) elimina únicamente los movimientos artificiales identificados;\n"+
+    "2) reemplaza los saldos anteriores de las cuentas de control;\n"+
+    "3) conserva ventas y cobranzas reales;\n"+
+    "4) verifica todos los saldos antes de informar éxito.\n\n"+
+    "¿Continuar?"
   )) return;
 
   const btn=$("repairAccounts1908");
-  if(btn){btn.disabled=true;btn.textContent="Reparando…";}
+  if(btn){btn.disabled=true;btn.textContent="Recuperando…";}
 
   try{
-    saveSafetyBackup("ANTES reparación maestra CC 19-08");
+    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.38");
 
     if(!supabaseClient){
       const connected=await initCloud();
       if(!connected) throw new Error("No se pudo conectar con Supabase.");
     }
 
-    // 1) Recargar la nube antes de decidir nada.
     await reloadCloudData();
 
-    // 2) Eliminar SOLO los movimientos artificiales exactos ya identificados.
-    const badIds=[...MASTER_BAD_MOVEMENT_IDS_1908];
-    if(badIds.length){
-      const {data,error}=await supabaseClient
-        .from("movements")
-        .delete()
-        .in("id",badIds)
-        .select("id");
-      if(error) throw error;
-      const deleted=new Set((data||[]).map(r=>String(r.id)));
-      // Si alguno ya no existe, no es error; no se elimina por criterios amplios.
-      console.info("Movimientos artificiales eliminados:",[...deleted]);
-    }
+    // Preparar TODO antes de borrar. No hay cálculos que puedan fallar después.
+    const targetNames=Object.keys(MASTER_ACCOUNT_TARGETS_1908);
+    const openingRows=Object.entries(MASTER_OPENINGS_1908).map(([display,amount])=>({
+      id:repairOpeningId1908(display),
+      date:"2026-08-19",
+      type:"ajuste",
+      party:repairClientCanonicalName1908(display),
+      concept:"Saldo anterior",
+      kg:0,
+      amount:Number(amount),
+      payment_method:"cuenta_corriente",
+      status:"confirmado",
+      notes:"SALDO_INICIAL | REPARACION_MAESTRA_19_08_2026_V35338",
+      source_order_id:null,
+      created_at:new Date().toISOString()
+    }));
 
-    await reloadCloudData();
-
-    // 3) Para cada cliente de control, borrar únicamente movimientos SALDO_INICIAL
-    //    de ese cliente. Las ventas y cobranzas reales quedan intactas.
-    const allOpeningIds=[];
-    Object.keys(MASTER_ACCOUNT_TARGETS_1908).forEach(display=>{
+    // Localizar todos los saldos anteriores actuales de las cuentas controladas.
+    const openingIds=[];
+    targetNames.forEach(display=>{
       const canonical=repairClientCanonicalName1908(display);
       accountMovementsFor(canonical)
         .filter(isOpeningBalanceMovement)
-        .forEach(m=>{if(m.id) allOpeningIds.push(String(m.id));});
+        .forEach(m=>{ if(m.id) openingIds.push(String(m.id)); });
     });
 
-    const uniqueOpeningIds=[...new Set(allOpeningIds)];
+    // A) Quitar movimientos artificiales exactos. Es idempotente.
+    if(MASTER_BAD_MOVEMENT_IDS_1908.length){
+      const {error}=await supabaseClient
+        .from("movements")
+        .delete()
+        .in("id",[...MASTER_BAD_MOVEMENT_IDS_1908]);
+      if(error) throw new Error("No se pudieron quitar los movimientos artificiales: "+error.message);
+    }
+
+    // B) Quitar saldos anteriores actuales SOLO de las cuentas de control.
+    const uniqueOpeningIds=[...new Set(openingIds)];
     if(uniqueOpeningIds.length){
       const {error}=await supabaseClient
         .from("movements")
         .delete()
         .in("id",uniqueOpeningIds);
-      if(error) throw error;
+      if(error) throw new Error("No se pudieron reemplazar los saldos anteriores: "+error.message);
     }
 
-    await reloadCloudData();
-
-    // 4) Calcular el Saldo anterior necesario DESDE los movimientos reales que
-    //    quedaron: target = apertura + ventas - cobranzas.
-    const openingRows=[];
-    const verification=[];
-
-    for(const [display,target] of Object.entries(MASTER_ACCOUNT_TARGETS_1908)){
-      const canonical=repairClientCanonicalName1908(display);
-      const list=accountMovementsFor(canonical).filter(m=>!isOpeningBalanceMovement(m));
-      const sales=list.filter(m=>m.type==="venta").reduce((a,m)=>a+Number(m.amount||0),0);
-      const collected=list.filter(m=>m.type==="cobro").reduce((a,m)=>a+Number(m.amount||0),0);
-      let opening=Number(target)-sales+collected;
-
-      // Tolerancia para centavos históricos.
-      if(Math.abs(opening)<0.5) opening=0;
-      opening=Math.round(opening*100)/100;
-      if(opening<0) throw new Error(`El saldo anterior calculado para ${display} dio negativo (${money(opening)}). Se detuvo sin insertar aperturas.`);
-
-      if(opening>0){
-        const slug=normalizeText(display).replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"") || "cliente";
-        openingRows.push({
-          id:`repair-opening-2026-08-19-${slug}`,
-          date:"2026-08-19",
-          type:"ajuste",
-          party:canonical,
-          concept:"Saldo anterior",
-          kg:0,
-          amount:opening,
-          payment_method:"cuenta_corriente",
-          status:"confirmado",
-          notes:"SALDO_INICIAL | REPARACION_MAESTRA_19_08_2026",
-          source_order_id:null,
-          created_at:new Date().toISOString()
-        });
-      }
-      verification.push({display,canonical,target,sales,collected,opening});
-    }
-
+    // C) Insertar saldos anteriores fijos y conocidos.
     if(openingRows.length){
       const {error}=await supabaseClient
         .from("movements")
         .upsert(openingRows,{onConflict:"id"});
-      if(error) throw error;
+      if(error) throw new Error("No se pudieron guardar los saldos de recuperación: "+error.message);
     }
 
     await reloadCloudData();
 
-    // 5) Verificación final: todos los clientes deben coincidir con su referencia.
+    // D) Verificar cliente por cliente. Se acepta diferencia menor a $1 por decimales históricos.
     const failures=[];
-    const ok=[];
+    const oks=[];
     for(const [display,target] of Object.entries(MASTER_ACCOUNT_TARGETS_1908)){
       const canonical=repairClientCanonicalName1908(display);
-      const got=accountTotals(canonical).balance;
-      if(Math.abs(Number(got)-Number(target))>0.51){
-        failures.push(`${display}: esperado ${money(target)} / obtenido ${money(got)}`);
-      }else{
-        ok.push(`${display} ${money(got)}`);
+      const got=Number(accountTotals(canonical).balance||0);
+      if(Math.abs(got-Number(target))>=1){
+        failures.push(`${display} — esperado ${money(target)} / quedó ${money(got)}`);
+      } else {
+        oks.push(`${display} — ${money(got)}`);
       }
     }
 
-    if(failures.length){
-      throw new Error("La verificación no cerró en:\n"+failures.join("\n"));
-    }
-
-    saveSafetyBackup("DESPUÉS reparación maestra CC 19-08 verificada");
     renderAll();
     buildOrderSheet();
 
+    if(failures.length){
+      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.38");
+      throw new Error(
+        "La reparación terminó pero estas cuentas no cerraron:\n\n"+
+        failures.join("\n")+
+        "\n\nNo cargues movimientos nuevos. Mandame esta pantalla."
+      );
+    }
+
+    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.38 VERIFICADA");
+
     alert(
-      "REPARACIÓN TERMINADA Y VERIFICADA.\n\n"+
-      `${ok.length} cuentas coinciden con la referencia del 19/08.\n`+
-      "Ventas y cobranzas históricas reales no fueron eliminadas.\n\n"+
-      "Ahora revisá Saldos antes de cargar cualquier movimiento nuevo."
+      "RECUPERACIÓN COMPLETA Y VERIFICADA ✅\n\n"+
+      `${oks.length} cuentas coinciden con las hojas de control del 19/08.\n\n`+
+      "No se borraron ventas ni cobranzas históricas reales.\n"+
+      "Ahora revisá la solapa SALDOS antes de seguir operando."
     );
   }catch(error){
     console.error(error);
-    alert("La reparación se detuvo: "+(error.message||error)+"\n\nConservá el respaldo descargado antes de la reparación.");
+    alert("RECUPERACIÓN DETENIDA\n\n"+(error.message||error));
   }finally{
     if(btn){btn.disabled=false;btn.textContent="🛡 Reparar cuentas 19/08";}
   }
@@ -2190,7 +2184,7 @@ async function saveOpeningBalance(event){
   if(!client) return alert("Elegí un cliente.");
   if(!Number.isFinite(amount) || amount<0) return alert("Ingresá un importe válido. Para anular el saldo anterior usá 0.");
 
-  // V35.3.37: el saldo anterior es ÚNICO por cliente.
+  // V35.3.38: el saldo anterior es ÚNICO por cliente.
   // Antes cada corrección agregaba otro movimiento SALDO_INICIAL y podía dejar
   // cuentas desajustadas. Ahora reemplaza exclusivamente los saldos anteriores
   // del cliente seleccionado. Un importe 0 los anula sin tocar otros clientes.
