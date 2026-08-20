@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.42";
+const APP_VERSION = "35.3.43";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1817,7 +1817,7 @@ function isOpeningBalanceMovement(m){
   return m.type==="ajuste" && String(m.notes||"").includes("SALDO_INICIAL");
 }
 
-// V35.3.42: las correcciones usadas para cuadrar una cuenta no deben
+// V35.3.43: las correcciones usadas para cuadrar una cuenta no deben
 // reemplazar visualmente a los remitos pendientes reales.
 // Se mantienen en el saldo matemático, pero se ocultan del listado operativo.
 function isBalanceCorrectionMovement(m){
@@ -1895,12 +1895,46 @@ function accountMovementsFor(client){
   );
 }
 
+const CC_CHECKPOINT_DATE="2026-08-19";
+const CC_CHECKPOINT_BALANCES=Object.freeze({"BELGRANO": 2656700, "CLINICA HAEDO": 1713270, "RAMOS": 772150, "HAEDO": 769980, "INTENDENCIA": 629650, "ARDENTE": 502500, "NOI": 185000, "CASEROS": 922500, "CONGRESO 1111": 149770, "GINO": 0, "ITUZAINGÓ": 333250, "SIFÓN": 981500, "VILLA DEL PARQUE": 965000, "SIMPLE": 602420, "DUMPLING": -568243, "SENDERO": 856750, "PALERMO": 7870150, "MORON PLAZA": 10736775, "VITTORINO": 2127523});
+
+function checkpointBalanceForClient(client){
+  const canonical=canonicalClientDisplayName(client);
+  if(Object.prototype.hasOwnProperty.call(CC_CHECKPOINT_BALANCES,canonical)){
+    return Number(CC_CHECKPOINT_BALANCES[canonical]||0);
+  }
+  return null;
+}
+
+function isAfterCcCheckpoint(m){
+  return String(m?.date||"")>CC_CHECKPOINT_DATE;
+}
+
 function accountTotals(client){
+  const checkpoint=checkpointBalanceForClient(client);
+
+  // V35.3.43: para las cuentas conciliadas al 19/08, ese cierre es la base
+  // inmutable. Solo los movimientos posteriores pueden modificar el saldo.
+  if(checkpoint!==null){
+    const newer=accountMovementsFor(client).filter(isAfterCcCheckpoint);
+    const sales=newer.filter(m=>m.type==="venta").reduce((s,m)=>s+Number(m.amount||0),0);
+    const collected=newer.filter(m=>m.type==="cobro").reduce((s,m)=>s+Number(m.amount||0),0);
+    return {
+      opening:checkpoint,
+      sales,
+      collected,
+      balance:checkpoint+sales-collected,
+      checkpoint:true,
+      checkpoint_date:CC_CHECKPOINT_DATE
+    };
+  }
+
+  // Clientes no incluidos en el cierre 19/08 mantienen la lógica histórica.
   const list=accountMovementsFor(client);
   const opening=list.filter(isOpeningBalanceMovement).reduce((s,m)=>s+Number(m.amount||0),0);
   const sales=list.filter(m=>m.type==="venta").reduce((s,m)=>s+Number(m.amount||0),0);
   const collected=list.filter(m=>m.type==="cobro").reduce((s,m)=>s+Number(m.amount||0),0);
-  return {opening,sales,collected,balance:opening+sales-collected};
+  return {opening,sales,collected,balance:opening+sales-collected,checkpoint:false};
 }
 
 function fillClientSelects(){
@@ -2000,9 +2034,20 @@ function renderAccountHistory(client){
     return;
   }
 
+  const checkpoint=checkpointBalanceForClient(client);
   const list=accountMovementsFor(client)
     .slice()
     .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)));
+
+  if(checkpoint!==null){
+    const checkpointRow=document.createElement("div");
+    checkpointRow.className="account-history-row opening";
+    checkpointRow.innerHTML=`
+      <div class="date">19/08/2026</div>
+      <div><strong>Saldo conciliado · Punto de corte</strong><small>Base protegida V35.3.43</small></div>
+      <div class="amount">+${money(checkpoint)}</div>`;
+    box.append(checkpointRow);
+  }
 
   if(!list.length){
     box.innerHTML='<div class="account-empty">Este cliente todavía no tiene movimientos.</div>';
@@ -2086,7 +2131,7 @@ async function repairAccounts1908(){
   if(btn){btn.disabled=true;btn.textContent="Recuperando…";}
 
   try{
-    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.42");
+    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.43");
 
     if(!supabaseClient){
       const connected=await initCloud();
@@ -2167,7 +2212,7 @@ async function repairAccounts1908(){
     buildOrderSheet();
 
     if(failures.length){
-      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.42");
+      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.43");
       throw new Error(
         "La reparación terminó pero estas cuentas no cerraron:\n\n"+
         failures.join("\n")+
@@ -2175,7 +2220,7 @@ async function repairAccounts1908(){
       );
     }
 
-    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.42 VERIFICADA");
+    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.43 VERIFICADA");
 
     alert(
       "RECUPERACIÓN COMPLETA Y VERIFICADA ✅\n\n"+
@@ -2201,7 +2246,7 @@ async function saveOpeningBalance(event){
   if(!client) return alert("Elegí un cliente.");
   if(!Number.isFinite(amount) || amount<0) return alert("Ingresá un importe válido. Para anular el saldo anterior usá 0.");
 
-  // V35.3.42: el saldo anterior es ÚNICO por cliente.
+  // V35.3.43: el saldo anterior es ÚNICO por cliente.
   // Antes cada corrección agregaba otro movimiento SALDO_INICIAL y podía dejar
   // cuentas desajustadas. Ahora reemplaza exclusivamente los saldos anteriores
   // del cliente seleccionado. Un importe 0 los anula sin tocar otros clientes.
@@ -2452,6 +2497,73 @@ function printAccountStatement(){
 // Las cobranzas se imputan por antigüedad (FIFO). Si existe un saldo a favor,
 // se conserva y se aplica contra la siguiente venta, igual que en el saldo general.
 function pendingAccountDebtsFor(client){
+  const checkpoint=checkpointBalanceForClient(client);
+
+  if(checkpoint!==null){
+    // Desde el 20/08 en adelante, los movimientos nuevos se imputan sobre
+    // el saldo conciliado del 19/08. No se vuelven a reinterpretar 1000+
+    // movimientos históricos.
+    const synthetic={
+      id:`cc-checkpoint-${canonicalClientKey(client)}`,
+      date:CC_CHECKPOINT_DATE,
+      type:"ajuste",
+      party:canonicalClientDisplayName(client),
+      concept:"Saldo conciliado 19/08",
+      kg:0,
+      amount:Math.max(0,Number(checkpoint||0)),
+      payment_method:"cuenta_corriente",
+      status:"confirmado",
+      notes:"CC_CHECKPOINT_19_08",
+      created_at:"2026-08-19T23:59:59.999Z"
+    };
+
+    const debts=[];
+    let credit=Math.max(0,-Number(checkpoint||0));
+
+    if(Number(checkpoint||0)>0){
+      debts.push({movement:synthetic,original:Number(checkpoint),remaining:Number(checkpoint)});
+    }
+
+    const newer=accountMovementsFor(client)
+      .filter(isAfterCcCheckpoint)
+      .slice()
+      .sort((a,b)=>{
+        const da=`${String(a.date||"")} ${String(a.created_at||"")}`;
+        const db=`${String(b.date||"")} ${String(b.created_at||"")}`;
+        return da.localeCompare(db);
+      });
+
+    const applyCredit=(debt)=>{
+      if(credit<=0 || debt.remaining<=0) return;
+      const applied=Math.min(credit,debt.remaining);
+      debt.remaining-=applied;
+      credit-=applied;
+    };
+
+    newer.forEach(m=>{
+      if(m.type==="venta"){
+        const debt={movement:m,original:Math.max(0,Number(m.amount||0)),remaining:Math.max(0,Number(m.amount||0))};
+        applyCredit(debt);
+        debts.push(debt);
+        return;
+      }
+      if(m.type==="cobro"){
+        let payment=Math.max(0,Number(m.amount||0));
+        for(const debt of debts){
+          if(payment<=0) break;
+          if(debt.remaining<=0) continue;
+          const applied=Math.min(payment,debt.remaining);
+          debt.remaining-=applied;
+          payment-=applied;
+        }
+        if(payment>0) credit+=payment;
+      }
+    });
+
+    return debts.filter(d=>Math.round(Number(d.remaining||0))>0);
+  }
+
+  // Compatibilidad para clientes sin checkpoint.
   const list=accountMovementsFor(client)
     .slice()
     .sort((a,b)=>{
@@ -2462,7 +2574,6 @@ function pendingAccountDebtsFor(client){
 
   const debts=[];
   let credit=0;
-
   const applyCreditToDebt=(debt)=>{
     if(credit<=0 || debt.remaining<=0) return;
     const applied=Math.min(credit,debt.remaining);
@@ -2472,25 +2583,16 @@ function pendingAccountDebtsFor(client){
 
   list.forEach(m=>{
     const isDebt=m.type==="venta" || isOpeningBalanceMovement(m);
-
     if(isDebt){
       const original=Math.max(0,Number(m.amount||0));
-      const debt={
-        movement:m,
-        original,
-        remaining:original
-      };
+      const debt={movement:m,original,remaining:original};
       applyCreditToDebt(debt);
       debts.push(debt);
       return;
     }
-
     if(m.type==="cobro"){
       let payment=Math.max(0,Number(m.amount||0));
       const targetIds=collectionTargetMovementIds(m);
-
-      // Si la cobranza fue imputada manualmente, aplica primero a TODOS los
-      // comprobantes seleccionados, respetando el orden guardado.
       for(const targetId of targetIds){
         if(payment<=0) break;
         const target=debts.find(d=>String(d.movement.id||"")===String(targetId) && d.remaining>0);
@@ -2499,8 +2601,6 @@ function pendingAccountDebtsFor(client){
         target.remaining-=applied;
         payment-=applied;
       }
-
-      // El remanente (o las cobranzas históricas sin imputación) sigue por antigüedad.
       for(const debt of debts){
         if(payment<=0) break;
         if(debt.remaining<=0) continue;
@@ -2508,14 +2608,10 @@ function pendingAccountDebtsFor(client){
         debt.remaining-=applied;
         payment-=applied;
       }
-
-      // Si la cobranza supera las deudas existentes, queda como saldo a favor.
       if(payment>0) credit+=payment;
     }
   });
 
-  // La app muestra importes en pesos enteros: un residuo menor a $0,50
-  // debe considerarse cancelado para pendientes y conteos.
   return debts.filter(d=>Math.round(Number(d.remaining||0))>0);
 }
 
@@ -2605,26 +2701,7 @@ function printPendingAccountStatement(){
 
 
 function totalClientCurrentAccounts(){
-  const totals=new Map();
-
-  movements
-    .filter(m=>m.status!=="pendiente" && ["venta","cobro","ajuste"].includes(m.type))
-    .forEach(m=>{
-      const raw=String(m.party||"").trim();
-      if(!raw) return;
-
-      const key=canonicalClientKey(raw);
-      const current=totals.get(key)||0;
-      const value=Number(m.amount||0);
-
-      if(m.type==="venta" || isOpeningBalanceMovement(m)){
-        totals.set(key,current+value);
-      }else if(m.type==="cobro"){
-        totals.set(key,current-value);
-      }
-    });
-
-  return [...totals.values()].reduce((sum,value)=>sum+value,0);
+  return clientNames().reduce((sum,client)=>sum+Number(accountTotals(client).balance||0),0);
 }
 
 // Fuente única para que Balance Diario muestre exactamente el mismo total que Saldos.
@@ -2632,7 +2709,7 @@ window.DonZoiloFinancialTotals = window.DonZoiloFinancialTotals || {};
 
 window.DonZoiloFinancialTotals.clientCurrentAccounts = totalClientCurrentAccounts;
 
-// V35.3.42 — SOLO LECTURA.
+// V35.3.43 — SOLO LECTURA.
 // Expone al Balance Diario el detalle de cuentas corrientes sin crear,
 // modificar, borrar ni recalcular movimientos.
 window.DonZoiloFinancialTotals.clientAccountDetail = function(){
@@ -4949,7 +5026,9 @@ on("closeBalanceDetail","click",()=>{ const d=$("balanceDetailDialog"); if(typeo
 on("accountDocumentEditForm","submit",saveAccountDocumentEdit);
 on("closeAccountDocumentEdit","click",()=>{ const d=$("accountDocumentEditDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
 on("cancelAccountDocumentEdit","click",()=>{ const d=$("accountDocumentEditDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
-on("repairAccounts1908","click",repairAccounts1908);
+on("repairAccounts1908","click",()=>{
+  alert("La reparación histórica quedó deshabilitada. V35.3.43 usa el cierre conciliado del 19/08 como punto de corte estable.");
+});
 on("openingBalanceForm","submit",saveOpeningBalance);
 on("collectionForm","submit",saveCollection);
 on("collectionClient","change",()=>fillCollectionPendingTargets($("collectionClient")?.value||""));
