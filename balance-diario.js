@@ -1,4 +1,4 @@
-/* V35.3.40: CIERRE DE BALANCE SOLO LECTURA respecto de movements. No crea, edita ni elimina cuentas corrientes. */
+/* V35.3.41: CIERRE DE BALANCE SOLO LECTURA respecto de movements. No crea, edita ni elimina cuentas corrientes. */
 /* DON ZOILO V35.3.13 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
 (function(){
 'use strict';
@@ -383,28 +383,29 @@ function reportLines(){
 function simplePdfBlob(lines){
   const clean=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'').replace(/([\\()])/g,'\\$1');
 
-  // V35.3.40: aprovechar A4 completo y mantener el cierre en UNA sola hoja.
-  // El tamaño y el interlineado se adaptan únicamente a la cantidad de líneas.
+  // V35.3.41: A4 en dos columnas para aprovechar ancho y mantener letra legible.
+  // Solo cambia la presentación del PDF; no modifica datos ni saldos.
   const count=Math.max(1,lines.length);
-  const top=808;
-  const bottom=32;
+  const leftX=32, rightX=306, top=808, bottom=32;
   const usable=top-bottom;
-  let fontSize=9;
-  let lineHeight=12;
+  const rows=Math.ceil(count/2);
 
-  if(count>58){ fontSize=8; lineHeight=10.5; }
-  if(count>70){ fontSize=7; lineHeight=9.2; }
-  if(count>82){ fontSize=6.2; lineHeight=8.1; }
+  let fontSize=8.4;
+  let lineHeight=10.8;
+  if(rows>64){ fontSize=7.6; lineHeight=9.8; }
+  if(rows>76){ fontSize=6.8; lineHeight=8.8; }
 
-  // Garantiza que todas las líneas entren en el alto útil de A4.
-  lineHeight=Math.min(lineHeight,usable/Math.max(count-1,1));
-  fontSize=Math.min(fontSize,Math.max(5.2,lineHeight*0.78));
+  lineHeight=Math.min(lineHeight, usable/Math.max(rows-1,1));
+  fontSize=Math.min(fontSize, Math.max(5.8,lineHeight*0.78));
 
-  let content=`BT\n/F1 ${fontSize.toFixed(2)} Tf\n32 ${top} Td\n`;
-  lines.forEach((line,i)=>{
-    if(i) content+=`0 -${lineHeight.toFixed(2)} Td\n`;
-    content+=`(${clean(line)}) Tj\n`;
-  });
+  let content='BT\n/F1 '+fontSize.toFixed(2)+' Tf\n';
+  for(let i=0;i<count;i++){
+    const col = i < rows ? 0 : 1;
+    const row = col===0 ? i : i-rows;
+    const x = col===0 ? leftX : rightX;
+    const y = top - row*lineHeight;
+    content+=`${x} ${y.toFixed(2)} Td\n(${clean(lines[i])}) Tj\n${-x} ${(-y).toFixed(2)} Td\n`;
+  }
   content+='ET';
 
   const objs=[];
