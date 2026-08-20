@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.44";
+const APP_VERSION = "35.3.45";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2829,23 +2829,47 @@ function supplierMovementsFor(name){
   );
 }
 
+// V35.3.45: punto de corte protegido para proveedores conciliados.
+// IMPORTANTE: no crea, borra ni modifica movimientos. Solo evita que movimientos
+// históricos anteriores al cierre vuelvan a alterar el saldo ya verificado.
+const SUPPLIER_CHECKPOINT_DATE="2026-08-19";
+const SUPPLIER_CHECKPOINT_BALANCES=Object.freeze({
+  JORGE: 6192165,
+  TITO: 6964750
+});
+
+function supplierCheckpointBalance(name){
+  const key=normalizeClientName(name);
+  return Object.prototype.hasOwnProperty.call(SUPPLIER_CHECKPOINT_BALANCES,key)
+    ? Number(SUPPLIER_CHECKPOINT_BALANCES[key]||0)
+    : null;
+}
+
 function supplierTotals(name){
   const list=supplierMovementsFor(name);
+  const checkpoint=supplierCheckpointBalance(name);
+
+  if(checkpoint!==null){
+    const newer=list.filter(m=>String(m?.date||"")>SUPPLIER_CHECKPOINT_DATE);
+    const purchases=newer.filter(m=>m.type==="compra").reduce((s,m)=>s+Number(m.amount||0),0);
+    const payments=newer.filter(m=>m.type==="pago").reduce((s,m)=>s+Number(m.amount||0),0);
+    return {
+      opening:checkpoint, purchases, payments,
+      balance:checkpoint+purchases-payments,
+      checkpoint:true, checkpoint_date:SUPPLIER_CHECKPOINT_DATE
+    };
+  }
+
+  // Los demás proveedores conservan exactamente la lógica histórica existente.
   const opening=list.filter(isSupplierOpeningMovement).reduce((s,m)=>s+Number(m.amount||0),0);
   const purchases=list.filter(m=>m.type==="compra" && !isSupplierOpeningMovement(m)).reduce((s,m)=>s+Number(m.amount||0),0);
   const payments=list.filter(m=>m.type==="pago").reduce((s,m)=>s+Number(m.amount||0),0);
-  return {opening,purchases,payments,balance:opening+purchases-payments};
+  return {opening,purchases,payments,balance:opening+purchases-payments,checkpoint:false};
 }
 
 function allSuppliersDebt(){
-  const grouped=new Map();
-  movements.filter(m=>m.status!=="pendiente" && ["compra","pago"].includes(m.type)).forEach(m=>{
-    const key=normalizeClientName(m.party);
-    if(!key) return;
-    const current=grouped.get(key)||0;
-    grouped.set(key,current+(m.type==="compra"?Number(m.amount||0):-Number(m.amount||0)));
-  });
-  return [...grouped.values()].reduce((sum,value)=>sum+value,0);
+  // Usar la misma fuente de verdad que la pantalla de cada proveedor.
+  return supplierNames().reduce((sum,name)=>sum+Number(supplierTotals(name).balance||0),0);
 }
 
 function fillSupplierSelectors(){
