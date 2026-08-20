@@ -1168,19 +1168,3 @@ dialog::backdrop{background:#0009}
 .account-document-edit-card{max-width:520px}
 .account-document-edit-card label{display:flex;flex-direction:column;gap:6px;margin:10px 0}
 .account-document-edit-card input{width:100%}
-
-.account-diagnostics-card{max-width:920px;width:min(920px,96vw)}
-.account-diagnostics-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0}
-.account-diagnostics-summary article{padding:10px;border:1px solid #e3e6ea;border-radius:8px}
-.account-diagnostics-summary span{display:block;font-size:11px;color:#667085}
-.account-diagnostics-summary strong{font-size:16px}
-.account-diagnostics-list{display:flex;flex-direction:column;gap:8px;max-height:62vh;overflow:auto}
-.account-diagnostic-row{display:grid;grid-template-columns:90px 1fr auto;gap:10px;align-items:start;padding:10px;border:1px solid #e3e6ea;border-radius:8px}
-.diag-main{display:flex;flex-direction:column;gap:3px;min-width:0}
-.diag-main small{font-size:11px;color:#667085;word-break:break-all}
-.diag-flags{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
-.diag-flag{font-size:10px;font-weight:700;padding:3px 6px;border-radius:999px;background:#eef2f6}
-.diag-flag.high{background:#fee4e2;color:#b42318}
-.diag-flag.info{background:#eaf2ff;color:#175cd3}
-.diag-amount{font-weight:800;white-space:nowrap}
-.diag-notes{margin-top:3px}
