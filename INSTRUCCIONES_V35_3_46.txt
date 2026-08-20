@@ -1,0 +1,9 @@
+DON ZOILO V35.3.46 — SALDOS DE PROVEEDORES MISMA FUENTE
+
+Cambio único:
+- La pestaña SALDOS ya no recalcula proveedores por su cuenta.
+- Ahora usa supplierTotals(), exactamente igual que la pestaña PROVEEDORES.
+- No crea, borra ni modifica movimientos.
+- No modifica la lógica de clientes.
+- Jorge esperado con los movimientos actuales: $5.265.990.
+- Tito esperado con los movimientos actuales: $7.794.940.
