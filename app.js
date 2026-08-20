@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.43";
+const APP_VERSION = "35.3.44";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1817,7 +1817,7 @@ function isOpeningBalanceMovement(m){
   return m.type==="ajuste" && String(m.notes||"").includes("SALDO_INICIAL");
 }
 
-// V35.3.43: las correcciones usadas para cuadrar una cuenta no deben
+// V35.3.44: las correcciones usadas para cuadrar una cuenta no deben
 // reemplazar visualmente a los remitos pendientes reales.
 // Se mantienen en el saldo matemático, pero se ocultan del listado operativo.
 function isBalanceCorrectionMovement(m){
@@ -1903,17 +1903,23 @@ function checkpointBalanceForClient(client){
   if(Object.prototype.hasOwnProperty.call(CC_CHECKPOINT_BALANCES,canonical)){
     return Number(CC_CHECKPOINT_BALANCES[canonical]||0);
   }
-  return null;
+  // Todo cliente no incluido en el cierre conciliado comienza en $0 al 19/08.
+  // Así ningún movimiento histórico anterior vuelve a entrar por una vía alternativa.
+  return 0;
 }
 
 function isAfterCcCheckpoint(m){
   return String(m?.date||"")>CC_CHECKPOINT_DATE;
 }
 
+function ccPostCheckpointMovements(client){
+  return accountMovementsFor(client).filter(isAfterCcCheckpoint);
+}
+
 function accountTotals(client){
   const checkpoint=checkpointBalanceForClient(client);
 
-  // V35.3.43: para las cuentas conciliadas al 19/08, ese cierre es la base
+  // V35.3.44: para las cuentas conciliadas al 19/08, ese cierre es la base
   // inmutable. Solo los movimientos posteriores pueden modificar el saldo.
   if(checkpoint!==null){
     const newer=accountMovementsFor(client).filter(isAfterCcCheckpoint);
@@ -2044,7 +2050,7 @@ function renderAccountHistory(client){
     checkpointRow.className="account-history-row opening";
     checkpointRow.innerHTML=`
       <div class="date">19/08/2026</div>
-      <div><strong>Saldo conciliado · Punto de corte</strong><small>Base protegida V35.3.43</small></div>
+      <div><strong>Saldo conciliado · Punto de corte</strong><small>Base protegida V35.3.44</small></div>
       <div class="amount">+${money(checkpoint)}</div>`;
     box.append(checkpointRow);
   }
@@ -2131,7 +2137,7 @@ async function repairAccounts1908(){
   if(btn){btn.disabled=true;btn.textContent="Recuperando…";}
 
   try{
-    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.43");
+    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.44");
 
     if(!supabaseClient){
       const connected=await initCloud();
@@ -2212,7 +2218,7 @@ async function repairAccounts1908(){
     buildOrderSheet();
 
     if(failures.length){
-      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.43");
+      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.44");
       throw new Error(
         "La reparación terminó pero estas cuentas no cerraron:\n\n"+
         failures.join("\n")+
@@ -2220,7 +2226,7 @@ async function repairAccounts1908(){
       );
     }
 
-    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.43 VERIFICADA");
+    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.44 VERIFICADA");
 
     alert(
       "RECUPERACIÓN COMPLETA Y VERIFICADA ✅\n\n"+
@@ -2246,7 +2252,7 @@ async function saveOpeningBalance(event){
   if(!client) return alert("Elegí un cliente.");
   if(!Number.isFinite(amount) || amount<0) return alert("Ingresá un importe válido. Para anular el saldo anterior usá 0.");
 
-  // V35.3.43: el saldo anterior es ÚNICO por cliente.
+  // V35.3.44: el saldo anterior es ÚNICO por cliente.
   // Antes cada corrección agregaba otro movimiento SALDO_INICIAL y podía dejar
   // cuentas desajustadas. Ahora reemplaza exclusivamente los saldos anteriores
   // del cliente seleccionado. Un importe 0 los anula sin tocar otros clientes.
@@ -2701,7 +2707,9 @@ function printPendingAccountStatement(){
 
 
 function totalClientCurrentAccounts(){
-  return clientNames().reduce((sum,client)=>sum+Number(accountTotals(client).balance||0),0);
+  return clientNames().reduce((sum,client)=>{
+    return sum+Number(accountTotals(client).balance||0);
+  },0);
 }
 
 // Fuente única para que Balance Diario muestre exactamente el mismo total que Saldos.
@@ -2709,7 +2717,7 @@ window.DonZoiloFinancialTotals = window.DonZoiloFinancialTotals || {};
 
 window.DonZoiloFinancialTotals.clientCurrentAccounts = totalClientCurrentAccounts;
 
-// V35.3.43 — SOLO LECTURA.
+// V35.3.44 — SOLO LECTURA.
 // Expone al Balance Diario el detalle de cuentas corrientes sin crear,
 // modificar, borrar ni recalcular movimientos.
 window.DonZoiloFinancialTotals.clientAccountDetail = function(){
@@ -3150,51 +3158,48 @@ function renderBalances(){
     $("allClientBalancesTotal").textContent=money(totalClientCurrentAccounts());
   }
 
-  const map=new Map();
+  const rows=[];
 
+  // CLIENTES: una única fuente de verdad.
+  // Jamás recalcular desde el historial acá: usar accountTotals(), que aplica
+  // el punto de corte conciliado del 19/08 + movimientos posteriores.
+  clientNames().forEach(name=>{
+    const balance=Number(accountTotals(name).balance||0);
+    if(Math.abs(balance)>0.001){
+      rows.push({name,client:balance,supplier:0});
+    }
+  });
+
+  // PROVEEDORES: no forman parte de la reparación de cuentas corrientes.
+  // Mantienen compras - pagos tal como estaban.
+  const supplierMap=new Map();
   movements
-    .filter(m=>m.status!=="pendiente")
+    .filter(m=>m.status!=="pendiente" && ["compra","pago"].includes(m.type))
     .forEach(m=>{
       const rawName=(m.party||"Sin nombre").trim();
-      const isClientMovement=["venta","cobro","ajuste"].includes(m.type);
-
-      const key=isClientMovement
-        ? canonicalClientKey(rawName)
-        : normalizeClientName(rawName);
-
-      if(!map.has(key)){
-        map.set(key,{
-          name:isClientMovement ? canonicalClientDisplayName(rawName) : rawName,
-          client:0,
-          supplier:0
-        });
-      }
-
-      const record=map.get(key);
+      const key=normalizeClientName(rawName);
+      if(!supplierMap.has(key)) supplierMap.set(key,{name:rawName,balance:0});
+      const rec=supplierMap.get(key);
       const amount=Number(m.amount||0);
-
-      if(m.type==="venta" || isOpeningBalanceMovement(m)){
-        record.client+=amount;
-      }else if(m.type==="cobro"){
-        record.client-=amount;
-      }else if(m.type==="compra"){
-        record.supplier+=amount;
-      }else if(m.type==="pago"){
-        record.supplier-=amount;
-      }
+      if(m.type==="compra") rec.balance+=amount;
+      if(m.type==="pago") rec.balance-=amount;
     });
+
+  supplierMap.forEach(rec=>{
+    if(Math.abs(rec.balance)>0.001){
+      rows.push({name:rec.name,client:0,supplier:rec.balance});
+    }
+  });
 
   const list=$("balanceList");
   if(!list) return;
   list.innerHTML="";
 
-  const rows=[...map.values()]
-    .filter(row=>Math.abs(row.client)>0.001 || Math.abs(row.supplier)>0.001)
-    .sort((a,b)=>{
-      const av=Math.max(a.client,a.supplier);
-      const bv=Math.max(b.client,b.supplier);
-      return bv-av;
-    });
+  rows.sort((a,b)=>{
+    const av=Math.max(a.client,a.supplier);
+    const bv=Math.max(b.client,b.supplier);
+    return bv-av;
+  });
 
   if(!rows.length){
     list.innerHTML='<p class="muted">Todavía no hay saldos.</p>';
@@ -3207,7 +3212,6 @@ function renderBalances(){
     const isClient=Math.abs(row.client)>0.001;
     if(isClient) activeClientNumber+=1;
     item.className=isClient ? "balance-row" : "balance-row balance-row-supplier";
-
 
     const balance=isClient ? row.client : row.supplier;
     const label=isClient ? "Saldo cliente" : "Saldo proveedor";
@@ -5027,7 +5031,7 @@ on("accountDocumentEditForm","submit",saveAccountDocumentEdit);
 on("closeAccountDocumentEdit","click",()=>{ const d=$("accountDocumentEditDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
 on("cancelAccountDocumentEdit","click",()=>{ const d=$("accountDocumentEditDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
 on("repairAccounts1908","click",()=>{
-  alert("La reparación histórica quedó deshabilitada. V35.3.43 usa el cierre conciliado del 19/08 como punto de corte estable.");
+  alert("La reparación histórica quedó deshabilitada. V35.3.44 usa el cierre conciliado del 19/08 como punto de corte estable.");
 });
 on("openingBalanceForm","submit",saveOpeningBalance);
 on("collectionForm","submit",saveCollection);

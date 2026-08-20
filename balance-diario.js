@@ -1,4 +1,4 @@
-/* V35.3.43: CIERRE DE BALANCE SOLO LECTURA respecto de movements. No crea, edita ni elimina cuentas corrientes. */
+/* V35.3.44: CIERRE DE BALANCE SOLO LECTURA respecto de movements. No crea, edita ni elimina cuentas corrientes. */
 /* DON ZOILO V35.3.13 — BALANCE DIARIO CONSOLIDADO: CORRECCIÓN NUMÉRICA DEFINITIVA */
 (function(){
 'use strict';
@@ -383,7 +383,7 @@ function reportLines(){
 function simplePdfBlob(lines){
   const clean=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'').replace(/([\\()])/g,'\\$1');
 
-  // V35.3.43: A4 en dos columnas para aprovechar ancho y mantener letra legible.
+  // V35.3.44: A4 en dos columnas para aprovechar ancho y mantener letra legible.
   // Solo cambia la presentación del PDF; no modifica datos ni saldos.
   const count=Math.max(1,lines.length);
   const leftX=32, rightX=306, top=808, bottom=32;
