@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.45";
+const APP_VERSION = "35.3.46";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3194,24 +3194,12 @@ function renderBalances(){
     }
   });
 
-  // PROVEEDORES: no forman parte de la reparación de cuentas corrientes.
-  // Mantienen compras - pagos tal como estaban.
-  const supplierMap=new Map();
-  movements
-    .filter(m=>m.status!=="pendiente" && ["compra","pago"].includes(m.type))
-    .forEach(m=>{
-      const rawName=(m.party||"Sin nombre").trim();
-      const key=normalizeClientName(rawName);
-      if(!supplierMap.has(key)) supplierMap.set(key,{name:rawName,balance:0});
-      const rec=supplierMap.get(key);
-      const amount=Number(m.amount||0);
-      if(m.type==="compra") rec.balance+=amount;
-      if(m.type==="pago") rec.balance-=amount;
-    });
-
-  supplierMap.forEach(rec=>{
-    if(Math.abs(rec.balance)>0.001){
-      rows.push({name:rec.name,client:0,supplier:rec.balance});
+  // V35.3.46: SALDOS debe leer exactamente la misma fuente que PROVEEDORES.
+  // Solo lectura: no crea, borra ni modifica movimientos ni saldos almacenados.
+  supplierNames().forEach(name=>{
+    const balance=Number(supplierTotals(name).balance||0);
+    if(Math.abs(balance)>0.001){
+      rows.push({name,client:0,supplier:balance});
     }
   });
 
