@@ -1,0 +1,13 @@
+DON ZOILO V35.3.47 — BALANCE DIARIO / PROVEEDORES MISMA FUENTE
+
+CAMBIO ÚNICO Y SEGURO
+- Balance Diario ahora toma Deudas con proveedores desde la misma función allSuppliersDebt() que usa la pestaña Proveedores.
+- Respeta los puntos de corte protegidos de Jorge y Tito introducidos en V35.3.45.
+- No crea, borra ni modifica movimientos, compras, pagos, stock, gastos ni cuentas corrientes.
+- Conserva un cálculo local anterior solo como respaldo si la fuente compartida no estuviera disponible.
+
+CONTROL ESPERADO CON LOS DATOS DEL 20/08/2026
+- Tito: $7.794.940
+- Jorge: $5.265.990
+- Total deuda con proveedores: $13.060.930
+- Balance Diario debe mostrar Deudas con proveedores: $13.060.930
