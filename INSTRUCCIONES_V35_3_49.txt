@@ -1,0 +1,14 @@
+DON ZOILO V35.3.49
+
+CAMBIO EXCLUSIVO EN PDF DE BALANCE DIARIO:
+- Se elimina la línea punteada que atravesaba el renglón TOTAL de cada cliente.
+- Se agrega ACUMULADO MENSUAL en el cuadro PATRIMONIO Y RESULTADO.
+- El acumulado suma los resultados netos de los cierres del mes hasta la fecha seleccionada e incluye el resultado visible del día. Puede ser positivo o negativo.
+
+NO SE MODIFICA:
+- lógica de saldos de clientes
+- movimientos
+- cuentas corrientes
+- stock
+- proveedores
+- cálculos base de patrimonio
