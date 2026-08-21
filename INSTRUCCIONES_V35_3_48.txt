@@ -1,13 +1,11 @@
-DON ZOILO - V35.3.48
+DON ZOILO V35.3.48 — REDISEÑO CIERRE BALANCE DIARIO
 
-Cambio exclusivo del PDF de Balance Diario:
-- A4 horizontal, una sola pagina adaptable.
-- Fecha delante de cada comprobante y texto Remito antes del numero.
-- Bordes finos en titulos de clientes y totales.
-- Separadores punteados entre renglones.
-- Resumen general en cuadro: Caja y bancos, Cuentas corrientes, Stock valorizado y Total activos.
-- Pasivos con detalle por proveedor y Total pasivos.
-- Patrimonio inicial/final, resultado antes de gastos, gastos, resultado neto y variacion.
-- Adapta columnas y tipografia cuando aumenta la cantidad de remitos (preparado para escenarios cercanos a 90 detalles).
-
-NO modifica saldos, movimientos, cobranzas, compras, pagos, stock ni formulas contables.
+- PDF de Balance Diario rediseñado en una sola hoja A4.
+- Mantiene dos columnas compactas de clientes + panel lateral.
+- Cada comprobante muestra fecha y la palabra Remito antes del número cuando corresponde.
+- Títulos de clientes y totales con cuadros finos; separaciones internas discretas.
+- Resumen general: Caja, Bancos, Total Cuentas Corrientes, Stock valorizado y Total Activos.
+- Pasivos: detalle por proveedor y Total Pasivos.
+- Patrimonio y resultado: patrimonio anterior/final, resultado antes de gastos, gastos, resultado neto y variación.
+- Diseño adaptable: reduce tipografía automáticamente cuando aumenta la cantidad de remitos para conservar una sola hoja.
+- No modifica la lógica de saldos, movimientos, cuentas corrientes, stock ni proveedores.
