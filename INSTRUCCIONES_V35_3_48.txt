@@ -1,0 +1,13 @@
+DON ZOILO - V35.3.48
+
+Cambio exclusivo del PDF de Balance Diario:
+- A4 horizontal, una sola pagina adaptable.
+- Fecha delante de cada comprobante y texto Remito antes del numero.
+- Bordes finos en titulos de clientes y totales.
+- Separadores punteados entre renglones.
+- Resumen general en cuadro: Caja y bancos, Cuentas corrientes, Stock valorizado y Total activos.
+- Pasivos con detalle por proveedor y Total pasivos.
+- Patrimonio inicial/final, resultado antes de gastos, gastos, resultado neto y variacion.
+- Adapta columnas y tipografia cuando aumenta la cantidad de remitos (preparado para escenarios cercanos a 90 detalles).
+
+NO modifica saldos, movimientos, cobranzas, compras, pagos, stock ni formulas contables.

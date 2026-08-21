@@ -1,4 +1,4 @@
-DON ZOILO V35.3.47 — BALANCE DIARIO / PROVEEDORES MISMA FUENTE
+DON ZOILO V35.3.48 — BALANCE DIARIO / PROVEEDORES MISMA FUENTE
 
 CAMBIO ÚNICO Y SEGURO
 - Balance Diario ahora toma Deudas con proveedores desde la misma función allSuppliersDebt() que usa la pestaña Proveedores.
