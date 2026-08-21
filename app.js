@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.49";
+const APP_VERSION = "35.3.50";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2872,9 +2872,9 @@ function allSuppliersDebt(){
   return supplierNames().reduce((sum,name)=>sum+Number(supplierTotals(name).balance||0),0);
 }
 
-// V35.3.49 — Balance Diario usa exactamente el mismo total que Proveedores.
+// V35.3.50 — Balance Diario usa exactamente el mismo total que Proveedores.
 window.DonZoiloFinancialTotals.supplierDebt = allSuppliersDebt;
-// V35.3.49 — detalle por proveedor para el cierre de Balance Diario.
+// V35.3.50 — detalle por proveedor para el cierre de Balance Diario.
 window.DonZoiloFinancialTotals.supplierDebtDetail = supplierDebtRows;
 
 function fillSupplierSelectors(){
