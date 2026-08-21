@@ -75,7 +75,7 @@ function calculations(date,previousOverride,assetsRows=cachedAssets){
         return s;
       },0);
   const inventory=stockValue(stock);
-  // V35.3.47: usa la misma fuente protegida que Proveedores (incluye checkpoints conciliados).
+  // V35.3.48: usa la misma fuente protegida que Proveedores (incluye checkpoints conciliados).
   const sharedSupplierDebt=window.DonZoiloFinancialTotals?.supplierDebt;
   const sharedSupplierValue=typeof sharedSupplierDebt==='function'?sharedSupplierDebt():null;
   const supplierDebt=typeof sharedSupplierValue==='number'&&Number.isFinite(sharedSupplierValue)
@@ -318,120 +318,237 @@ async function save(){
   const record={id:existing?.id||uid(),balance_date:current.date,...current,notes:$('balanceNotes').value.trim(),created_at:existing?.created_at||new Date().toISOString(),updated_at:new Date().toISOString()};delete record.date;
   try{if(cloud()){const {data,error}=await cloud().from(TABLE).upsert(record,{onConflict:'balance_date'}).select().single();if(error)throw error;Object.assign(record,data)}closings=closings.filter(r=>r.balance_date!==record.balance_date);closings.push(record);localWrite();renderHistory();renderIncomeStatement();alert('Cierre diario guardado correctamente.')}catch(e){alert('No se pudo guardar el cierre: '+(e.message||e))}
 }
-function accountDetailLines(){
-  const getDetail=window.DonZoiloFinancialTotals?.clientAccountDetail;
-  if(typeof getDetail!=='function') return [];
-  const rows=getDetail()||[];
-  const lines=['','DETALLE CUENTAS CORRIENTES DE CLIENTES'];
+function fmtPdfDate(value){
+  const raw=String(value||'');
+  const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m?`${m[3]}/${m[2]}/${m[1]}`:raw;
+}
 
-  rows.forEach(row=>{
-    lines.push('');
-    lines.push(String(row.client||'CLIENTE'));
+function balancePdfData(){
+  const getClients=window.DonZoiloFinancialTotals?.clientAccountDetail;
+  const getSuppliers=window.DonZoiloFinancialTotals?.supplierDetail;
+  const clients=typeof getClients==='function'?(getClients()||[]):[];
+  const suppliers=typeof getSuppliers==='function'?(getSuppliers()||[]):[];
 
-    const pending=Array.isArray(row.pending)?row.pending:[];
-    if(pending.length){
-      pending.forEach(p=>{
-        const doc=p.invoice
-          ? `Factura ${p.invoice}`
-          : (p.remito||'Comprobante pendiente');
-        const remito=p.invoice&&p.remito ? ` / ${p.remito}` : '';
-        lines.push(`  ${doc}${remito}: ${money(p.remaining)}`);
-      });
-    }else if(Number(row.balance||0)>0){
-      lines.push('  Sin remitos/facturas pendientes individualizados');
-    }
+  return {
+    date:new Date(current.date+'T12:00:00').toLocaleDateString('es-AR'),
+    generated:new Date().toLocaleString('es-AR'),
+    current_assets:Number(current.current_assets||0),
+    client_accounts:Number(current.client_accounts||0),
+    stock_value:Number(current.stock_value||0),
+    total_assets:Number(current.total_assets||0),
+    supplier_debt:Number(current.supplier_debt||0),
+    total_liabilities:Number(current.total_liabilities||0),
+    previous_equity:Number(current.previous_equity||0),
+    final_equity:Number(current.final_equity||0),
+    daily_expenses:Number(current.daily_expenses||0),
+    result_before_expenses:Number(current.result_before_expenses||0),
+    net_result:Number(current.net_result||0),
+    variation_pct:Number(current.variation_pct||0),
+    notes:$('balanceNotes').value.trim()||'-',
+    clients,
+    suppliers
+  };
+}
 
-    if(Math.round(Number(row.correctionPending||0))!==0){
-      lines.push(`  Saldo anterior / regularizacion: ${money(row.correctionPending)}`);
-    }
+function simplePdfBlob(){
+  const data=balancePdfData();
+  const W=842,H=595; // A4 horizontal: permite conservar una sola pagina con muchos remitos.
+  const margin=22;
+  const clean=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'').replace(/([\\()])/g,'\\$1');
+  const pdfMoney=v=>money(v);
+  const approxWidth=(text,size)=>clean(text).length*size*0.49;
+  const text=(x,y,t,size=7,bold=false)=>`BT\n/${bold?'F2':'F1'} ${size.toFixed(2)} Tf\n${x.toFixed(2)} ${y.toFixed(2)} Td\n(${clean(t)}) Tj\nET\n`;
+  const rightText=(xRight,y,t,size=7,bold=false)=>text(Math.max(margin,xRight-approxWidth(t,size)),y,t,size,bold);
+  const line=(x1,y1,x2,y2,width=.5,dotted=false)=>`${width.toFixed(2)} w\n${dotted?'[2 2] 0 d':'[] 0 d'}\n${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S\n[] 0 d\n`;
+  const rect=(x,y,w,h,width=.6)=>`${width.toFixed(2)} w\n${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S\n`;
+  const fillGray=(x,y,w,h,g=.94)=>`${g.toFixed(2)} g\n${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f\n0 g\n`;
 
-    const recon=Number(row.reconciliation||0);
-    if(Math.abs(recon)>=0.5){
-      lines.push(`${recon<0?'  Saldo a favor / excedente':'  Diferencia de cuenta'}: ${money(recon)}`);
-    }
+  let c='';
+  // Encabezado limpio.
+  c+=text(margin,H-28,'DON ZOILO',13,true);
+  c+=text(margin,H-41,'BALANCE DIARIO',8,true);
+  c+=text(margin,H-53,`Fecha ${data.date}`,6.5,false);
+  c+=rightText(W-margin,H-28,'NUMEROS QUE HACEN TU NEGOCIO',7.5,true);
+  c+=rightText(W-margin,H-41,`Generado ${data.generated}`,5.8,false);
+  c+=line(margin,H-60,W-margin,H-60,1.1,false);
 
-    lines.push(`  TOTAL ${String(row.client||'').toUpperCase()}: ${money(row.balance)}`);
+  // Resumen general superior: 5 indicadores, borde fino.
+  const kpiY=H-104, kpiH=34, gap=5;
+  const kpiW=(W-margin*2-gap*4)/5;
+  const kpis=[
+    ['CAJA Y BANCOS',data.current_assets],
+    ['CUENTAS CORRIENTES',data.client_accounts],
+    ['STOCK VALORIZADO',data.stock_value],
+    ['TOTAL ACTIVOS',data.total_assets],
+    ['TOTAL PASIVOS',data.total_liabilities]
+  ];
+  kpis.forEach((k,i)=>{
+    const x=margin+i*(kpiW+gap);
+    c+=rect(x,kpiY,kpiW,kpiH,.6);
+    c+=text(x+6,kpiY+22,k[0],5.6,true);
+    c+=rightText(x+kpiW-6,kpiY+8,pdfMoney(k[1]),7.2,true);
   });
 
-  lines.push('');
-  lines.push(`TOTAL CUENTAS CORRIENTES: ${money(current.client_accounts)}`);
-  return lines;
-}
+  // Preparar bloques de clientes. Cada movimiento ocupa una unidad.
+  const clients=(data.clients||[]).map(row=>{
+    const pending=Array.isArray(row.pending)?row.pending:[];
+    const detail=[];
+    pending.forEach(p=>{
+      const date=fmtPdfDate(p.date);
+      const rem=String(p.remito||'').trim();
+      const inv=String(p.invoice||'').trim();
+      let label='';
+      if(/saldo conciliado/i.test(rem)) label=`${date} · Saldo conciliado`;
+      else if(inv) label=`${date} · Factura ${inv}${rem?` · Remito ${rem}`:''}`;
+      else if(rem) label=`${date} · Remito ${rem.replace(/^Remito\s*/i,'')}`;
+      else label=`${date} · Comprobante`;
+      detail.push({label,amount:Number(p.remaining||0)});
+    });
+    if(Math.round(Number(row.correctionPending||0))!==0) detail.push({label:'Saldo anterior / regularizacion',amount:Number(row.correctionPending||0)});
+    const recon=Number(row.reconciliation||0);
+    if(Math.abs(recon)>=0.5) detail.push({label:recon<0?'Saldo a favor / excedente':'Diferencia de cuenta',amount:recon});
+    if(!detail.length && Number(row.balance||0)>0) detail.push({label:'Saldo sin remitos individualizados',amount:Number(row.balance||0)});
+    return {client:String(row.client||'CLIENTE'),balance:Number(row.balance||0),detail,units:2+Math.max(1,detail.length)};
+  });
 
-function reportLines(){
-  const d=new Date(current.date+'T12:00:00').toLocaleDateString('es-AR');
-  return [
-    'DON ZOILO',
-    'BALANCE DIARIO - '+d,
-    '',
-    'ACTIVOS',
-    'Caja y activos: '+money(current.current_assets),
-    ...accountDetailLines(),
-    'Stock valorizado: '+money(current.stock_value),
-    'TOTAL ACTIVOS: '+money(current.total_assets),
-    '',
-    'PASIVOS',
-    'Deudas con proveedores: '+money(current.supplier_debt),
-    'TOTAL PASIVOS: '+money(current.total_liabilities),
-    '',
-    'Patrimonio anterior: '+money(current.previous_equity),
-    'PATRIMONIO FINAL: '+money(current.final_equity),
-    'Gastos del dia: '+money(current.daily_expenses),
-    'Resultado antes de gastos: '+money(current.result_before_expenses),
-    'RESULTADO NETO: '+money(current.net_result),
-    'Variacion: '+pct(current.variation_pct),
-    '',
-    'Observaciones: '+($('balanceNotes').value.trim()||'-')
-  ];
-}
+  const totalDetail=clients.reduce((s,r)=>s+r.detail.length,0);
+  // Adaptacion automatica. Caso extremo 90 remitos: 4 columnas y letra compacta.
+  let cols=2;
+  if(totalDetail>44) cols=3;
+  if(totalDetail>72) cols=4;
+  let font=6.6, detailFont=5.8, rowH=9.3, titleH=15, totalH=13, clientGap=5;
+  if(totalDetail>44){font=6.0;detailFont=5.2;rowH=8.2;titleH=13;totalH=11.5;clientGap=3.5;}
+  if(totalDetail>72){font=5.4;detailFont=4.7;rowH=7.1;titleH=11.5;totalH=10.3;clientGap=2.5;}
+  if(totalDetail>90){font=5.0;detailFont=4.35;rowH=6.45;titleH=10.5;totalH=9.5;clientGap=2;}
 
-function simplePdfBlob(lines){
-  const clean=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'').replace(/([\\()])/g,'\\$1');
+  // Espacio reservado para resumen inferior.
+  const ccTop=H-120;
+  const bottomPanelH=112;
+  const ccBottom=margin+bottomPanelH+10;
+  const colGap=7;
+  const colW=(W-margin*2-colGap*(cols-1))/cols;
+  const availableH=ccTop-ccBottom;
 
-  // V35.3.44: A4 en dos columnas para aprovechar ancho y mantener letra legible.
-  // Solo cambia la presentación del PDF; no modifica datos ni saldos.
-  const count=Math.max(1,lines.length);
-  const leftX=32, rightX=306, top=808, bottom=32;
-  const usable=top-bottom;
-  const rows=Math.ceil(count/2);
+  // Distribucion balanceada por altura, no por cantidad de clientes.
+  const buckets=Array.from({length:cols},()=>({height:0,items:[]}));
+  clients.slice().sort((a,b)=>b.units-a.units).forEach(client=>{
+    buckets.sort((a,b)=>a.height-b.height);
+    const estimated=titleH+Math.max(1,client.detail.length)*rowH+totalH+clientGap;
+    buckets[0].items.push(client);
+    buckets[0].height+=estimated;
+  });
+  // Restaurar posicion de columnas de izquierda a derecha por altura actual no importa; usamos buckets existentes.
 
-  let fontSize=8.4;
-  let lineHeight=10.8;
-  if(rows>64){ fontSize=7.6; lineHeight=9.8; }
-  if(rows>76){ fontSize=6.8; lineHeight=8.8; }
+  c+=text(margin,ccTop+6,'CUENTAS CORRIENTES DE CLIENTES',7.2,true);
+  c+=rightText(W-margin,ccTop+6,`${clients.length} clientes · ${totalDetail} detalles`,5.4,false);
+  c+=line(margin,ccTop+2,W-margin,ccTop+2,.7,false);
 
-  lineHeight=Math.min(lineHeight, usable/Math.max(rows-1,1));
-  fontSize=Math.min(fontSize, Math.max(5.8,lineHeight*0.78));
+  buckets.forEach((bucket,ci)=>{
+    const x=margin+ci*(colW+colGap);
+    let y=ccTop-8;
+    // Si por cantidad real supera alto, escalar verticalmente solo esta columna.
+    const rawH=Math.max(1,bucket.height);
+    const scaleY=Math.min(1,availableH/rawH);
+    const rh=rowH*scaleY, th=titleH*scaleY, toh=totalH*scaleY, cg=clientGap*scaleY;
+    const df=Math.max(3.8,detailFont*Math.min(1,scaleY+.08));
+    const tf=Math.max(4.5,font*Math.min(1,scaleY+.08));
 
-  let content='BT\n/F1 '+fontSize.toFixed(2)+' Tf\n';
-  for(let i=0;i<count;i++){
-    const col = i < rows ? 0 : 1;
-    const row = col===0 ? i : i-rows;
-    const x = col===0 ? leftX : rightX;
-    const y = top - row*lineHeight;
-    content+=`${x} ${y.toFixed(2)} Td\n(${clean(lines[i])}) Tj\n${-x} ${(-y).toFixed(2)} Td\n`;
-  }
-  content+='ET';
+    bucket.items.forEach(client=>{
+      // Titulo del cliente dentro de celda con borde fino y saldo resaltado.
+      y-=th;
+      c+=fillGray(x,y,colW,th,.965);
+      c+=rect(x,y,colW,th,.55);
+      c+=text(x+4,y+th*.32,client.client,tf,true);
+      c+=rightText(x+colW-4,y+th*.32,pdfMoney(client.balance),tf,true);
+
+      const details=client.detail.length?client.detail:[{label:'Sin detalle',amount:client.balance}];
+      details.forEach(d=>{
+        y-=rh;
+        const amount=pdfMoney(d.amount);
+        const amountWidth=Math.max(41,approxWidth(amount,df)+5);
+        let label=d.label;
+        const maxChars=Math.max(13,Math.floor((colW-amountWidth-9)/(df*.49)));
+        if(clean(label).length>maxChars) label=clean(label).slice(0,Math.max(4,maxChars-1))+'…';
+        c+=text(x+4,y+rh*.26,label,df,false);
+        c+=rightText(x+colW-4,y+rh*.26,amount,df,false);
+        c+=line(x+3,y,x+colW-3,y,.35,true);
+      });
+
+      // Total: celda propia con borde y linea superior algo mas fuerte.
+      y-=toh;
+      c+=rect(x,y,colW,toh,.6);
+      c+=text(x+4,y+toh*.28,`TOTAL ${client.client}`,Math.max(4.2,tf-.25),true);
+      c+=rightText(x+colW-4,y+toh*.28,pdfMoney(client.balance),Math.max(4.2,tf-.25),true);
+      y-=cg;
+    });
+  });
+
+  // Panel inferior unificado, minimalista, con separadores punteados.
+  const panelY=margin;
+  const panelH=bottomPanelH;
+  c+=rect(margin,panelY,W-margin*2,panelH,.8);
+  const secGap=10;
+  const secW=(W-margin*2-secGap*2)/3;
+  const x1=margin, x2=margin+secW+secGap, x3=margin+(secW+secGap)*2;
+  c+=line(x2-secGap/2,panelY+6,x2-secGap/2,panelY+panelH-6,.5,false);
+  c+=line(x3-secGap/2,panelY+6,x3-secGap/2,panelY+panelH-6,.5,false);
+
+  const sectionTitle=(x,t)=>{c+=text(x+6,panelY+panelH-15,t,6.2,true);c+=line(x+6,panelY+panelH-19,x+secW-6,panelY+panelH-19,.55,false);};
+  const row=(x,y,label,value,bold=false)=>{c+=text(x+6,y,label,5.4,bold);c+=rightText(x+secW-6,y,pdfMoney(value),5.7,bold);c+=line(x+6,y-3,x+secW-6,y-3,.3,true);};
+
+  sectionTitle(x1,'RESUMEN GENERAL');
+  let yy=panelY+panelH-31;
+  row(x1,yy,'Caja y bancos',data.current_assets); yy-=13;
+  row(x1,yy,'Cuentas corrientes',data.client_accounts); yy-=13;
+  row(x1,yy,'Stock valorizado',data.stock_value); yy-=13;
+  row(x1,yy,'TOTAL ACTIVOS',data.total_assets,true);
+
+  sectionTitle(x2,'PASIVOS');
+  yy=panelY+panelH-31;
+  row(x2,yy,'Deudas con proveedores',data.supplier_debt,true); yy-=12;
+  const suppliers=(data.suppliers||[]).filter(r=>Math.abs(Number(r.debt||0))>=.5);
+  const supplierFont=suppliers.length>5?4.5:5.2;
+  suppliers.slice(0,7).forEach(sp=>{
+    c+=text(x2+12,yy,String(sp.name||'Proveedor'),supplierFont,false);
+    c+=rightText(x2+secW-6,yy,pdfMoney(sp.debt),supplierFont,false);
+    c+=line(x2+10,yy-3,x2+secW-6,yy-3,.28,true);
+    yy-=10;
+  });
+  if(suppliers.length>7){c+=text(x2+12,yy,`+ ${suppliers.length-7} proveedores`,4.5,false);yy-=9;}
+  c+=text(x2+6,panelY+9,'TOTAL PASIVOS',5.5,true);
+  c+=rightText(x2+secW-6,panelY+9,pdfMoney(data.total_liabilities),5.8,true);
+
+  sectionTitle(x3,'PATRIMONIO Y RESULTADOS');
+  yy=panelY+panelH-31;
+  row(x3,yy,'Patrimonio inicial',data.previous_equity); yy-=12;
+  row(x3,yy,'Patrimonio final',data.final_equity,true); yy-=12;
+  row(x3,yy,'Resultado antes de gastos',data.result_before_expenses); yy-=12;
+  row(x3,yy,'Gastos del dia',data.daily_expenses); yy-=12;
+  row(x3,yy,'RESULTADO NETO',data.net_result,true); yy-=12;
+  c+=text(x3+6,yy,'Variacion',5.3,false);
+  c+=rightText(x3+secW-6,yy,pct(data.variation_pct),5.4,true);
+
+  // Observaciones y pie discretos.
+  c+=text(margin,panelY-10,`Observaciones: ${data.notes}`,4.8,false);
+  c+=rightText(W-margin,panelY-10,'MAS CONTROL, MAS POSIBILIDADES',4.8,true);
 
   const objs=[];
   objs[1]='<< /Type /Catalog /Pages 2 0 R >>';
-  objs[2]='<< /Type /Pages /Kids [4 0 R] /Count 1 >>';
+  objs[2]='<< /Type /Pages /Kids [5 0 R] /Count 1 >>';
   objs[3]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
-  objs[4]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>';
-  objs[5]=`<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
-
+  objs[4]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>';
+  objs[5]='<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>';
+  objs[6]=`<< /Length ${c.length} >>\nstream\n${c}\nendstream`;
   let pdf='%PDF-1.4\n',offsets=[0];
-  for(let i=1;i<=5;i++){
-    offsets[i]=pdf.length;
-    pdf+=`${i} 0 obj\n${objs[i]}\nendobj\n`;
-  }
+  for(let i=1;i<=6;i++){offsets[i]=pdf.length;pdf+=`${i} 0 obj\n${objs[i]}\nendobj\n`;}
   const xref=pdf.length;
-  pdf+='xref\n0 6\n0000000000 65535 f \n';
-  for(let i=1;i<=5;i++) pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
-  pdf+=`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  pdf+='xref\n0 7\n0000000000 65535 f \n';
+  for(let i=1;i<=6;i++) pdf+=String(offsets[i]).padStart(10,'0')+' 00000 n \n';
+  pdf+=`trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return new Blob([pdf],{type:'application/pdf'});
 }
-function pdfFile(){return new File([simplePdfBlob(reportLines())],`Balance_Don_Zoilo_${current.date}.pdf`,{type:'application/pdf'})}
+function pdfFile(){return new File([simplePdfBlob()],`Balance_Don_Zoilo_${current.date}.pdf`,{type:'application/pdf'})}
 function downloadPdf(){const file=pdfFile();const url=URL.createObjectURL(file);const a=document.createElement('a');a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000)}
 async function sharePdf(){const file=pdfFile();try{if(navigator.canShare?.({files:[file]})&&navigator.share){await navigator.share({title:'Balance diario Don Zoilo',text:`Balance diario ${current.date}`,files:[file]})}else{downloadPdf();alert('Se descargó el PDF. Abrilo desde Descargas y compartilo por WhatsApp.')}}catch(e){if(e.name!=='AbortError')alert('No se pudo compartir: '+e.message)} }
 function bind(){$('balanceDate').value=today();$('balanceDate').addEventListener('change',()=>refresh(false));$('balancePrevious').addEventListener('input',()=>{current=calculations($('balanceDate').value,num($('balancePrevious').value),cachedAssets);render()});$('balanceRefresh').addEventListener('click',()=>refresh(true));$('balanceSave').addEventListener('click',save);$('balancePdf').addEventListener('click',downloadPdf);$('balanceShare').addEventListener('click',sharePdf)}
