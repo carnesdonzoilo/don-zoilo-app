@@ -388,7 +388,7 @@ function simplePdfBlob(){
       detail.forEach(d=>{
         text(x+4,cy,(d[0]?d[0]+'  ':'')+d[1],fs,false);rightText(x+colW-4,cy,fmt(d[2]),fs,false);cy-=lh;
       });
-      line(x+3,cy+lh*.38,x+colW-3,cy+lh*.38,.35,true);
+      // V35.3.49: el renglón TOTAL queda limpio, sin línea punteada atravesándolo.
       text(x+4,cy,`TOTAL ${String(r.client||'').toUpperCase()}:`,fs+.15,true);rightText(x+colW-4,cy,fmt(r.balance),fs+.15,true);
       top=y-4;
     });
@@ -407,9 +407,18 @@ function simplePdfBlob(){
   else {text(sx+9,yy,'Deudas con proveedores',6.5,false);rightText(sx+sw-9,yy,fmt(current.supplier_debt),7,true);yy-=14;}
   box(sx+7,p2.y+9,sw-14,22,true);text(sx+11,p2.y+16,'TOTAL PASIVOS',8,true);rightText(sx+sw-11,p2.y+16,fmt(current.total_liabilities),8.5,true);
 
-  top=p2.y-9;let p3=panel(top,150,'PATRIMONIO Y RESULTADO');yy=top-38;
+  // V35.3.49: acumulado mensual del resultado hasta la fecha seleccionada.
+  // Si ya existe un cierre para la fecha actual, se reemplaza por el cálculo visible
+  // para evitar duplicarlo y para que el PDF coincida con lo que se ve en pantalla.
+  const monthKey=String(current.date||'').slice(0,7);
+  const monthlyAccumulated=closings
+    .filter(r=>String(r.balance_date||'').slice(0,7)===monthKey && String(r.balance_date||'')<=String(current.date||'') && String(r.balance_date||'')!==String(current.date||''))
+    .reduce((s,r)=>s+num(r.net_result),0)+num(current.net_result);
+
+  top=p2.y-9;let p3=panel(top,171,'PATRIMONIO Y RESULTADO');yy=top-38;
   [['Patrimonio anterior',current.previous_equity],['PATRIMONIO FINAL',current.final_equity],['Resultado antes de gastos',current.result_before_expenses],['Gastos del dia',current.daily_expenses],['RESULTADO NETO',current.net_result]].forEach(([lab,val],i)=>{text(sx+9,yy,lab,6.6,i===1||i===4);rightText(sx+sw-9,yy,fmt(val),7.3,true);if(i<4)line(sx+8,yy-7,sx+sw-8,yy-7,.25,true);yy-=21;});
-  text(sx+9,p3.y+11,'Variacion s/ patrimonio inicial',5.8,false);rightText(sx+sw-9,p3.y+11,pct(current.variation_pct),7,true);
+  text(sx+9,yy,'Variacion s/ patrimonio inicial',5.8,false);rightText(sx+sw-9,yy,pct(current.variation_pct),7,true);yy-=20;
+  box(sx+7,p3.y+9,sw-14,22,true);text(sx+11,p3.y+16,'ACUMULADO MENSUAL',7.5,true);rightText(sx+sw-11,p3.y+16,fmt(monthlyAccumulated),8.2,true);
 
   top=p3.y-9;const obsH=Math.max(75,top-28);let p4=panel(top,obsH,'OBSERVACIONES');text(sx+9,top-38,$('balanceNotes').value.trim()||'-',6,false);
   line(M,20,W-M,20,.6);text(220,11,'MAS CONTROL, MAS POSIBILIDADES',5.5,false);
