@@ -1,0 +1,6 @@
+DON ZOILO V35.3.50 — CORRECCIÓN ETIQUETA REMITO EN BALANCE
+
+Cambio puntual sobre V35.3.49:
+- En el PDF de Balance Diario, si el número automático ya viene guardado como “Remito 1234”, no vuelve a anteponer la palabra Remito.
+- Los números manuales continúan mostrándose como “Remito 1234”.
+- Se conserva el acumulado mensual y el resto del diseño/lógica de V35.3.49 sin cambios.
