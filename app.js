@@ -2874,15 +2874,8 @@ function allSuppliersDebt(){
 
 // V35.3.48 — Balance Diario usa exactamente el mismo total que Proveedores.
 window.DonZoiloFinancialTotals.supplierDebt = allSuppliersDebt;
-
-// V35.3.48 - detalle SOLO LECTURA para el PDF del Balance Diario.
-// Usa exactamente supplierTotals(), la misma fuente protegida de Proveedores.
-window.DonZoiloFinancialTotals.supplierDetail = function(){
-  return supplierNames()
-    .map(name=>({name,debt:Number(supplierTotals(name).balance||0)}))
-    .filter(row=>Math.abs(row.debt)>=0.5)
-    .sort((a,b)=>b.debt-a.debt);
-};
+// V35.3.48 — detalle por proveedor para el cierre de Balance Diario.
+window.DonZoiloFinancialTotals.supplierDebtDetail = supplierDebtRows;
 
 function fillSupplierSelectors(){
   const names=supplierNames();
