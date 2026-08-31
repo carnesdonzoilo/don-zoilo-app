@@ -1,0 +1,6 @@
+DON ZOILO V35.3.55 — CORRECCIÓN TIPOS DE ACTIVOS
+
+1. Ejecutar una sola vez supabase_update_v35_3_55_current_assets_types.sql en Supabase SQL Editor.
+2. Publicar esta versión en GitHub/Vercel.
+3. La app revierte visualmente un alta si Supabase rechaza el registro.
+4. No modifica saldos, pedidos, stock, clientes ni proveedores.
