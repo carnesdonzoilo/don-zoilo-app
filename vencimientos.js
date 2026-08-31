@@ -1,4 +1,4 @@
-/* DON ZOILO V35.0 — Agenda de vencimientos */
+/* DON ZOILO V35.3.57 — Agenda de vencimientos · copiar mes anterior */
 (() => {
   const CACHE_KEY="don_zoilo_due_dates_v1";
   let rows=[];
@@ -148,6 +148,39 @@
   function renderAllDue(){renderKpis();renderCalendar();renderLists();renderDashboardAlerts();}
   function moveMonth(delta){const [y,m]=selectedMonth.split("-").map(Number);const d=new Date(y,m-1+delta,1);selectedMonth=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;q("dueMonth").value=selectedMonth;renderAllDue();}
 
+
+  function previousMonthKey(month){
+    const [y,m]=month.split("-").map(Number);const d=new Date(y,m-2,1);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  }
+  function daysInMonth(y,m){return new Date(y,m,0).getDate()}
+  function copyDateToMonth(date,targetMonth){
+    const day=Number(String(date||"").slice(8,10))||1;const [y,m]=targetMonth.split("-").map(Number);
+    return `${targetMonth}-${String(Math.min(day,daysInMonth(y,m))).padStart(2,"0")}`;
+  }
+  function copyPreviousMonth(){
+    const prev=previousMonthKey(selectedMonth);const source=rows.filter(r=>r.due_date?.startsWith(prev));
+    if(!source.length)return alert("El mes anterior no tiene vencimientos para copiar.");
+    const existing=rows.filter(r=>r.due_date?.startsWith(selectedMonth));
+    const normalized=s=>String(s||"").trim().toLocaleLowerCase("es-AR");
+    const items=source.filter(r=>!existing.some(e=>normalized(e.title)===normalized(r.title)&&String(e.due_date).slice(8,10)===String(copyDateToMonth(r.due_date,selectedMonth)).slice(8,10))).map(r=>({
+      date:copyDateToMonth(r.due_date,selectedMonth),title:r.title,amount:Number(r.amount||0),category:r.category||"General",remind_days:Number(r.remind_days??3),notes:r.notes||""
+    }));
+    if(!items.length)return alert("Los conceptos del mes anterior ya están cargados en este mes. No se crearon duplicados.");
+    renderCopyPreview(items,prev);
+  }
+  function renderCopyPreview(items,prev){
+    const root=q("dueOcrPreview");if(!root)return;root.classList.remove("hidden");
+    root.innerHTML=`<div class="panel-head"><div><h3>Copiar vencimientos de ${esc(prev)} a ${esc(selectedMonth)}</h3><p class="muted small">Revisá fechas e importes. Se copian como PENDIENTES, aunque el mes anterior esté pagado.</p></div></div><div id="dueCopyRows">${items.map(x=>`<div class="due-ocr-row"><label>Fecha<input type="date" class="copy-date" value="${x.date}"></label><label class="ocr-concept">Concepto<input class="copy-title" value="${esc(x.title)}"></label><label>Importe<input type="number" class="copy-amount" min="0" step="0.01" value="${x.amount||0}"></label><label>Aviso<select class="copy-remind"><option value="0">Mismo día</option><option value="1">1 día</option><option value="3">3 días</option><option value="7">7 días</option><option value="15">15 días</option><option value="30">30 días</option></select></label><button type="button" class="secondary copy-remove">Quitar</button><input type="hidden" class="copy-category" value="${esc(x.category)}"><input type="hidden" class="copy-notes" value="${esc(x.notes)}"></div>`).join("")}</div><button type="button" id="saveCopiedDueDates" class="primary">Confirmar y guardar en ${esc(selectedMonth)}</button>`;
+    [...root.querySelectorAll(".due-ocr-row")].forEach((el,i)=>{el.querySelector(".copy-remind").value=String(items[i].remind_days);el.querySelector(".copy-remove").onclick=()=>el.remove()});
+    q("saveCopiedDueDates").onclick=async()=>{
+      const now=new Date().toISOString();const candidates=[...root.querySelectorAll(".due-ocr-row")].map(el=>({id:uuid(),title:el.querySelector(".copy-title").value.trim(),due_date:el.querySelector(".copy-date").value,amount:Number(el.querySelector(".copy-amount").value||0),status:"pending",remind_days:Number(el.querySelector(".copy-remind").value||0),category:el.querySelector(".copy-category").value||"General",notes:el.querySelector(".copy-notes").value,source_text:`Copiado desde ${prev}`,paid_at:null,created_at:now,updated_at:now})).filter(x=>x.title&&x.due_date);
+      if(!candidates.length)return alert("No hay vencimientos para guardar.");
+      if(typeof supabaseClient==="undefined"||!supabaseClient)return alert("No hay conexión con Supabase.");
+      try{const {error}=await supabaseClient.from("due_dates").insert(candidates);if(error)throw error;root.classList.add("hidden");root.innerHTML="";await ensureData();alert(`Se copiaron ${candidates.length} vencimientos a ${selectedMonth}. Ahora podés editar cualquier monto normalmente.`)}catch(e){alert("No se pudieron copiar los vencimientos: "+e.message)}
+    };
+  }
+
   function parseOcrText(text){
     const year=new Date().getFullYear();const out=[];
     for(const raw of text.split(/\r?\n/)){
@@ -185,7 +218,7 @@
     createDialog();
     q("newDueDateBtn")?.addEventListener("click",()=>openEditor());q("duePrevMonth")?.addEventListener("click",()=>moveMonth(-1));q("dueNextMonth")?.addEventListener("click",()=>moveMonth(1));
     q("dueToday")?.addEventListener("click",()=>{selectedMonth=currentMonth();q("dueMonth").value=selectedMonth;renderAllDue()});q("dueMonth")?.addEventListener("change",e=>{selectedMonth=e.target.value||currentMonth();renderAllDue()});
-    q("dueStatusFilter")?.addEventListener("change",renderLists);q("refreshDueDates")?.addEventListener("click",ensureData);q("scanDuePhoto")?.addEventListener("click",scanPhoto);
+    q("dueStatusFilter")?.addEventListener("change",renderLists);q("refreshDueDates")?.addEventListener("click",ensureData);q("copyPrevDueDates")?.addEventListener("click",copyPreviousMonth);q("scanDuePhoto")?.addEventListener("click",scanPhoto);
     document.querySelector('.tab[data-view="dueDates"]')?.addEventListener("click",ensureData);
     // Espera a que la app principal termine su conexión con Supabase.
     setTimeout(ensureData,900);

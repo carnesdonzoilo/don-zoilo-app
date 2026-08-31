@@ -1,0 +1,9 @@
+DON ZOILO V35.3.57 — VENCIMIENTOS
+
+- Agrega botón Copiar mes anterior.
+- Copia concepto, día, categoría, aviso y monto a modo de revisión.
+- Antes de guardar permite editar fecha, concepto e importe.
+- Los nuevos registros siempre se crean PENDIENTES; no copia estado Pagado.
+- Evita duplicar un mismo concepto/día si ya existe en el mes destino.
+- El selector de imagen permite elegir capturas/fotos de la galería en PC y celular (se quitó capture=environment).
+- No cambia tablas ni requiere SQL nuevo.
