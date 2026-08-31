@@ -62,7 +62,17 @@ function calculations(date,previousOverride,assetsRows=cachedAssets){
   const movements=readJson(MOVEMENTS_KEY,[]);
   const assets=Array.isArray(assetsRows)?assetsRows:[];
   const stock=readJson(STOCK_KEY,[]);
-  const currentAssets=assets.reduce((s,r)=>s+num(r.balance),0);
+  const assetBreakdown={
+    cash:assets.filter(r=>r.asset_type==='cash').reduce((s,r)=>s+num(r.balance),0),
+    checks:assets.filter(r=>r.asset_type==='checks').reduce((s,r)=>s+num(r.balance),0),
+    bank:assets.filter(r=>r.asset_type==='bank').reduce((s,r)=>s+num(r.balance),0),
+    personal_receivable:assets.filter(r=>r.asset_type==='personal_receivable').reduce((s,r)=>s+num(r.balance),0),
+    investment:assets.filter(r=>r.asset_type==='investment').reduce((s,r)=>s+num(r.balance),0),
+    fixed_asset:assets.filter(r=>r.asset_type==='fixed_asset').reduce((s,r)=>s+num(r.balance),0),
+    opening_investment:assets.filter(r=>r.asset_type==='opening_investment').reduce((s,r)=>s+num(r.balance),0),
+    opening_fixed_asset:assets.filter(r=>r.asset_type==='opening_fixed_asset').reduce((s,r)=>s+num(r.balance),0)
+  };
+  const currentAssets=Object.values(assetBreakdown).reduce((s,v)=>s+num(v),0);
   // Usa exactamente la misma función que alimenta el total visible del módulo Saldos.
   // El cálculo local queda solo como respaldo por compatibilidad.
   const sharedAccountsTotal=window.DonZoiloFinancialTotals?.clientCurrentAccounts;
@@ -94,7 +104,7 @@ function calculations(date,previousOverride,assetsRows=cachedAssets){
   const netResult=finalEquity-previous-openingAdjustment;
   const beforeExpenses=netResult+expenses;
   const variation=previous?netResult/previous*100:0;
-  return {date,current_assets:currentAssets,client_accounts:clientAccounts,stock_value:inventory,total_assets:totalAssets,supplier_debt:supplierDebt,total_liabilities:supplierDebt,daily_expenses:expenses,previous_equity:previous,final_equity:finalEquity,opening_adjustment:openingAdjustment,result_before_expenses:beforeExpenses,net_result:netResult,variation_pct:variation};
+  return {date,current_assets:currentAssets,asset_breakdown:assetBreakdown,client_accounts:clientAccounts,stock_value:inventory,total_assets:totalAssets,supplier_debt:supplierDebt,total_liabilities:supplierDebt,daily_expenses:expenses,previous_equity:previous,final_equity:finalEquity,opening_adjustment:openingAdjustment,result_before_expenses:beforeExpenses,net_result:netResult,variation_pct:variation};
 }
 function previousEquity(date){
   const prior=closings.filter(r=>r.balance_date<date).sort((a,b)=>String(b.balance_date).localeCompare(String(a.balance_date)))[0];
@@ -110,7 +120,7 @@ async function loadClosings(){
   }catch(e){console.warn('Balance diario:',e);closings=readJson(LOCAL_KEY,[])}
 }
 function injectStyles(){if($('dailyBalanceStyles'))return;const s=document.createElement('style');s.id='dailyBalanceStyles';s.textContent=`
-#dailyBalance .balance-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:16px}#dailyBalance .balance-toolbar label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .balance-toolbar input{min-width:180px}#dailyBalance .balance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}#dailyBalance .balance-panel{background:#fff;border:1px solid #d9dee7;border-radius:14px;padding:16px}#dailyBalance .balance-panel h3{margin:0 0 12px;color:#101820}#dailyBalance .balance-line{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #eceff3}#dailyBalance .balance-line.total{font-size:1.08rem;font-weight:900;border-top:2px solid #101820;border-bottom:0;margin-top:7px}#dailyBalance .balance-result{grid-column:1/-1;background:#101820;color:#fff;border-radius:15px;padding:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}#dailyBalance .result-card{border:1px solid #ffffff33;border-radius:11px;padding:12px}#dailyBalance .result-card span{display:block;color:#d0d5dd;font-size:.8rem;margin-bottom:6px}#dailyBalance .result-card strong{font-size:1.2rem}#dailyBalance .positive{color:#1f9d55}#dailyBalance .negative{color:#d92d20}#dailyBalance .balance-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}#dailyBalance .balance-history{background:#fff;border:1px solid #d9dee7;border-radius:14px;overflow:hidden}#dailyBalance .balance-history-tools{display:flex;gap:12px;align-items:end;justify-content:space-between;flex-wrap:wrap;margin:18px 0 10px}#dailyBalance .balance-history-tools label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .month-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 12px}#dailyBalance .month-summary-card{background:#fff;border:1px solid #d9dee7;border-radius:12px;padding:12px}#dailyBalance .month-summary-card span{display:block;font-size:.78rem;color:#667085;margin-bottom:5px}#dailyBalance .month-summary-card strong{font-size:1.05rem}#dailyBalance .history-row{display:grid;grid-template-columns:110px 1fr 1fr 80px;gap:10px;padding:11px 14px;border-bottom:1px solid #eceff3;align-items:center}#dailyBalance .history-row.head{font-weight:900;background:#f3f5f7}#dailyBalance .balance-note{width:100%;min-height:80px}
+#dailyBalance .balance-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:16px}#dailyBalance .balance-toolbar label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .balance-toolbar input{min-width:180px}#dailyBalance .balance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}#dailyBalance .balance-panel{background:#fff;border:1px solid #d9dee7;border-radius:14px;padding:16px}#dailyBalance .balance-panel h3{margin:0 0 12px;color:#101820}#dailyBalance .balance-adjustments{grid-column:1/-1}#dailyBalance .balance-line{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #eceff3}#dailyBalance .balance-line.total{font-size:1.08rem;font-weight:900;border-top:2px solid #101820;border-bottom:0;margin-top:7px}#dailyBalance .balance-result{grid-column:1/-1;background:#101820;color:#fff;border-radius:15px;padding:18px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}#dailyBalance .result-card{border:1px solid #ffffff33;border-radius:11px;padding:12px}#dailyBalance .result-card span{display:block;color:#d0d5dd;font-size:.8rem;margin-bottom:6px}#dailyBalance .result-card strong{font-size:1.2rem}#dailyBalance .positive{color:#1f9d55}#dailyBalance .negative{color:#d92d20}#dailyBalance .balance-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}#dailyBalance .balance-history{background:#fff;border:1px solid #d9dee7;border-radius:14px;overflow:hidden}#dailyBalance .balance-history-tools{display:flex;gap:12px;align-items:end;justify-content:space-between;flex-wrap:wrap;margin:18px 0 10px}#dailyBalance .balance-history-tools label{display:flex;flex-direction:column;gap:5px;font-weight:700}#dailyBalance .month-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 12px}#dailyBalance .month-summary-card{background:#fff;border:1px solid #d9dee7;border-radius:12px;padding:12px}#dailyBalance .month-summary-card span{display:block;font-size:.78rem;color:#667085;margin-bottom:5px}#dailyBalance .month-summary-card strong{font-size:1.05rem}#dailyBalance .history-row{display:grid;grid-template-columns:110px 1fr 1fr 80px;gap:10px;padding:11px 14px;border-bottom:1px solid #eceff3;align-items:center}#dailyBalance .history-row.head{font-weight:900;background:#f3f5f7}#dailyBalance .balance-note{width:100%;min-height:80px}
 #dailyBalance .income-statement{margin-top:24px;background:#fff;border:1px solid #d9dee7;border-radius:14px;padding:16px}
 #dailyBalance .income-head{display:flex;justify-content:space-between;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
 #dailyBalance .income-head h3{margin:0}
@@ -139,8 +149,21 @@ function injectUI(){
     <div class="section-head"><div><h2>📊 Balance diario</h2><p class="muted">Activos menos pasivos, comparación patrimonial y gastos del día.</p></div></div>
     <div class="balance-toolbar"><label>Fecha<input id="balanceDate" type="date"></label><label>Patrimonio anterior<input id="balancePrevious" type="number" step="0.01" inputmode="decimal"></label><button id="balanceRefresh" type="button" class="secondary">↻ Actualizar cálculo</button></div>
     <div class="balance-grid">
-      <section class="balance-panel"><h3>ACTIVOS</h3><div class="balance-line"><span>Caja y activos</span><strong id="balAssets"></strong></div><div class="balance-line"><span>Cuentas corrientes clientes</span><strong id="balAccounts"></strong></div><div class="balance-line"><span>Stock valorizado</span><strong id="balStock"></strong></div><div class="balance-line total"><span>TOTAL ACTIVOS</span><strong id="balTotalAssets"></strong></div></section>
-      <section class="balance-panel"><h3>PASIVOS Y GASTOS</h3><div class="balance-line"><span>Deudas con proveedores</span><strong id="balSuppliers"></strong></div><div class="balance-line total"><span>TOTAL PASIVOS</span><strong id="balLiabilities"></strong></div><div class="balance-line"><span>Gastos del día</span><strong id="balExpenses"></strong></div><div class="balance-line" id="balOpeningAdjustmentRow" style="display:none"><span>Altas patrimoniales existentes (no resultado)</span><strong id="balOpeningAdjustment"></strong></div><p class="muted small">Los gastos ya reducen los activos; se muestran por separado para explicar el resultado real.</p></section>
+      <section class="balance-panel"><h3>ACTIVOS</h3>
+        <div class="balance-line"><span>Caja</span><strong id="balAssetCash"></strong></div>
+        <div class="balance-line"><span>Cheques</span><strong id="balAssetChecks"></strong></div>
+        <div class="balance-line"><span>Bancos y billeteras</span><strong id="balAssetBank"></strong></div>
+        <div class="balance-line"><span>Clientes particulares</span><strong id="balAssetPersonal"></strong></div>
+        <div class="balance-line"><span>Inversiones / activos en formación</span><strong id="balAssetInvestment"></strong></div>
+        <div class="balance-line"><span>Bienes de uso / activos</span><strong id="balAssetFixed"></strong></div>
+        <div class="balance-line"><span>Inversiones existentes · saldo inicial</span><strong id="balAssetOpeningInvestment"></strong></div>
+        <div class="balance-line"><span>Bienes de uso existentes · saldo inicial</span><strong id="balAssetOpeningFixed"></strong></div>
+        <div class="balance-line"><span>Cuentas corrientes clientes</span><strong id="balAccounts"></strong></div>
+        <div class="balance-line"><span>Stock valorizado</span><strong id="balStock"></strong></div>
+        <div class="balance-line total"><span>TOTAL ACTIVOS</span><strong id="balTotalAssets"></strong></div>
+      </section>
+      <section class="balance-panel"><h3>PASIVOS Y GASTOS</h3><div class="balance-line"><span>Deudas con proveedores</span><strong id="balSuppliers"></strong></div><div class="balance-line total"><span>TOTAL PASIVOS</span><strong id="balLiabilities"></strong></div><div class="balance-line"><span>Gastos del día</span><strong id="balExpenses"></strong></div><p class="muted small">Los gastos ya reducen los activos; se muestran por separado para explicar el resultado real.</p></section>
+      <section class="balance-panel balance-adjustments" id="balOpeningAdjustmentPanel" style="display:none"><h3>AJUSTES PATRIMONIALES</h3><div class="balance-line total" style="margin-top:0"><span>Altas de activos existentes (no resultado)</span><strong id="balOpeningAdjustment"></strong></div><p class="muted small">Incorpora patrimonio que ya existía en el negocio. Aumenta activos y patrimonio, pero no se considera ganancia del día ni del mes.</p></section>
       <section class="balance-result"><div class="result-card"><span>Patrimonio anterior</span><strong id="balPrevious"></strong></div><div class="result-card"><span>Patrimonio final</span><strong id="balFinal"></strong></div><div class="result-card"><span>Resultado antes de gastos</span><strong id="balBeforeExpenses"></strong></div><div class="result-card"><span>Resultado neto</span><strong id="balNet"></strong><small id="balVariation"></small></div></section>
     </div>
     <label>Observaciones<textarea id="balanceNotes" class="balance-note" placeholder="Aclaraciones del cierre..."></textarea></label>
@@ -177,8 +200,33 @@ function injectUI(){
 }
 function render(){
   if(!current)return;
-  $('balAssets').textContent=money(current.current_assets);if($('balOpeningAdjustment')){$('balOpeningAdjustment').textContent=money(current.opening_adjustment||0);$('balOpeningAdjustmentRow').style.display=num(current.opening_adjustment)>0?'flex':'none';}$('balAccounts').textContent=money(current.client_accounts);$('balStock').textContent=money(current.stock_value);$('balTotalAssets').textContent=money(current.total_assets);$('balSuppliers').textContent=money(current.supplier_debt);$('balLiabilities').textContent=money(current.total_liabilities);$('balExpenses').textContent=money(current.daily_expenses);$('balPrevious').textContent=money(current.previous_equity);$('balFinal').textContent=money(current.final_equity);$('balBeforeExpenses').textContent=money(current.result_before_expenses);$('balNet').textContent=money(current.net_result);$('balNet').className=current.net_result>=0?'positive':'negative';$('balVariation').textContent=` · ${current.net_result>=0?'+':''}${pct(current.variation_pct)}`;
+  const a=current.asset_breakdown||{};
+  $('balAssetCash').textContent=money(a.cash||0);
+  $('balAssetChecks').textContent=money(a.checks||0);
+  $('balAssetBank').textContent=money(a.bank||0);
+  $('balAssetPersonal').textContent=money(a.personal_receivable||0);
+  $('balAssetInvestment').textContent=money(a.investment||0);
+  $('balAssetFixed').textContent=money(a.fixed_asset||0);
+  $('balAssetOpeningInvestment').textContent=money(a.opening_investment||0);
+  $('balAssetOpeningFixed').textContent=money(a.opening_fixed_asset||0);
+  if($('balOpeningAdjustment')){
+    $('balOpeningAdjustment').textContent=money(current.opening_adjustment||0);
+    $('balOpeningAdjustmentPanel').style.display=num(current.opening_adjustment)>0?'block':'none';
+  }
+  $('balAccounts').textContent=money(current.client_accounts);
+  $('balStock').textContent=money(current.stock_value);
+  $('balTotalAssets').textContent=money(current.total_assets);
+  $('balSuppliers').textContent=money(current.supplier_debt);
+  $('balLiabilities').textContent=money(current.total_liabilities);
+  $('balExpenses').textContent=money(current.daily_expenses);
+  $('balPrevious').textContent=money(current.previous_equity);
+  $('balFinal').textContent=money(current.final_equity);
+  $('balBeforeExpenses').textContent=money(current.result_before_expenses);
+  $('balNet').textContent=money(current.net_result);
+  $('balNet').className=current.net_result>=0?'positive':'negative';
+  $('balVariation').textContent=` · ${current.net_result>=0?'+':''}${pct(current.variation_pct)}`;
 }
+
 function currentMonthValue(){
   const d=new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
