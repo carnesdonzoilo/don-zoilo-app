@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.50";
+const APP_VERSION = "35.3.51";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -671,6 +671,174 @@ async function uploadSignedReceipt(batchKey,items,file){
   if(error) throw error;
   signedReceiptCache.set(batchKey,data);
   return data;
+}
+
+
+// V35.3.51 — lectura asistida del remito físico.
+// La foto se archiva como siempre y el OCR SOLO propone cambios. Nada se guarda
+// hasta que el usuario revisa el formulario y toca "Guardar cambios".
+function receiptOcrNorm(value){
+  return String(value||"")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toUpperCase().replace(/[^A-Z0-9]+/g," ").replace(/\s+/g," ").trim();
+}
+
+function receiptOcrNumber(value){
+  let raw=String(value||"").replace(/\s/g,"").replace(/\$/g,"");
+  if(!raw) return 0;
+  const lastComma=raw.lastIndexOf(","), lastDot=raw.lastIndexOf(".");
+  if(lastComma>=0 && lastDot>=0){
+    if(lastComma>lastDot) raw=raw.replace(/\./g,"").replace(",",".");
+    else raw=raw.replace(/,/g,"");
+  }else if(lastComma>=0){
+    const decimals=raw.length-lastComma-1;
+    raw=decimals<=2 ? raw.replace(/\./g,"").replace(",",".") : raw.replace(/,/g,"");
+  }else if(lastDot>=0){
+    const decimals=raw.length-lastDot-1;
+    if(decimals===3 && /^\d{1,3}(?:\.\d{3})+$/.test(raw)) raw=raw.replace(/\./g,"");
+  }
+  const n=Number(raw.replace(/[^0-9.-]/g,""));
+  return Number.isFinite(n)?n:0;
+}
+
+function receiptOcrNumbers(line){
+  return (String(line||"").match(/\$?\s*\d[\d.]*?(?:,\d+)?(?=\s|$|[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ])/g)||[])
+    .map(receiptOcrNumber).filter(n=>Number.isFinite(n)&&n>0);
+}
+
+function receiptOcrProductTokens(product){
+  const ignored=new Set(["DE","DEL","LA","LAS","EL","LOS","SIN","CON","FRESCO","FRESCA","ENVASADO","ENVASADA","OFERTA","CAJA","KG"]);
+  const aliases={
+    "ROASTBEEF":["ROAST","BEEF","ROSBIF"],
+    "ROAST BEEF":["ROAST","BEEF","ROSBIF"],
+    "NALGA SIN TAPA":["NALGA","TAPA"],
+    "BIFE DE CHORIZO":["BIFE","CHORIZO"],
+    "BIFE CHORIZO":["BIFE","CHORIZO"],
+    "BIFE CON LOMO":["BIFE","LOMO"],
+    "PATA Y MUSLO":["PATA","MUSLO"],
+    "TAPA DE ASADO":["TAPA","ASADO"]
+  };
+  const norm=receiptOcrNorm(product);
+  if(aliases[norm]) return aliases[norm];
+  return norm.split(" ").filter(t=>t.length>=3&&!ignored.has(t));
+}
+
+function receiptOcrLineForProduct(lines,product){
+  const tokens=receiptOcrProductTokens(product);
+  if(!tokens.length) return null;
+  let best=null,score=0;
+  for(const line of lines){
+    const norm=receiptOcrNorm(line);
+    const hits=tokens.filter(t=>norm.includes(t)).length;
+    const ratio=hits/tokens.length;
+    const current=ratio + (hits>=2?0.25:0);
+    if(hits && current>score){best=line;score=current;}
+  }
+  return score>=0.55?best:null;
+}
+
+function receiptOcrRemitoNumber(text){
+  const raw=String(text||"");
+  const patterns=[
+    /(?:REMITO|RTO)\s*(?:NRO\.?|N[°º]?|NUM(?:ERO)?\.?|#)?\s*[:\-]?\s*([A-Z0-9-]{2,20})/i,
+    /(?:NRO\.?|N[°º]|NUM(?:ERO)?\.?)\s*[:\-]?\s*([0-9]{2,20})/i
+  ];
+  for(const re of patterns){const m=raw.match(re);if(m?.[1]) return String(m[1]).replace(/^REMITO\s*/i,"").trim();}
+  return "";
+}
+
+function receiptOcrGuessItem(line,item){
+  if(!line) return null;
+  const nums=receiptOcrNumbers(line);
+  if(!nums.length) return null;
+  const currentQty=Number(item.quantity||0), currentPrice=Number(item.unit_price||0);
+  let quantity=0, unit_price=0;
+  const qtyCandidates=nums.filter(n=>n>0&&n<1000);
+  if(qtyCandidates.length){
+    quantity=qtyCandidates.reduce((best,n)=>Math.abs(n-currentQty)<Math.abs(best-currentQty)?n:best,qtyCandidates[0]);
+  }
+  const priceCandidates=nums.filter(n=>n>=500);
+  if(priceCandidates.length&&currentPrice>0){
+    unit_price=priceCandidates.reduce((best,n)=>Math.abs(n-currentPrice)<Math.abs(best-currentPrice)?n:best,priceCandidates[0]);
+    if(Math.abs(unit_price-currentPrice)>Math.max(5000,currentPrice*.45)) unit_price=0;
+  }
+  if(!unit_price && nums.length>=3){
+    const possible=nums.find(n=>n>=1000&&n<1000000);
+    if(possible) unit_price=possible;
+  }
+  return {quantity:quantity||0,unit_price:unit_price||0,line};
+}
+
+async function analyzeSignedReceiptImage(file,items){
+  if(!window.Tesseract) throw new Error("El lector OCR todavía no está disponible.");
+  const result=await Tesseract.recognize(file,"spa");
+  const text=result?.data?.text||"";
+  const lines=text.split(/\r?\n/).map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean);
+  return {
+    text,
+    remito:receiptOcrRemitoNumber(text),
+    rows:items.map(item=>({item,guess:receiptOcrGuessItem(receiptOcrLineForProduct(lines,item.product),item)}))
+  };
+}
+
+function showReceiptOcrReview(items,card,result){
+  document.getElementById("receiptOcrReviewDialog")?.remove();
+  const detected=result?.rows?.filter(x=>x.guess&&(x.guess.quantity||x.guess.unit_price))||[];
+  const dialog=document.createElement("dialog");
+  dialog.id="receiptOcrReviewDialog";
+  dialog.style.cssText="width:min(760px,94vw);max-height:90vh;border:0;border-radius:16px;padding:0;box-shadow:0 18px 60px #0005";
+  const remitoCurrent=orderRemitoNumberFromNotes(items[0])||"";
+  dialog.innerHTML=`
+    <div style="padding:18px 18px 10px;border-bottom:1px solid #ddd">
+      <h3 style="margin:0 0 5px">📷 Datos detectados del remito</h3>
+      <div class="muted">La foto ya quedó archivada. Revisá todo: <strong>nada se modifica todavía</strong>.</div>
+    </div>
+    <div style="padding:16px;overflow:auto;max-height:62vh">
+      <label style="display:block;margin-bottom:14px"><strong>N.º de remito</strong>
+        <input class="receipt-ocr-remito" value="${escapeHtml(result?.remito||remitoCurrent)}" placeholder="Revisar número" style="width:100%;margin-top:5px">
+      </label>
+      <div style="display:grid;gap:10px">
+        ${items.map((item,i)=>{
+          const found=result?.rows?.[i]?.guess;
+          const q=found?.quantity||Number(item.quantity||0);
+          const p=found?.unit_price||Number(item.unit_price||0);
+          const changedQ=found?.quantity&&Math.abs(found.quantity-Number(item.quantity||0))>.001;
+          const changedP=found?.unit_price&&Math.abs(found.unit_price-Number(item.unit_price||0))>.01;
+          return `<div class="receipt-ocr-row" data-order-id="${escapeHtml(item.id)}" style="border:1px solid #ddd;border-radius:10px;padding:10px">
+            <div style="font-weight:700;margin-bottom:7px">${escapeHtml(item.product)}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <label>Cantidad / kg<input class="receipt-ocr-qty" type="number" min="0" step="0.01" value="${q}" style="width:100%"><small>Actual: ${Number(item.quantity||0).toLocaleString("es-AR")}${changedQ?" · detectado diferente":""}</small></label>
+              <label>Precio<input class="receipt-ocr-price" type="number" min="0" step="0.01" value="${p}" style="width:100%"><small>Actual: ${money(item.unit_price||0)}${changedP?" · detectado diferente":""}</small></label>
+            </div>
+            ${found?.line?`<small class="muted" style="display:block;margin-top:7px">OCR: ${escapeHtml(found.line)}</small>`:`<small class="muted" style="display:block;margin-top:7px">No se detectó una línea clara: se conserva el dato actual.</small>`}
+          </div>`;
+        }).join("")}
+      </div>
+      ${!detected.length?`<div class="notice" style="margin-top:12px">No encontré cambios confiables automáticamente. Podés corregir los campos manualmente antes de continuar.</div>`:""}
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid #ddd;display:flex;justify-content:flex-end;gap:8px">
+      <button type="button" class="secondary receipt-ocr-cancel">Cerrar sin cambiar</button>
+      <button type="button" class="primary receipt-ocr-apply">Pasar datos a revisión</button>
+    </div>`;
+  document.body.appendChild(dialog);
+  dialog.querySelector(".receipt-ocr-cancel").onclick=()=>dialog.close();
+  dialog.querySelector(".receipt-ocr-apply").onclick=()=>{
+    const remito=dialog.querySelector(".receipt-ocr-remito").value.trim();
+    const remitoInput=card.querySelector(".edit-remito-number"); if(remitoInput) remitoInput.value=remito;
+    dialog.querySelectorAll(".receipt-ocr-row").forEach(src=>{
+      const id=src.dataset.orderId;
+      const dst=[...card.querySelectorAll(".edit-item-row")].find(r=>r.dataset.orderId===id);
+      if(!dst) return;
+      dst.querySelector(".edit-quantity").value=src.querySelector(".receipt-ocr-qty").value;
+      dst.querySelector(".edit-price").value=src.querySelector(".receipt-ocr-price").value;
+    });
+    card.querySelector(".edit-group")?.classList.remove("hidden");
+    dialog.close();
+    card.querySelector(".edit-group")?.scrollIntoView({behavior:"smooth",block:"center"});
+    showDeliveryToast("Datos del remito cargados para revisar. Tocá Guardar cambios solamente si están correctos.");
+  };
+  dialog.addEventListener("close",()=>dialog.remove());
+  if(typeof dialog.showModal==="function") dialog.showModal(); else dialog.setAttribute("open","");
 }
 
 async function showSignedReceipt(batchKey,items){
@@ -1561,7 +1729,18 @@ function renderOrders(){
       try{
         label.childNodes[0].textContent=" Subiendo... ";
         await uploadSignedReceipt(batchId,items,file);
-        alert("Remito firmado guardado correctamente.");
+        if(allDelivered){
+          alert("Remito firmado guardado correctamente. Como el pedido ya está entregado, no se modificaron sus datos.");
+          return;
+        }
+        label.childNodes[0].textContent=" Leyendo remito... ";
+        try{
+          const detected=await analyzeSignedReceiptImage(file,items);
+          showReceiptOcrReview(items,card,detected);
+        }catch(ocrError){
+          console.warn("OCR de remito:",ocrError);
+          alert("La foto quedó archivada correctamente, pero no se pudo leer automáticamente. Podés editar el pedido de forma manual.");
+        }
       }catch(e){
         alert("No se pudo guardar la foto: "+e.message);
       }finally{
