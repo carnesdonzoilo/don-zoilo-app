@@ -1,0 +1,19 @@
+DON ZOILO V35.3.56 — DESGLOSE DE ACTIVOS EN BALANCE DIARIO
+
+Cambio visual únicamente en Balance Diario:
+- Caja
+- Cheques
+- Bancos y billeteras
+- Clientes particulares
+- Inversiones / activos en formación
+- Bienes de uso / activos
+- Inversiones existentes · saldo inicial
+- Bienes de uso existentes · saldo inicial
+- Cuentas corrientes clientes
+- Stock valorizado
+- Total activos
+
+Las altas patrimoniales existentes pasan a un bloque separado: AJUSTES PATRIMONIALES.
+
+No cambia cálculos, saldos, estadísticas, movimientos, stock, cuentas corrientes ni proveedores.
+No requiere cambios adicionales en Supabase respecto de los ya realizados para V35.3.55.
