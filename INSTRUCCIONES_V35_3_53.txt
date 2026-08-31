@@ -1,0 +1,9 @@
+DON ZOILO V35.3.53 — INVERSIONES Y BIENES DE USO
+
+- Agrega Inversiones / activos en formación dentro de Caja y activos.
+- Cada inversión permite sumar aportes sin reemplazar el acumulado.
+- Los aportes se agregan al saldo y dejan fecha/importe en Observación.
+- Permite convertir una inversión terminada en Bien de uso / activo.
+- Balance Diario separa Inversiones y Bienes de uso del resto de Caja/Bancos.
+- El total de activos sigue usando current_assets; no requiere una tabla nueva ni migración de Supabase.
+- No modifica saldos de clientes, proveedores, stock ni movimientos existentes.
