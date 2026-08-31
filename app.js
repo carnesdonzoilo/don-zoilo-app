@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.51";
+const APP_VERSION = "35.3.52";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -818,24 +818,38 @@ function showReceiptOcrReview(items,card,result){
     </div>
     <div style="padding:12px 16px;border-top:1px solid #ddd;display:flex;justify-content:flex-end;gap:8px">
       <button type="button" class="secondary receipt-ocr-cancel">Cerrar sin cambiar</button>
-      <button type="button" class="primary receipt-ocr-apply">Pasar datos a revisión</button>
+      <button type="button" class="primary receipt-ocr-apply">Confirmar y guardar cambios</button>
     </div>`;
   document.body.appendChild(dialog);
   dialog.querySelector(".receipt-ocr-cancel").onclick=()=>dialog.close();
-  dialog.querySelector(".receipt-ocr-apply").onclick=()=>{
+  dialog.querySelector(".receipt-ocr-apply").onclick=async()=>{
+    const button=dialog.querySelector(".receipt-ocr-apply");
     const remito=dialog.querySelector(".receipt-ocr-remito").value.trim();
-    const remitoInput=card.querySelector(".edit-remito-number"); if(remitoInput) remitoInput.value=remito;
+    const remitoInput=card.querySelector(".edit-remito-number");
+    if(remitoInput) remitoInput.value=remito;
     dialog.querySelectorAll(".receipt-ocr-row").forEach(src=>{
       const id=src.dataset.orderId;
       const dst=[...card.querySelectorAll(".edit-item-row")].find(r=>r.dataset.orderId===id);
       if(!dst) return;
       dst.querySelector(".edit-quantity").value=src.querySelector(".receipt-ocr-qty").value;
       dst.querySelector(".edit-price").value=src.querySelector(".receipt-ocr-price").value;
+      // Fuerza a que el formulario reconozca el valor cargado por OCR igual que si se hubiera escrito a mano.
+      dst.querySelector(".edit-quantity").dispatchEvent(new Event("input",{bubbles:true}));
+      dst.querySelector(".edit-price").dispatchEvent(new Event("input",{bubbles:true}));
     });
     card.querySelector(".edit-group")?.classList.remove("hidden");
-    dialog.close();
-    card.querySelector(".edit-group")?.scrollIntoView({behavior:"smooth",block:"center"});
-    showDeliveryToast("Datos del remito cargados para revisar. Tocá Guardar cambios solamente si están correctos.");
+    button.disabled=true;
+    button.textContent="Guardando...";
+    try{
+      // V35.3.52: al confirmar el OCR se guarda el pedido real, no queda sólo precargado visualmente.
+      await saveEditedOrderGroup(items,card);
+      if(document.body.contains(dialog)) dialog.close();
+    }finally{
+      if(document.body.contains(button)){
+        button.disabled=false;
+        button.textContent="Confirmar y guardar cambios";
+      }
+    }
   };
   dialog.addEventListener("close",()=>dialog.remove());
   if(typeof dialog.showModal==="function") dialog.showModal(); else dialog.setAttribute("open","");
