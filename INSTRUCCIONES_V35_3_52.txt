@@ -1,0 +1,8 @@
+DON ZOILO V35.3.52 — CORRECCIÓN GUARDADO OCR REMITO
+
+- Corrige el problema de V35.3.51 donde los datos OCR podían verse cargados en el formulario pero no quedar guardados.
+- El botón final ahora dice “Confirmar y guardar cambios”.
+- Al confirmarlo, los kilos/cantidades, precios y número de remito se pasan al formulario y se ejecuta el guardado real del pedido existente.
+- No crea un pedido nuevo.
+- No modifica la estructura de Supabase.
+- El pedido debe seguir pendiente/no entregado para poder modificarse.
