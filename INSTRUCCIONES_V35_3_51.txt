@@ -1,0 +1,19 @@
+DON ZOILO V35.3.51 — REMITO FÍSICO CON LECTURA ASISTIDA
+
+CAMBIO PRINCIPAL
+- Al cargar la foto del remito firmado desde un pedido PENDIENTE, la foto se archiva igual que antes.
+- Luego la app intenta leer con OCR el N.º de remito, kilos/cantidad y precios de las líneas correspondientes a los productos ya cargados.
+- Se abre una pantalla de DATOS DETECTADOS para revisar.
+- Ningún dato del pedido se modifica automáticamente.
+- Al tocar “Pasar datos a revisión”, los valores pasan al formulario Editar pedido.
+- Recién al tocar “Guardar cambios” se actualiza el pedido existente.
+- Después se puede marcar Entregado con el flujo habitual.
+
+SEGURIDAD
+- NO modifica la estructura de Supabase.
+- NO crea pedidos nuevos desde el OCR.
+- NO modifica Cuenta Corriente, ventas, stock ni movimientos por leer una foto.
+- Si el pedido ya está ENTREGADO, la foto se archiva pero el OCR no modifica datos.
+- Si OCR no reconoce con claridad, conserva los datos actuales para revisión manual.
+
+BASE: V35.3.50.
