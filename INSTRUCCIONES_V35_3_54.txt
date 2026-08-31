@@ -1,0 +1,8 @@
+DON ZOILO V35.3.54 — ACTIVOS EXISTENTES SIN DISTORSIONAR RESULTADOS
+
+- Agrega categorías “Inversiones existentes · saldo inicial” y “Bienes de uso existentes · saldo inicial”.
+- Usar esas categorías para Kangoo, mobiliario, cámaras, maquinaria u otros bienes que ya pertenecían al negocio antes de cargarlos en la app.
+- Esos importes SÍ aumentan Activos y Patrimonio, pero el alta inicial NO se computa como ganancia del día ni entra al acumulado mensual.
+- Las inversiones/adquisiciones nuevas siguen en las categorías normales.
+- No modifica facturación, kilos, rankings, clientes, proveedores, stock ni estadísticas comerciales.
+- No requiere migración ni tabla nueva en Supabase.
