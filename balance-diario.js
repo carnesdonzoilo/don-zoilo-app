@@ -85,10 +85,16 @@ function calculations(date,previousOverride,assetsRows=cachedAssets){
   const totalAssets=currentAssets+clientAccounts+inventory;
   const finalEquity=totalAssets-supplierDebt;
   const previous=previousOverride!==undefined?num(previousOverride):previousEquity(date);
-  const netResult=finalEquity-previous;
+  // V35.3.54 — los bienes/inversiones que ya existían antes de cargarlos en la app
+  // aumentan el patrimonio informado, pero NO son una ganancia del día ni del mes.
+  const openingAdjustment=assets
+    .filter(r=>['opening_investment','opening_fixed_asset'].includes(r.asset_type))
+    .filter(r=>String(r.created_at||'').slice(0,10)===date)
+    .reduce((s,r)=>s+num(r.balance),0);
+  const netResult=finalEquity-previous-openingAdjustment;
   const beforeExpenses=netResult+expenses;
   const variation=previous?netResult/previous*100:0;
-  return {date,current_assets:currentAssets,client_accounts:clientAccounts,stock_value:inventory,total_assets:totalAssets,supplier_debt:supplierDebt,total_liabilities:supplierDebt,daily_expenses:expenses,previous_equity:previous,final_equity:finalEquity,result_before_expenses:beforeExpenses,net_result:netResult,variation_pct:variation};
+  return {date,current_assets:currentAssets,client_accounts:clientAccounts,stock_value:inventory,total_assets:totalAssets,supplier_debt:supplierDebt,total_liabilities:supplierDebt,daily_expenses:expenses,previous_equity:previous,final_equity:finalEquity,opening_adjustment:openingAdjustment,result_before_expenses:beforeExpenses,net_result:netResult,variation_pct:variation};
 }
 function previousEquity(date){
   const prior=closings.filter(r=>r.balance_date<date).sort((a,b)=>String(b.balance_date).localeCompare(String(a.balance_date)))[0];
@@ -134,7 +140,7 @@ function injectUI(){
     <div class="balance-toolbar"><label>Fecha<input id="balanceDate" type="date"></label><label>Patrimonio anterior<input id="balancePrevious" type="number" step="0.01" inputmode="decimal"></label><button id="balanceRefresh" type="button" class="secondary">↻ Actualizar cálculo</button></div>
     <div class="balance-grid">
       <section class="balance-panel"><h3>ACTIVOS</h3><div class="balance-line"><span>Caja y activos</span><strong id="balAssets"></strong></div><div class="balance-line"><span>Cuentas corrientes clientes</span><strong id="balAccounts"></strong></div><div class="balance-line"><span>Stock valorizado</span><strong id="balStock"></strong></div><div class="balance-line total"><span>TOTAL ACTIVOS</span><strong id="balTotalAssets"></strong></div></section>
-      <section class="balance-panel"><h3>PASIVOS Y GASTOS</h3><div class="balance-line"><span>Deudas con proveedores</span><strong id="balSuppliers"></strong></div><div class="balance-line total"><span>TOTAL PASIVOS</span><strong id="balLiabilities"></strong></div><div class="balance-line"><span>Gastos del día</span><strong id="balExpenses"></strong></div><p class="muted small">Los gastos ya reducen los activos; se muestran por separado para explicar el resultado real.</p></section>
+      <section class="balance-panel"><h3>PASIVOS Y GASTOS</h3><div class="balance-line"><span>Deudas con proveedores</span><strong id="balSuppliers"></strong></div><div class="balance-line total"><span>TOTAL PASIVOS</span><strong id="balLiabilities"></strong></div><div class="balance-line"><span>Gastos del día</span><strong id="balExpenses"></strong></div><div class="balance-line" id="balOpeningAdjustmentRow" style="display:none"><span>Altas patrimoniales existentes (no resultado)</span><strong id="balOpeningAdjustment"></strong></div><p class="muted small">Los gastos ya reducen los activos; se muestran por separado para explicar el resultado real.</p></section>
       <section class="balance-result"><div class="result-card"><span>Patrimonio anterior</span><strong id="balPrevious"></strong></div><div class="result-card"><span>Patrimonio final</span><strong id="balFinal"></strong></div><div class="result-card"><span>Resultado antes de gastos</span><strong id="balBeforeExpenses"></strong></div><div class="result-card"><span>Resultado neto</span><strong id="balNet"></strong><small id="balVariation"></small></div></section>
     </div>
     <label>Observaciones<textarea id="balanceNotes" class="balance-note" placeholder="Aclaraciones del cierre..."></textarea></label>
@@ -171,7 +177,7 @@ function injectUI(){
 }
 function render(){
   if(!current)return;
-  $('balAssets').textContent=money(current.current_assets);$('balAccounts').textContent=money(current.client_accounts);$('balStock').textContent=money(current.stock_value);$('balTotalAssets').textContent=money(current.total_assets);$('balSuppliers').textContent=money(current.supplier_debt);$('balLiabilities').textContent=money(current.total_liabilities);$('balExpenses').textContent=money(current.daily_expenses);$('balPrevious').textContent=money(current.previous_equity);$('balFinal').textContent=money(current.final_equity);$('balBeforeExpenses').textContent=money(current.result_before_expenses);$('balNet').textContent=money(current.net_result);$('balNet').className=current.net_result>=0?'positive':'negative';$('balVariation').textContent=` · ${current.net_result>=0?'+':''}${pct(current.variation_pct)}`;
+  $('balAssets').textContent=money(current.current_assets);if($('balOpeningAdjustment')){$('balOpeningAdjustment').textContent=money(current.opening_adjustment||0);$('balOpeningAdjustmentRow').style.display=num(current.opening_adjustment)>0?'flex':'none';}$('balAccounts').textContent=money(current.client_accounts);$('balStock').textContent=money(current.stock_value);$('balTotalAssets').textContent=money(current.total_assets);$('balSuppliers').textContent=money(current.supplier_debt);$('balLiabilities').textContent=money(current.total_liabilities);$('balExpenses').textContent=money(current.daily_expenses);$('balPrevious').textContent=money(current.previous_equity);$('balFinal').textContent=money(current.final_equity);$('balBeforeExpenses').textContent=money(current.result_before_expenses);$('balNet').textContent=money(current.net_result);$('balNet').className=current.net_result>=0?'positive':'negative';$('balVariation').textContent=` · ${current.net_result>=0?'+':''}${pct(current.variation_pct)}`;
 }
 function currentMonthValue(){
   const d=new Date();
@@ -329,8 +335,8 @@ function balanceSupplierRows(){
 function balanceAssetSplit(){
   const cash=cachedAssets.filter(r=>r.asset_type==='cash').reduce((s,r)=>s+num(r.balance),0);
   // El resto de Caja y Activos se muestra junto a Bancos para conservar exactamente el total activo.
-  const investments=cachedAssets.filter(r=>r.asset_type==='investment').reduce((s,r)=>s+num(r.balance),0);
-  const fixedAssets=cachedAssets.filter(r=>r.asset_type==='fixed_asset').reduce((s,r)=>s+num(r.balance),0);
+  const investments=cachedAssets.filter(r=>['investment','opening_investment'].includes(r.asset_type)).reduce((s,r)=>s+num(r.balance),0);
+  const fixedAssets=cachedAssets.filter(r=>['fixed_asset','opening_fixed_asset'].includes(r.asset_type)).reduce((s,r)=>s+num(r.balance),0);
   return {cash,investments,fixedAssets,banks:Math.max(0,num(current.current_assets)-cash-investments-fixedAssets)};
 }
 function pdfDate(v){
