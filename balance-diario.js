@@ -329,7 +329,9 @@ function balanceSupplierRows(){
 function balanceAssetSplit(){
   const cash=cachedAssets.filter(r=>r.asset_type==='cash').reduce((s,r)=>s+num(r.balance),0);
   // El resto de Caja y Activos se muestra junto a Bancos para conservar exactamente el total activo.
-  return {cash,banks:Math.max(0,num(current.current_assets)-cash)};
+  const investments=cachedAssets.filter(r=>r.asset_type==='investment').reduce((s,r)=>s+num(r.balance),0);
+  const fixedAssets=cachedAssets.filter(r=>r.asset_type==='fixed_asset').reduce((s,r)=>s+num(r.balance),0);
+  return {cash,investments,fixedAssets,banks:Math.max(0,num(current.current_assets)-cash-investments-fixedAssets)};
 }
 function pdfDate(v){
   if(!v)return '';
@@ -399,9 +401,9 @@ function simplePdfBlob(){
   const sx=M+mainW+gap, sw=sidebarW;
   function panel(top,h,title){const y=top-h;box(sx,y,sw,h,false);text(sx+8,top-15,title,10,true);line(sx+7,top-21,sx+sw-7,top-21,.35);return {y,top};}
   let top=772;
-  let p1=panel(top,160,'RESUMEN GENERAL');
-  const metrics=[['CAJA',assetSplit.cash],['BANCOS',assetSplit.banks],['TOTAL CUENTAS CORRIENTES',current.client_accounts],['STOCK VALORIZADO',current.stock_value]];
-  let yy=top-38;metrics.forEach(([lab,val])=>{text(sx+9,yy,lab,6.5,lab.startsWith('TOTAL'));rightText(sx+sw-9,yy,fmt(val),8,true);line(sx+8,yy-8,sx+sw-8,yy-8,.25,true);yy-=25;});
+  let p1=panel(top,205,'RESUMEN GENERAL');
+  const metrics=[['CAJA',assetSplit.cash],['BANCOS Y OTROS CORRIENTES',assetSplit.banks],['INVERSIONES',assetSplit.investments],['BIENES DE USO',assetSplit.fixedAssets],['TOTAL CUENTAS CORRIENTES',current.client_accounts],['STOCK VALORIZADO',current.stock_value]];
+  let yy=top-38;metrics.forEach(([lab,val])=>{text(sx+9,yy,lab,6.5,lab.startsWith('TOTAL'));rightText(sx+sw-9,yy,fmt(val),8,true);line(sx+8,yy-8,sx+sw-8,yy-8,.25,true);yy-=22;});
   box(sx+7,p1.y+9,sw-14,23,true);text(sx+11,p1.y+17,'TOTAL ACTIVOS',8,true);rightText(sx+sw-11,p1.y+17,fmt(current.total_assets),9,true);
 
   top=p1.y-9; const passH=Math.min(160,72+suppliers.length*14);let p2=panel(top,passH,'PASIVOS');yy=top-38;

@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.52";
+const APP_VERSION = "35.3.53";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -841,7 +841,7 @@ function showReceiptOcrReview(items,card,result){
     button.disabled=true;
     button.textContent="Guardando...";
     try{
-      // V35.3.52: al confirmar el OCR se guarda el pedido real, no queda sólo precargado visualmente.
+      // V35.3.53: al confirmar el OCR se guarda el pedido real, no queda sólo precargado visualmente.
       await saveEditedOrderGroup(items,card);
       if(document.body.contains(dialog)) dialog.close();
     }finally{
