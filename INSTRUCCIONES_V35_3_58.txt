@@ -1,0 +1,9 @@
+DON ZOILO V35.3.58 — PRINGLES UNIFICADO CON DUMPLING
+
+Cambio puntual:
+- PRINGLES, aunque se haya cargado sin el número 1272, se agrupa bajo DUMPLING.
+- Se mantiene PRINGLES 1272 -> DUMPLING.
+- Se mantiene GORRITI 5612 / GORRITI 56xx -> DUMPLING en Cuentas Corrientes.
+- Estadísticas también agrupa PRINGLES bajo DUMPLING.
+
+No se modifican movimientos históricos, saldos base, stock, proveedores ni estructura de Supabase.
