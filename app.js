@@ -2039,6 +2039,7 @@ function canonicalClientKey(name){
 
   if(
     normalized==="DUMPLING" ||
+    normalized==="PRINGLES" ||
     normalized==="PRINGLES1272" ||
     normalized==="GUATEMALA" ||
     normalized.startsWith("GUATEMALA4450") ||

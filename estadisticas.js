@@ -49,7 +49,7 @@
   }
   addClientGroup('ITUZAINGÓ', ['ITUZAINGO']);
   addClientGroup('MORÓN', ['MORON','MORON PLAZA','MORÓN PLAZA']);
-  addClientGroup('DUMPLING', ['GORRITI 5612','PRINGLES 1272']);
+  addClientGroup('DUMPLING', ['GORRITI 5612','PRINGLES 1272','PRINGLES']);
   addClientGroup('GARCÍA DEL RIO', ['GARCIA DEL RIO']);
 
   function canonicalClient(value){
