@@ -1,0 +1,11 @@
+DON ZOILO V35.3.59 — CENTRO DE COSTOS
+
+NUEVO MÓDULO: Centro de costos.
+- IVA por defecto: 10,5%.
+- IIBB por defecto: 3%.
+- Margen por defecto: 12%.
+- Permite indicar si el costo ingresado es sin IVA o ya incluye IVA.
+- Calcula costo total, importe de IVA, IIBB, margen y precio sugerido.
+- Los cálculos se guardan solo como referencia en el dispositivo.
+- NO modifica la lista de precios, pedidos, cuentas corrientes, estadísticas, stock ni Balance Diario.
+- NO requiere cambios de Supabase.
