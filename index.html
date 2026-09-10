@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <title>Don Zoilo | Operaciones</title>
-  <link rel="stylesheet" href="styles.css?v=35.3.58" />
+  <link rel="stylesheet" href="styles.css?v=35.3.59" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 35.3.58 · Cuentas Corrientes · Estadísticas y vencimientos</div>
+      <div class="subtitle">Control de operaciones · Versión 35.3.59 · Cuentas Corrientes · Estadísticas y vencimientos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -45,6 +45,7 @@
       <button class="tab" data-view="accounts">Cuentas corrientes</button>
       <button class="tab" data-view="suppliers">Proveedores</button>
       <button class="tab" data-view="prices">Precios</button>
+      <button class="tab" data-view="costCenter">🧮 Centro de costos</button>
       <button class="tab" data-view="stock">📦 Stock</button>
     </nav>
 
@@ -930,6 +931,58 @@
     </section>
 
 
+    <section id="costCenter" class="view">
+      <div class="panel cost-center-panel">
+        <div class="panel-head">
+          <div>
+            <h2>🧮 Centro de costos</h2>
+            <p class="muted small">Calculá un precio sugerido sin modificar la lista de precios, pedidos ni estadísticas. Por defecto: IVA 10,5%, IIBB 3% y margen 12%.</p>
+          </div>
+          <button type="button" id="clearCostCenter" class="secondary">Limpiar calculadora</button>
+        </div>
+
+        <div class="cost-defaults">
+          <label>IVA %
+            <input id="costDefaultVat" type="number" min="0" step="0.1" value="10.5">
+          </label>
+          <label>IIBB %
+            <input id="costDefaultIibb" type="number" min="0" step="0.1" value="3">
+          </label>
+          <label>Margen predeterminado %
+            <input id="costDefaultMargin" type="number" min="0" step="0.1" value="12">
+          </label>
+        </div>
+
+        <form id="costCenterForm" class="cost-form">
+          <label>Producto
+            <input id="costProduct" list="costProductList" placeholder="Ej.: Paleta" autocomplete="off" required>
+            <datalist id="costProductList"></datalist>
+          </label>
+          <label>Costo de compra
+            <input id="costPurchase" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" required>
+          </label>
+          <label>El costo ingresado
+            <select id="costVatMode">
+              <option value="without" selected>Es SIN IVA</option>
+              <option value="included">Ya incluye IVA</option>
+            </select>
+          </label>
+          <label>Margen %
+            <input id="costMargin" type="number" min="0" step="0.1" value="12" required>
+          </label>
+          <button type="submit" class="primary">Calcular y guardar</button>
+        </form>
+
+        <div id="costResult" class="cost-result hidden"></div>
+
+        <div class="panel-head cost-history-head">
+          <div><h3>Productos calculados</h3><p class="muted small">Se guardan en este dispositivo como referencia. No alteran ningún dato operativo.</p></div>
+          <input id="costSearch" type="search" placeholder="Buscar producto">
+        </div>
+        <div id="costCenterList" class="cost-center-list"></div>
+      </div>
+    </section>
+
     <section id="prices" class="view">
       <div class="panel">
         <div class="panel-head">
@@ -1244,14 +1297,14 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=35.3.58"></script>
-  <script src="app.js?v=35.3.58"></script>
+  <script src="cloud-config.js?v=35.3.59"></script>
+  <script src="app.js?v=35.3.59"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=35.3.58"></script>
-  <script src="stock-ocr.js?v=35.3.58"></script>
-  <script src="caja-activos.js?v=35.3.58"></script>
-  <script src="balance-diario.js?v=35.3.58"></script>
-  <script src="vencimientos.js?v=35.3.58"></script>
-  <script src="estadisticas.js?v=35.3.58"></script>
+  <script src="stock.js?v=35.3.59"></script>
+  <script src="stock-ocr.js?v=35.3.59"></script>
+  <script src="caja-activos.js?v=35.3.59"></script>
+  <script src="balance-diario.js?v=35.3.59"></script>
+  <script src="vencimientos.js?v=35.3.59"></script>
+  <script src="estadisticas.js?v=35.3.59"></script>
 </body>
 </html>

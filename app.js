@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.56";
+const APP_VERSION = "35.3.59";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3440,7 +3440,134 @@ function renderBalances(){
   });
 }
 
-function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderAccounts(); renderPrices(); renderPricePrintSheet();  renderSuppliers(); }
+
+// V35.3.59 — Centro de costos independiente. No modifica precios, pedidos ni estadísticas.
+const COST_CENTER_STORAGE_KEY = "don_zoilo_cost_center_v1";
+const COST_CENTER_SETTINGS_KEY = "don_zoilo_cost_center_settings_v1";
+
+function costCenterSettings(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(COST_CENTER_SETTINGS_KEY)||"{}");
+    return {
+      vat:Number.isFinite(Number(saved.vat))?Number(saved.vat):10.5,
+      iibb:Number.isFinite(Number(saved.iibb))?Number(saved.iibb):3,
+      margin:Number.isFinite(Number(saved.margin))?Number(saved.margin):12
+    };
+  }catch(_){ return {vat:10.5,iibb:3,margin:12}; }
+}
+function costCenterRows(){
+  try{
+    const rows=JSON.parse(localStorage.getItem(COST_CENTER_STORAGE_KEY)||"[]");
+    return Array.isArray(rows)?rows:[];
+  }catch(_){ return []; }
+}
+function saveCostCenterRows(rows){ localStorage.setItem(COST_CENTER_STORAGE_KEY,JSON.stringify(rows||[])); }
+function saveCostCenterSettings(settings){ localStorage.setItem(COST_CENTER_SETTINGS_KEY,JSON.stringify(settings)); }
+
+function calculateCostCenter(purchase,vatMode,vatPct,iibbPct,marginPct){
+  const input=Math.max(0,Number(purchase||0));
+  const vatRate=Math.max(0,Number(vatPct||0))/100;
+  const iibbRate=Math.max(0,Number(iibbPct||0))/100;
+  const marginRate=Math.max(0,Number(marginPct||0))/100;
+  // Si el costo ya incluye IVA no se vuelve a agregar. IIBB se calcula sobre el costo ingresado.
+  const vatAmount=vatMode==="included"?0:input*vatRate;
+  const iibbAmount=input*iibbRate;
+  const totalCost=input+vatAmount+iibbAmount;
+  const marginAmount=totalCost*marginRate;
+  const suggested=totalCost+marginAmount;
+  return {input,vatAmount,iibbAmount,totalCost,marginAmount,suggested};
+}
+
+function fillCostProductList(){
+  const list=$("costProductList"); if(!list) return;
+  const names=new Set();
+  try{ Object.values(PRICE_CATALOG||{}).forEach(items=>items.forEach(([name])=>names.add(String(name)))); }catch(_){ }
+  Object.values(productCatalogMeta||{}).forEach(meta=>{ if(meta?.name) names.add(String(meta.name)); });
+  list.innerHTML=[...names].sort((a,b)=>a.localeCompare(b,"es")).map(name=>`<option value="${escapeHtml(name)}"></option>`).join("");
+}
+
+function renderCostResult(row){
+  const box=$("costResult"); if(!box) return;
+  if(!row){ box.classList.add("hidden"); box.innerHTML=""; return; }
+  box.classList.remove("hidden");
+  box.innerHTML=`
+    <div class="cost-result-title"><strong>${escapeHtml(row.product||"Producto")}</strong><span>Precio sugerido <b>${money(row.suggested)}</b></span></div>
+    <div class="cost-result-grid">
+      <div><span>Costo ingresado</span><strong>${money(row.purchase)}</strong></div>
+      <div><span>IVA ${Number(row.vatPct||0).toLocaleString("es-AR")}%${row.vatMode==="included"?" (incluido)":""}</span><strong>${row.vatMode==="included"?"Ya incluido":money(row.vatAmount)}</strong></div>
+      <div><span>IIBB ${Number(row.iibbPct||0).toLocaleString("es-AR")}%</span><strong>${money(row.iibbAmount)}</strong></div>
+      <div><span>Costo total</span><strong>${money(row.totalCost)}</strong></div>
+      <div><span>Margen ${Number(row.marginPct||0).toLocaleString("es-AR")}%</span><strong>${money(row.marginAmount)}</strong></div>
+      <div class="highlight"><span>Precio de venta sugerido</span><strong>${money(row.suggested)}</strong></div>
+    </div>`;
+}
+
+function renderCostCenter(){
+  if(!$("costCenter")) return;
+  fillCostProductList();
+  const settings=costCenterSettings();
+  if($("costDefaultVat") && document.activeElement!==$("costDefaultVat")) $("costDefaultVat").value=settings.vat;
+  if($("costDefaultIibb") && document.activeElement!==$("costDefaultIibb")) $("costDefaultIibb").value=settings.iibb;
+  if($("costDefaultMargin") && document.activeElement!==$("costDefaultMargin")) $("costDefaultMargin").value=settings.margin;
+  if($("costMargin") && !$("costMargin").dataset.userChanged) $("costMargin").value=settings.margin;
+  const q=String($("costSearch")?.value||"").trim().toLowerCase();
+  const rows=costCenterRows().filter(r=>!q||String(r.product||"").toLowerCase().includes(q));
+  const list=$("costCenterList"); if(!list) return;
+  if(!rows.length){ list.innerHTML='<div class="empty-state">Todavía no hay productos calculados.</div>'; return; }
+  list.innerHTML=rows.map(r=>`
+    <div class="cost-row" data-cost-id="${escapeHtml(r.id)}">
+      <div><strong>${escapeHtml(r.product)}</strong><small>${r.vatMode==="included"?"Costo con IVA incluido":"Costo sin IVA"} · IVA ${Number(r.vatPct).toLocaleString("es-AR")}% · IIBB ${Number(r.iibbPct).toLocaleString("es-AR")}% · margen ${Number(r.marginPct).toLocaleString("es-AR")}%</small></div>
+      <div><span>Costo</span><strong>${money(r.purchase)}</strong></div>
+      <div><span>Costo total</span><strong>${money(r.totalCost)}</strong></div>
+      <div class="cost-price"><span>Sugerido</span><strong>${money(r.suggested)}</strong></div>
+      <div class="cost-row-actions"><button type="button" class="secondary cost-reuse">Editar</button><button type="button" class="danger cost-delete">Eliminar</button></div>
+    </div>`).join("");
+}
+
+function persistCostDefaults(){
+  const settings={vat:Number($("costDefaultVat")?.value||10.5),iibb:Number($("costDefaultIibb")?.value||3),margin:Number($("costDefaultMargin")?.value||12)};
+  saveCostCenterSettings(settings);
+  if($("costMargin") && !$("costMargin").dataset.userChanged) $("costMargin").value=settings.margin;
+}
+
+async function submitCostCenter(e){
+  e.preventDefault();
+  const settings=costCenterSettings();
+  const product=String($("costProduct")?.value||"").trim();
+  const purchase=Number($("costPurchase")?.value||0);
+  const vatMode=$("costVatMode")?.value||"without";
+  const marginPct=Number($("costMargin")?.value||settings.margin);
+  if(!product || !(purchase>0)) return alert("Ingresá el producto y un costo de compra mayor a 0.");
+  const calc=calculateCostCenter(purchase,vatMode,settings.vat,settings.iibb,marginPct);
+  const row={id:uid(),product,purchase,vatMode,vatPct:settings.vat,iibbPct:settings.iibb,marginPct,...calc,created_at:new Date().toISOString()};
+  let rows=costCenterRows();
+  const key=product.toLocaleLowerCase("es");
+  const existing=rows.findIndex(r=>String(r.product||"").toLocaleLowerCase("es")===key);
+  if(existing>=0){ row.id=rows[existing].id; rows[existing]=row; } else rows.unshift(row);
+  saveCostCenterRows(rows);
+  renderCostResult(row);
+  renderCostCenter();
+}
+
+on("costCenterForm","submit",submitCostCenter);
+on("costSearch","input",renderCostCenter);
+on("costDefaultVat","change",persistCostDefaults);
+on("costDefaultIibb","change",persistCostDefaults);
+on("costDefaultMargin","change",persistCostDefaults);
+on("costMargin","input",()=>{ if($("costMargin")) $("costMargin").dataset.userChanged="1"; });
+on("clearCostCenter","click",()=>{
+  if(confirm("¿Limpiar todos los cálculos guardados del Centro de costos en este dispositivo?")){ saveCostCenterRows([]); renderCostResult(null); renderCostCenter(); }
+});
+document.addEventListener("click",e=>{
+  const rowEl=e.target.closest(".cost-row"); if(!rowEl) return;
+  const rows=costCenterRows(); const row=rows.find(r=>String(r.id)===String(rowEl.dataset.costId)); if(!row) return;
+  if(e.target.closest(".cost-delete")){ saveCostCenterRows(rows.filter(r=>String(r.id)!==String(row.id))); renderCostCenter(); return; }
+  if(e.target.closest(".cost-reuse")){
+    $("costProduct").value=row.product; $("costPurchase").value=row.purchase; $("costVatMode").value=row.vatMode; $("costMargin").value=row.marginPct; $("costMargin").dataset.userChanged="1"; renderCostResult(row); $("costPurchase").focus();
+  }
+});
+
+function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderAccounts(); renderPrices(); renderPricePrintSheet(); renderCostCenter(); renderSuppliers(); }
 
 function exportCSV(){
   const cols=["date","type","party","concept","kg","amount","payment_method","status","notes"];
