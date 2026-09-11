@@ -1,0 +1,11 @@
+DON ZOILO V35.3.60 — CENTRO DE COSTOS: FILTROS Y ORDEN
+
+Cambios:
+- Cada producto calculado tiene rubro.
+- El rubro se intenta detectar automáticamente desde el catálogo y puede cambiarse manualmente.
+- Filtro por rubro en Productos calculados.
+- Orden por producto A-Z / Z-A.
+- Orden por precio sugerido de menor a mayor / mayor a menor.
+- Los cálculos ya guardados sin rubro se clasifican automáticamente cuando coinciden con el catálogo; si no, quedan en Otros.
+- No modifica pedidos, precios operativos, stock, cuentas corrientes, balances ni estadísticas.
+- No requiere cambios en Supabase.
