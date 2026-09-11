@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.60";
+const APP_VERSION = "35.3.61";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3441,7 +3441,7 @@ function renderBalances(){
 }
 
 
-// V35.3.60 — Centro de costos: rubros, filtros y ordenamiento. No modifica precios, pedidos ni estadísticas.
+// V35.3.61 — Centro de costos: comparación y edición del precio vigente de la Lista de precios.
 const COST_CENTER_STORAGE_KEY = "don_zoilo_cost_center_v1";
 const COST_CENTER_SETTINGS_KEY = "don_zoilo_cost_center_settings_v1";
 
@@ -3506,6 +3506,20 @@ function normalizedCostCategory(row){
   return String(row?.category||inferCostCategory(row?.product)||"Otros");
 }
 
+function costListPriceEntry(product){
+  const directKey=productKey(product);
+  if(directKey && Object.prototype.hasOwnProperty.call(productPrices,directKey)){
+    return {key:directKey,value:Number(productPrices[directKey]||0),meta:productCatalogMeta[directKey]||{}};
+  }
+  const target=normalizeProductKey(product);
+  const matchedKey=Object.keys(productPrices||{}).find(key=>{
+    const metaName=productCatalogMeta[key]?.name||key;
+    return normalizeProductKey(key)===target || normalizeProductKey(metaName)===target;
+  });
+  if(!matchedKey) return null;
+  return {key:matchedKey,value:Number(productPrices[matchedKey]||0),meta:productCatalogMeta[matchedKey]||{}};
+}
+
 function renderCostResult(row){
   const box=$("costResult"); if(!box) return;
   if(!row){ box.classList.add("hidden"); box.innerHTML=""; return; }
@@ -3544,14 +3558,26 @@ function renderCostCenter(){
   });
   const list=$("costCenterList"); if(!list) return;
   if(!rows.length){ list.innerHTML='<div class="empty-state">No hay productos para mostrar con esos filtros.</div>'; return; }
-  list.innerHTML=rows.map(r=>`
+  list.innerHTML=rows.map(r=>{
+    const listEntry=costListPriceEntry(r.product);
+    const listPrice=listEntry?Number(listEntry.value||0):"";
+    return `
     <div class="cost-row" data-cost-id="${escapeHtml(r.id)}">
       <div><strong>${escapeHtml(r.product)}</strong><small>${escapeHtml(r.category)} · ${r.vatMode==="included"?"Costo con IVA incluido":"Costo sin IVA"} · IVA ${Number(r.vatPct).toLocaleString("es-AR")}% · IIBB ${Number(r.iibbPct).toLocaleString("es-AR")}% · margen ${Number(r.marginPct).toLocaleString("es-AR")}%</small></div>
       <div><span>Costo</span><strong>${money(r.purchase)}</strong></div>
       <div><span>Costo total</span><strong>${money(r.totalCost)}</strong></div>
       <div class="cost-price"><span>Sugerido</span><strong>${money(r.suggested)}</strong></div>
-      <div class="cost-row-actions"><button type="button" class="secondary cost-reuse">Editar</button><button type="button" class="danger cost-delete">Eliminar</button></div>
-    </div>`).join("");
+      <div class="cost-list-price">
+        <span>Precio lista</span>
+        <div class="cost-list-price-edit">
+          <input class="cost-list-price-input" type="number" min="0" step="0.01" value="${listPrice}" placeholder="Sin precio">
+          <button type="button" class="secondary cost-save-list-price">Guardar</button>
+        </div>
+        <small>${listEntry?"Precio vigente de Lista de precios":"No está en la Lista de precios"}</small>
+      </div>
+      <div class="cost-row-actions"><button type="button" class="secondary cost-reuse">Editar costo</button><button type="button" class="danger cost-delete">Eliminar</button></div>
+    </div>`;
+  }).join("");
 }
 
 function persistCostDefaults(){
@@ -3596,6 +3622,34 @@ document.addEventListener("click",e=>{
   const rowEl=e.target.closest(".cost-row"); if(!rowEl) return;
   const rows=costCenterRows(); const row=rows.find(r=>String(r.id)===String(rowEl.dataset.costId)); if(!row) return;
   if(e.target.closest(".cost-delete")){ saveCostCenterRows(rows.filter(r=>String(r.id)!==String(row.id))); renderCostCenter(); return; }
+  if(e.target.closest(".cost-save-list-price")){
+    const btn=e.target.closest(".cost-save-list-price");
+    const input=rowEl.querySelector(".cost-list-price-input");
+    const value=Number(input?.value||0);
+    if(!(value>=0)) return alert("Ingresá un precio válido.");
+    const found=costListPriceEntry(row.product);
+    const meta=found?.meta||{};
+    btn.disabled=true;
+    btn.textContent="Guardando…";
+    (async()=>{
+      try{
+        await saveCatalogProduct({
+          oldKey:found?.key||null,
+          name:meta.name||row.product,
+          category:meta.category||normalizedCostCategory(row),
+          value
+        });
+        renderPrices();
+        renderPricePrintSheet();
+        renderCostCenter();
+      }catch(err){
+        btn.disabled=false;
+        btn.textContent="Guardar";
+        alert("No se pudo actualizar el precio de lista: "+err.message);
+      }
+    })();
+    return;
+  }
   if(e.target.closest(".cost-reuse")){
     $("costProduct").value=row.product; if($("costCategory")) $("costCategory").value=normalizedCostCategory(row); $("costPurchase").value=row.purchase; $("costVatMode").value=row.vatMode; $("costMargin").value=row.marginPct; $("costMargin").dataset.userChanged="1"; renderCostResult(row); $("costPurchase").focus();
   }
