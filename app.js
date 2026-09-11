@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.59";
+const APP_VERSION = "35.3.60";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3441,7 +3441,7 @@ function renderBalances(){
 }
 
 
-// V35.3.59 — Centro de costos independiente. No modifica precios, pedidos ni estadísticas.
+// V35.3.60 — Centro de costos: rubros, filtros y ordenamiento. No modifica precios, pedidos ni estadísticas.
 const COST_CENTER_STORAGE_KEY = "don_zoilo_cost_center_v1";
 const COST_CENTER_SETTINGS_KEY = "don_zoilo_cost_center_settings_v1";
 
@@ -3486,6 +3486,26 @@ function fillCostProductList(){
   list.innerHTML=[...names].sort((a,b)=>a.localeCompare(b,"es")).map(name=>`<option value="${escapeHtml(name)}"></option>`).join("");
 }
 
+function inferCostCategory(product){
+  const target=String(product||"").trim().toLocaleLowerCase("es");
+  if(!target) return "Otros";
+  try{
+    for(const [category,items] of Object.entries(PRICE_CATALOG||{})){
+      if((items||[]).some(([name])=>String(name||"").trim().toLocaleLowerCase("es")===target)) return category;
+    }
+  }catch(_){ }
+  try{
+    for(const meta of Object.values(productCatalogMeta||{})){
+      if(String(meta?.name||"").trim().toLocaleLowerCase("es")===target && meta?.category) return String(meta.category);
+    }
+  }catch(_){ }
+  return "Otros";
+}
+
+function normalizedCostCategory(row){
+  return String(row?.category||inferCostCategory(row?.product)||"Otros");
+}
+
 function renderCostResult(row){
   const box=$("costResult"); if(!box) return;
   if(!row){ box.classList.add("hidden"); box.innerHTML=""; return; }
@@ -3511,12 +3531,22 @@ function renderCostCenter(){
   if($("costDefaultMargin") && document.activeElement!==$("costDefaultMargin")) $("costDefaultMargin").value=settings.margin;
   if($("costMargin") && !$("costMargin").dataset.userChanged) $("costMargin").value=settings.margin;
   const q=String($("costSearch")?.value||"").trim().toLowerCase();
-  const rows=costCenterRows().filter(r=>!q||String(r.product||"").toLowerCase().includes(q));
+  const categoryFilter=String($("costCategoryFilter")?.value||"");
+  const sortMode=String($("costSort")?.value||"name_asc");
+  const rows=costCenterRows()
+    .map(r=>({...r,category:normalizedCostCategory(r)}))
+    .filter(r=>(!q||String(r.product||"").toLowerCase().includes(q)) && (!categoryFilter||r.category===categoryFilter));
+  rows.sort((a,b)=>{
+    if(sortMode==="name_desc") return String(b.product||"").localeCompare(String(a.product||""),"es",{sensitivity:"base"});
+    if(sortMode==="price_asc") return Number(a.suggested||0)-Number(b.suggested||0) || String(a.product||"").localeCompare(String(b.product||""),"es",{sensitivity:"base"});
+    if(sortMode==="price_desc") return Number(b.suggested||0)-Number(a.suggested||0) || String(a.product||"").localeCompare(String(b.product||""),"es",{sensitivity:"base"});
+    return String(a.product||"").localeCompare(String(b.product||""),"es",{sensitivity:"base"});
+  });
   const list=$("costCenterList"); if(!list) return;
-  if(!rows.length){ list.innerHTML='<div class="empty-state">Todavía no hay productos calculados.</div>'; return; }
+  if(!rows.length){ list.innerHTML='<div class="empty-state">No hay productos para mostrar con esos filtros.</div>'; return; }
   list.innerHTML=rows.map(r=>`
     <div class="cost-row" data-cost-id="${escapeHtml(r.id)}">
-      <div><strong>${escapeHtml(r.product)}</strong><small>${r.vatMode==="included"?"Costo con IVA incluido":"Costo sin IVA"} · IVA ${Number(r.vatPct).toLocaleString("es-AR")}% · IIBB ${Number(r.iibbPct).toLocaleString("es-AR")}% · margen ${Number(r.marginPct).toLocaleString("es-AR")}%</small></div>
+      <div><strong>${escapeHtml(r.product)}</strong><small>${escapeHtml(r.category)} · ${r.vatMode==="included"?"Costo con IVA incluido":"Costo sin IVA"} · IVA ${Number(r.vatPct).toLocaleString("es-AR")}% · IIBB ${Number(r.iibbPct).toLocaleString("es-AR")}% · margen ${Number(r.marginPct).toLocaleString("es-AR")}%</small></div>
       <div><span>Costo</span><strong>${money(r.purchase)}</strong></div>
       <div><span>Costo total</span><strong>${money(r.totalCost)}</strong></div>
       <div class="cost-price"><span>Sugerido</span><strong>${money(r.suggested)}</strong></div>
@@ -3536,10 +3566,11 @@ async function submitCostCenter(e){
   const product=String($("costProduct")?.value||"").trim();
   const purchase=Number($("costPurchase")?.value||0);
   const vatMode=$("costVatMode")?.value||"without";
+  const category=String($("costCategory")?.value||inferCostCategory(product)||"Otros");
   const marginPct=Number($("costMargin")?.value||settings.margin);
   if(!product || !(purchase>0)) return alert("Ingresá el producto y un costo de compra mayor a 0.");
   const calc=calculateCostCenter(purchase,vatMode,settings.vat,settings.iibb,marginPct);
-  const row={id:uid(),product,purchase,vatMode,vatPct:settings.vat,iibbPct:settings.iibb,marginPct,...calc,created_at:new Date().toISOString()};
+  const row={id:uid(),product,category,purchase,vatMode,vatPct:settings.vat,iibbPct:settings.iibb,marginPct,...calc,created_at:new Date().toISOString()};
   let rows=costCenterRows();
   const key=product.toLocaleLowerCase("es");
   const existing=rows.findIndex(r=>String(r.product||"").toLocaleLowerCase("es")===key);
@@ -3551,6 +3582,9 @@ async function submitCostCenter(e){
 
 on("costCenterForm","submit",submitCostCenter);
 on("costSearch","input",renderCostCenter);
+on("costCategoryFilter","change",renderCostCenter);
+on("costSort","change",renderCostCenter);
+on("costProduct","change",()=>{ if($("costCategory")) $("costCategory").value=inferCostCategory($("costProduct")?.value); });
 on("costDefaultVat","change",persistCostDefaults);
 on("costDefaultIibb","change",persistCostDefaults);
 on("costDefaultMargin","change",persistCostDefaults);
@@ -3563,7 +3597,7 @@ document.addEventListener("click",e=>{
   const rows=costCenterRows(); const row=rows.find(r=>String(r.id)===String(rowEl.dataset.costId)); if(!row) return;
   if(e.target.closest(".cost-delete")){ saveCostCenterRows(rows.filter(r=>String(r.id)!==String(row.id))); renderCostCenter(); return; }
   if(e.target.closest(".cost-reuse")){
-    $("costProduct").value=row.product; $("costPurchase").value=row.purchase; $("costVatMode").value=row.vatMode; $("costMargin").value=row.marginPct; $("costMargin").dataset.userChanged="1"; renderCostResult(row); $("costPurchase").focus();
+    $("costProduct").value=row.product; if($("costCategory")) $("costCategory").value=normalizedCostCategory(row); $("costPurchase").value=row.purchase; $("costVatMode").value=row.vatMode; $("costMargin").value=row.marginPct; $("costMargin").dataset.userChanged="1"; renderCostResult(row); $("costPurchase").focus();
   }
 });
 

@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <title>Don Zoilo | Operaciones</title>
-  <link rel="stylesheet" href="styles.css?v=35.3.59" />
+  <link rel="stylesheet" href="styles.css?v=35.3.60" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <div class="brand">DON ZOILO</div>
-      <div class="subtitle">Control de operaciones · Versión 35.3.59 · Cuentas Corrientes · Estadísticas y vencimientos</div>
+      <div class="subtitle">Control de operaciones · Versión 35.3.60 · Cuentas Corrientes · Estadísticas y vencimientos</div>
     </div>
     <button id="installBtn" class="secondary hidden">Instalar app</button>
   </header>
@@ -967,6 +967,18 @@
               <option value="included">Ya incluye IVA</option>
             </select>
           </label>
+          <label>Rubro
+            <select id="costCategory">
+              <option value="Vacunos">Vacunos</option>
+              <option value="Pollos">Pollos</option>
+              <option value="Cerdo">Cerdo</option>
+              <option value="Achuras">Achuras</option>
+              <option value="Embutidos">Embutidos</option>
+              <option value="Granja">Granja</option>
+              <option value="Preparados">Preparados</option>
+              <option value="Otros">Otros</option>
+            </select>
+          </label>
           <label>Margen %
             <input id="costMargin" type="number" min="0" step="0.1" value="12" required>
           </label>
@@ -976,8 +988,27 @@
         <div id="costResult" class="cost-result hidden"></div>
 
         <div class="panel-head cost-history-head">
-          <div><h3>Productos calculados</h3><p class="muted small">Se guardan en este dispositivo como referencia. No alteran ningún dato operativo.</p></div>
-          <input id="costSearch" type="search" placeholder="Buscar producto">
+          <div><h3>Productos calculados</h3><p class="muted small">Se guardan en este dispositivo como referencia. Podés ordenar y filtrar sin alterar ningún dato operativo.</p></div>
+          <div class="cost-history-controls">
+            <input id="costSearch" type="search" placeholder="Buscar producto">
+            <select id="costCategoryFilter" aria-label="Filtrar por rubro">
+              <option value="">Todos los rubros</option>
+              <option value="Vacunos">Vacunos</option>
+              <option value="Pollos">Pollos</option>
+              <option value="Cerdo">Cerdo</option>
+              <option value="Achuras">Achuras</option>
+              <option value="Embutidos">Embutidos</option>
+              <option value="Granja">Granja</option>
+              <option value="Preparados">Preparados</option>
+              <option value="Otros">Otros</option>
+            </select>
+            <select id="costSort" aria-label="Ordenar productos">
+              <option value="name_asc">Producto A → Z</option>
+              <option value="name_desc">Producto Z → A</option>
+              <option value="price_asc">Precio sugerido: menor → mayor</option>
+              <option value="price_desc">Precio sugerido: mayor → menor</option>
+            </select>
+          </div>
         </div>
         <div id="costCenterList" class="cost-center-list"></div>
       </div>
@@ -1297,14 +1328,14 @@
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="cloud-config.js?v=35.3.59"></script>
-  <script src="app.js?v=35.3.59"></script>
+  <script src="cloud-config.js?v=35.3.60"></script>
+  <script src="app.js?v=35.3.60"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="stock.js?v=35.3.59"></script>
-  <script src="stock-ocr.js?v=35.3.59"></script>
-  <script src="caja-activos.js?v=35.3.59"></script>
-  <script src="balance-diario.js?v=35.3.59"></script>
-  <script src="vencimientos.js?v=35.3.59"></script>
-  <script src="estadisticas.js?v=35.3.59"></script>
+  <script src="stock.js?v=35.3.60"></script>
+  <script src="stock-ocr.js?v=35.3.60"></script>
+  <script src="caja-activos.js?v=35.3.60"></script>
+  <script src="balance-diario.js?v=35.3.60"></script>
+  <script src="vencimientos.js?v=35.3.60"></script>
+  <script src="estadisticas.js?v=35.3.60"></script>
 </body>
 </html>
