@@ -1,0 +1,12 @@
+DON ZOILO V35.3.61 — CENTRO DE COSTOS: PRECIO DE LISTA
+
+CAMBIO:
+- En Productos calculados se agrega una columna “Precio lista”.
+- Toma automáticamente el precio vigente del módulo Lista de precios.
+- El precio puede editarse y guardarse desde Centro de costos.
+- Al guardar, se actualiza la Lista de precios real y su lista A4.
+- Si el producto todavía no existe en Lista de precios, al guardar un valor se crea usando el rubro del Centro de costos.
+
+SEGURIDAD:
+- No modifica costos calculados, pedidos, cuentas corrientes, saldos, stock, balances ni estadísticas.
+- No requiere cambios SQL ni migraciones en Supabase.

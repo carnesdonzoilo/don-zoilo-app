@@ -1172,3 +1172,14 @@ dialog::backdrop{background:#0009}
 
 /* V35.3.60 Centro de costos — filtros y orden */
 .cost-history-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.cost-history-controls input,.cost-history-controls select{min-height:40px}.cost-history-controls input{min-width:220px}.cost-history-controls select{min-width:180px}.cost-form{grid-template-columns:1.6fr .9fr 1fr 1fr .8fr auto}@media(max-width:850px){.cost-history-controls{width:100%;justify-content:stretch}.cost-history-controls input,.cost-history-controls select{width:100%;max-width:none}.cost-form{grid-template-columns:1fr 1fr}}
+
+
+/* V35.3.61 Centro de costos — precio de lista editable */
+.cost-row{grid-template-columns:2fr .72fr .82fr .82fr 1.25fr auto}
+.cost-list-price{min-width:170px}
+.cost-list-price-edit{display:flex!important;flex-direction:row!important;gap:6px;align-items:center}
+.cost-list-price-input{width:110px;min-width:0;padding:8px 9px}
+.cost-list-price-edit button{padding:8px 10px;white-space:nowrap}
+.cost-list-price small{font-size:11px;line-height:1.2}
+@media(max-width:1050px){.cost-row{grid-template-columns:1.7fr .8fr .8fr .8fr 1.2fr}.cost-row-actions{grid-column:1/-1;justify-content:flex-end}}
+@media(max-width:850px){.cost-row{grid-template-columns:1fr 1fr}.cost-list-price{grid-column:1/-1}.cost-list-price-edit{max-width:320px}.cost-row-actions{grid-column:1/-1}}
