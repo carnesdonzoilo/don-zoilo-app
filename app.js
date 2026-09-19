@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.61";
+const APP_VERSION = "35.3.62";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3096,21 +3096,75 @@ function fillSupplierSelectors(){
   }
 }
 
+function supplierPeriodBounds(){
+  return {
+    from:String($("supplierDateFrom")?.value||""),
+    to:String($("supplierDateTo")?.value||"")
+  };
+}
+
+function supplierRawBalanceBefore(name,date){
+  const list=supplierMovementsFor(name).filter(m=>!date || String(m.date||"")<date);
+  const opening=list.filter(isSupplierOpeningMovement).reduce((s,m)=>s+Number(m.amount||0),0);
+  const purchases=list.filter(m=>m.type==="compra" && !isSupplierOpeningMovement(m)).reduce((s,m)=>s+Number(m.amount||0),0);
+  const payments=list.filter(m=>m.type==="pago").reduce((s,m)=>s+Number(m.amount||0),0);
+  return opening+purchases-payments;
+}
+
+function supplierBalanceBefore(name,date){
+  if(!date) return 0;
+  const checkpoint=supplierCheckpointBalance(name);
+  if(checkpoint!==null && date>SUPPLIER_CHECKPOINT_DATE){
+    const newer=supplierMovementsFor(name).filter(m=>String(m.date||"")>SUPPLIER_CHECKPOINT_DATE && String(m.date||"")<date);
+    return checkpoint + newer.reduce((saldo,m)=>saldo+(m.type==="compra"?Number(m.amount||0):-Number(m.amount||0)),0);
+  }
+  return supplierRawBalanceBefore(name,date);
+}
+
+function supplierStatementData(name){
+  const {from,to}=supplierPeriodBounds();
+  let list=supplierMovementsFor(name).slice().sort((a,b)=>{
+    const d=String(a.date||"").localeCompare(String(b.date||""));
+    return d || String(a.created_at||"").localeCompare(String(b.created_at||""));
+  });
+  if(from) list=list.filter(m=>String(m.date||"")>=from);
+  if(to) list=list.filter(m=>String(m.date||"")<=to);
+  const opening=from?supplierBalanceBefore(name,from):0;
+  let running=opening;
+  const rows=list.map(m=>{
+    running += m.type==="compra"?Number(m.amount||0):-Number(m.amount||0);
+    return {movement:m,balance:running};
+  });
+  const purchases=list.filter(m=>m.type==="compra" && !isSupplierOpeningMovement(m)).reduce((s,m)=>s+Number(m.amount||0),0);
+  const payments=list.filter(m=>m.type==="pago").reduce((s,m)=>s+Number(m.amount||0),0);
+  return {from,to,opening,rows,purchases,payments,closing:running};
+}
+
 function renderSupplierHistory(name){
   const box=$("supplierHistoryList");
+  const summary=$("supplierPeriodSummary");
   if(!box) return;
   box.innerHTML="";
   if(!name){
+    if(summary) summary.hidden=true;
     box.innerHTML='<div class="supplier-empty">Elegí un proveedor para ver su cuenta corriente.</div>';
     return;
   }
-  const list=supplierMovementsFor(name).slice()
-    .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)));
-  if(!list.length){
-    box.innerHTML='<div class="supplier-empty">Este proveedor todavía no tiene movimientos.</div>';
+  const data=supplierStatementData(name);
+  const filtered=!!(data.from||data.to);
+  if(summary){
+    summary.hidden=!filtered;
+    if(filtered) summary.innerHTML=`<strong>Período:</strong> ${data.from?fmtDate(data.from):"Inicio"} a ${data.to?fmtDate(data.to):"Hoy"} · <strong>Saldo anterior:</strong> ${money(data.opening)} · <strong>Compras:</strong> ${money(data.purchases)} · <strong>Pagos:</strong> ${money(data.payments)} · <strong>Saldo al cierre:</strong> ${money(data.closing)}`;
+  }
+  if(!data.rows.length){
+    box.innerHTML='<div class="supplier-empty">No hay movimientos en el período seleccionado.</div>';
     return;
   }
-  list.forEach(movement=>{
+  const header=document.createElement("div");
+  header.className="supplier-history-header";
+  header.innerHTML='<div>Fecha</div><div>Tipo / detalle</div><div>Debe</div><div>Haber</div><div>Saldo</div><div></div>';
+  box.append(header);
+  data.rows.slice().reverse().forEach(({movement,balance})=>{
     const isDebt=movement.type==="compra";
     const label=isSupplierOpeningMovement(movement)?"Saldo inicial":movement.type==="compra"?"Compra":"Pago";
     const dueMatch=String(movement.notes||"").match(/VENCE:\s*(\d{4}-\d{2}-\d{2})/);
@@ -3119,15 +3173,11 @@ function renderSupplierHistory(name){
     row.className=`supplier-history-row ${isDebt?"debt":"payment"}`;
     row.innerHTML=`
       <div class="date">${fmtDate(movement.date)}</div>
-      <div>
-        <strong>${label} · ${escapeHtml(movement.concept||"")}${dueText}</strong>
-        <small>${escapeHtml(movement.payment_method||"")}</small>
-      </div>
-      <div class="amount">${isDebt?"+":"−"}${money(movement.amount||0)}</div>
-      <div class="supplier-history-actions">
-        <button type="button" class="supplier-edit-btn">Editar</button>
-        <button type="button" class="supplier-delete-btn">Eliminar</button>
-      </div>`;
+      <div><strong>${label} · ${escapeHtml(movement.concept||"")}${dueText}</strong><small>${escapeHtml(movement.payment_method||"")}</small></div>
+      <div class="amount debit-col">${isDebt?money(movement.amount||0):""}</div>
+      <div class="amount credit-col">${!isDebt?money(movement.amount||0):""}</div>
+      <div class="amount balance-col">${money(balance)}</div>
+      <div class="supplier-history-actions"><button type="button" class="supplier-edit-btn">Editar</button><button type="button" class="supplier-delete-btn">Eliminar</button></div>`;
     row.querySelector(".supplier-edit-btn").addEventListener("click",()=>editSupplierMovement(movement));
     row.querySelector(".supplier-delete-btn").addEventListener("click",()=>deleteSupplierMovement(movement));
     box.append(row);
@@ -3207,24 +3257,24 @@ async function deleteSupplierMovement(movement){
 function printSupplierStatement(){
   const supplier=$("supplierAccountSelect")?.value||"";
   if(!supplier) return alert("Elegí un proveedor.");
-  const totals=supplierTotals(supplier);
-  const rows=supplierMovementsFor(supplier).slice()
-    .sort((a,b)=>String(a.date).localeCompare(String(b.date)))
-    .map(m=>{
-      const debit=m.type==="compra";
-      const label=isSupplierOpeningMovement(m)?"Saldo inicial":m.type==="compra"?"Compra":"Pago";
-      return `<tr><td>${fmtDate(m.date)}</td><td>${escapeHtml(label)}</td><td>${escapeHtml(m.concept||"")}</td><td class="num">${debit?money(m.amount):""}</td><td class="num">${!debit?money(m.amount):""}</td></tr>`;
-    }).join("");
+  const data=supplierStatementData(supplier);
+  const periodText=(data.from||data.to)?`${data.from?fmtDate(data.from):"Inicio"} a ${data.to?fmtDate(data.to):"Hoy"}`:"Todos los movimientos";
+  const rows=data.rows.map(({movement:m,balance})=>{
+    const debit=m.type==="compra";
+    const label=isSupplierOpeningMovement(m)?"Saldo inicial":m.type==="compra"?"Compra":"Pago";
+    return `<tr><td>${fmtDate(m.date)}</td><td>${escapeHtml(label)}</td><td>${escapeHtml(m.concept||"")}</td><td class="num">${debit?money(m.amount):""}</td><td class="num">${!debit?money(m.amount):""}</td><td class="num"><strong>${money(balance)}</strong></td></tr>`;
+  }).join("");
   const popup=window.open("","_blank");
   if(!popup) return alert("El navegador bloqueó la ventana.");
   popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(supplier)}</title>
-  <style>body{font-family:Arial;padding:18mm}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:7px;font-size:12px}th{background:#eee}.num{text-align:right}.summary{margin-top:14px;margin-left:auto;width:320px}.summary div{display:flex;justify-content:space-between;padding:6px;border-bottom:1px solid #ccc}.final{font-size:18px;font-weight:900;border-top:3px solid #111}@page{size:A4 portrait;margin:10mm}</style>
-  </head><body><h1>DON ZOILO</h1><h2>Estado de cuenta de proveedor: ${escapeHtml(supplier)}</h2>
-  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="summary"><div><span>Saldo inicial</span><strong>${money(totals.opening)}</strong></div><div><span>Compras</span><strong>${money(totals.purchases)}</strong></div><div><span>Pagos</span><strong>${money(totals.payments)}</strong></div><div class="final"><span>Saldo actual</span><strong>${money(totals.balance)}</strong></div></div>
+  <style>body{font-family:Arial;padding:24px;color:#111}h1{margin:0;font-size:20px}h2{margin:5px 0 4px;font-size:16px}.period{margin:0 0 16px;color:#555}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #bbb;padding:7px;text-align:left}th{background:#eee}.num{text-align:right;white-space:nowrap}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.summary div{border:1px solid #bbb;padding:9px}.summary span{display:block;font-size:10px;color:#555}.summary strong{display:block;margin-top:4px}.final{background:#eee}</style>
+  </head><body><h1>DON ZOILO</h1><h2>Estado de cuenta de proveedor: ${escapeHtml(supplier)}</h2><p class="period">Período: ${periodText}</p>
+  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Debe</th><th>Haber</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="summary"><div><span>Saldo anterior</span><strong>${money(data.opening)}</strong></div><div><span>Compras período</span><strong>${money(data.purchases)}</strong></div><div><span>Pagos período</span><strong>${money(data.payments)}</strong></div><div class="final"><span>Saldo al cierre</span><strong>${money(data.closing)}</strong></div></div>
   <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script></body></html>`);
   popup.document.close();
 }
+
 function renderSuppliers(){
   fillSupplierSelectors();
   renderSupplierDirectory();
@@ -5489,6 +5539,10 @@ on("supplierPurchaseForm","submit",submitSupplierPurchase);
 on("supplierPaymentForm","submit",submitSupplierPayment);
 on("supplierAccountSelect","change",renderSuppliers);
 on("refreshSuppliers","click",renderSuppliers);
+on("applySupplierPeriod","click",()=>renderSupplierHistory($("supplierAccountSelect")?.value||""));
+on("clearSupplierPeriod","click",()=>{ if($("supplierDateFrom")) $("supplierDateFrom").value=""; if($("supplierDateTo")) $("supplierDateTo").value=""; renderSupplierHistory($("supplierAccountSelect")?.value||""); });
+on("supplierDateFrom","change",()=>renderSupplierHistory($("supplierAccountSelect")?.value||""));
+on("supplierDateTo","change",()=>renderSupplierHistory($("supplierAccountSelect")?.value||""));
 on("quickExpenseForm","submit",saveQuickExpense);
 on("expenseCategory","change",()=>{
   selectedExpenseCategory=$("expenseCategory")?.value||"";
