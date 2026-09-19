@@ -1,0 +1,15 @@
+DON ZOILO V35.3.66 — UNIFICACIONES ESTADÍSTICAS SEPTIEMBRE
+
+Se agregan equivalencias SOLO para Estadísticas y sus PDF:
+- Paleta = Paleta + Paleta trozo
+- Bife angosto = Bife angosto + Bife angosto 1 de dedo
+- Pata y muslo = Pata y muslo + Pata muslo
+- Asado = Asado + Asado banderita
+- Matambrito = Matambrito + Matambre de cerdo
+- Morcilla = Morcilla + Morcilla atada
+- Parrillera = Parrillera + Salchicha parrillera
+- Alita = Alita + Alitas
+
+Las unificaciones suman kilos/unidades y facturación en el ranking y PDF.
+NO se modifican pedidos históricos, remitos, stock, precios, cuentas corrientes ni balances.
+NO requiere SQL/Supabase.
