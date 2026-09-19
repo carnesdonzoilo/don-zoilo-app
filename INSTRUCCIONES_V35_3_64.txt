@@ -1,0 +1,12 @@
+DON ZOILO V35.3.64 — CORRECCIÓN SEGURA DE IMPUTACIONES HISTÓRICAS
+
+- Agrega botón 🔗 Imputación en cada cobranza de Cuenta Corriente.
+- Permite vincular una cobranza histórica a uno o varios números de remito/factura.
+- La corrección SOLO actualiza la referencia de imputación en notes del movimiento.
+- NO cambia importe, fecha, cliente, saldo total, checkpoints ni crea movimientos nuevos.
+- Pendientes reserva los comprobantes que tienen una cobranza específica vinculada para que pagos FIFO anteriores no los consuman por error.
+- Las cobranzas nuevas siguen respetando primero los comprobantes seleccionados.
+- Sin selección explícita, se mantiene FIFO.
+- No requiere SQL.
+
+Ejemplo MORON: vincular la cobranza $827.410 del 15/09 al Remito 4023. El Remito 4011 del 03/09 puede quedar pendiente aunque sea anterior.
