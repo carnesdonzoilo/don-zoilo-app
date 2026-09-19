@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.62";
+const APP_VERSION = "35.3.66";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2225,6 +2225,95 @@ async function saveAccountDocumentEdit(event){
   }
 }
 
+function accountCollectionAllocationLabel(movement){
+  const ids=collectionTargetMovementIds(movement);
+  if(!ids.length) return "Sin imputación específica · aplica por antigüedad";
+  const sales=accountMovementsFor(movement.party||"").filter(m=>m.type==="venta");
+  const labels=ids.map(id=>{
+    const sale=sales.find(m=>String(m.id||"")===String(id));
+    if(!sale) return `Comprobante ${id}`;
+    const meta=movementDocumentMeta(sale);
+    if(meta.remito) return `Remito ${meta.remito}`;
+    if(meta.invoice) return `Factura ${meta.invoice}`;
+    return `${fmtDate(sale.date)} · ${sale.concept||"Venta"}`;
+  });
+  return `Imputado a: ${labels.join(" · ")}`;
+}
+
+async function editCollectionAllocation(movement){
+  if(!movement || movement.type!=="cobro") return;
+  const client=canonicalClientDisplayName(movement.party||"");
+  const sales=accountMovementsFor(client)
+    .filter(m=>m.type==="venta" && !isBalanceCorrectionMovement(m))
+    .slice()
+    .sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
+  if(!sales.length) return alert("No hay ventas/remitos disponibles para vincular.");
+
+  const currentIds=collectionTargetMovementIds(movement);
+  const currentDocs=currentIds.map(id=>{
+    const m=sales.find(x=>String(x.id||"")===String(id));
+    if(!m) return "";
+    const meta=movementDocumentMeta(m);
+    return meta.remito||meta.invoice||"";
+  }).filter(Boolean);
+
+  const recent=sales.slice(-30).map(m=>{
+    const meta=movementDocumentMeta(m);
+    const doc=meta.remito?`Remito ${meta.remito}`:meta.invoice?`Factura ${meta.invoice}`:"Sin número";
+    return `${fmtDate(m.date)} · ${doc} · ${money(m.amount||0)}`;
+  }).join("\n");
+
+  const entered=prompt(
+    `Corregir imputación de esta cobranza (${money(movement.amount||0)} · ${fmtDate(movement.date)}).\n\n`+
+    `Escribí el/los NÚMEROS DE REMITO o FACTURA separados por coma.\n`+
+    `Esto NO cambia importe, fecha ni saldo total; solo vincula la cobranza con los comprobantes correctos.\n\n`+
+    `Comprobantes recientes:\n${recent}`,
+    currentDocs.join(", ")
+  );
+  if(entered===null) return;
+  const docs=entered.split(",").map(x=>x.trim()).filter(Boolean);
+  if(!docs.length) return alert("No se hizo ningún cambio. Para cobranzas sin imputación específica se mantiene la regla por antigüedad.");
+
+  const matched=[];
+  const missing=[];
+  for(const doc of docs){
+    const normalized=String(doc).toUpperCase().replace(/^(REMITO|FACTURA|FC)\s*/i,"").trim();
+    const sale=sales.find(m=>{
+      const meta=movementDocumentMeta(m);
+      return [meta.remito,meta.invoice].some(v=>String(v||"").toUpperCase().trim()===normalized);
+    });
+    if(sale && !matched.some(x=>String(x.id)===String(sale.id))) matched.push(sale);
+    else if(!sale) missing.push(doc);
+  }
+  if(missing.length) return alert(`No encontré estos comprobantes para ${client}: ${missing.join(", ")}. No se modificó nada.`);
+
+  const summary=matched.map(m=>{
+    const meta=movementDocumentMeta(m);
+    return `${fmtDate(m.date)} · ${meta.remito?`Remito ${meta.remito}`:`Factura ${meta.invoice}`} · ${money(m.amount||0)}`;
+  }).join("\n");
+  if(!confirm(`Vincular ${money(movement.amount||0)} del ${fmtDate(movement.date)} a:\n\n${summary}\n\nNo se modifica el monto de la cobranza ni el saldo total. ¿Confirmar?`)) return;
+
+  const cleaned=String(movement.notes||"")
+    .replace(/(?:^|\|)\s*IMPUTA_MOVEMENT_IDS?:[^|]+(?=\||$)/g,"")
+    .replace(/^\s*\|\s*|\s*\|\s*$/g,"")
+    .trim();
+  const allocation=`IMPUTA_MOVEMENT_IDS:${matched.map(m=>m.id).join(",")}`;
+  const notes=[allocation,cleaned].filter(Boolean).join(" | ");
+
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").update({notes}).eq("id",movement.id);
+      if(error) throw error;
+    }
+    movement.notes=notes;
+    localSave();
+    renderAll();
+    showDeliveryToast("Imputación corregida sin modificar el saldo total.");
+  }catch(error){
+    alert("No se pudo corregir la imputación: "+error.message);
+  }
+}
+
 function renderAccountHistory(client){
   const box=$("accountHistoryList");
   if(!box) return;
@@ -2271,11 +2360,14 @@ function renderAccountHistory(client){
         <strong>${label} · ${escapeHtml(m.concept||"")}</strong>
         ${documentInfo?`<small class="account-document-meta">${escapeHtml(documentInfo)}</small>`:""}
         <small>${escapeHtml(m.payment_method||"")} ${cleanAccountMovementNotes(m)?`· ${escapeHtml(cleanAccountMovementNotes(m))}`:""}</small>
+        ${m.type==="cobro"?`<small class="account-document-meta">${escapeHtml(accountCollectionAllocationLabel(m))}</small>`:""}
       </div>
       <div class="history-amount">${sign}${money(m.amount||0)}</div>
-      ${m.type==="venta"?'<button type="button" class="secondary account-edit-document-btn">✏️ Comprobante</button>':""}`;
+      ${m.type==="venta"?'<button type="button" class="secondary account-edit-document-btn">✏️ Comprobante</button>':m.type==="cobro"?'<button type="button" class="secondary account-edit-allocation-btn">🔗 Imputación</button>':""}`;
     if(m.type==="venta"){
       row.querySelector(".account-edit-document-btn")?.addEventListener("click",()=>openAccountDocumentEdit(m));
+    }else if(m.type==="cobro"){
+      row.querySelector(".account-edit-allocation-btn")?.addEventListener("click",()=>editCollectionAllocation(m));
     }
     box.append(row);
   });
@@ -2564,10 +2656,10 @@ function fillCollectionPendingTargets(client,preferredIds=[]){
   const validPreferred=preferred.filter(id=>
     pending.some(d=>String(d.movement.id||"")===String(id))
   );
-  const selectedIds=new Set(validPreferred.length
-    ? validPreferred
-    : [String(pending[0].movement.id||"")]
-  );
+  // V35.3.64: no se preselecciona el comprobante más antiguo.
+  // Si el usuario marca uno o varios, esa selección tiene prioridad real.
+  // Si no marca ninguno, recién ahí se conserva el comportamiento FIFO.
+  const selectedIds=new Set(validPreferred);
 
   pending.forEach((debt,index)=>{
     const m=debt.movement;
@@ -2599,6 +2691,23 @@ async function saveCollection(event){
   if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
 
   const concept=detail||"Cobranza";
+
+  // V35.3.64: confirmar explícitamente la imputación antes de guardar.
+  if(targetMovementIds.length){
+    const selectedDetails=targetMovementIds.map(id=>{
+      const input=[...document.querySelectorAll('#collectionTargets input[type="checkbox"]')]
+        .find(el=>String(el.value||"")===String(id));
+      const label=input?.closest("label")?.innerText?.replace(/\s+/g," ")?.trim();
+      return label||id;
+    });
+    const message=`Vas a registrar ${money(amount)} para ${client} e imputarlo primero a:
+
+${selectedDetails.map(x=>`• ${x}`).join("\n")}
+
+¿Confirmar cobranza?`;
+    if(!confirm(message)) return;
+  }
+
   const movement={
     id:uid(),
     date,
@@ -2733,6 +2842,14 @@ function pendingAccountDebtsFor(client){
         return da.localeCompare(db);
       });
 
+    // V35.3.64: una cobranza vinculada reserva su comprobante.
+    // Así una cobranza FIFO anterior no puede consumir por error un remito
+    // que sabemos que fue cancelado específicamente después.
+    const futureTargetLocks=new Map();
+    newer.filter(m=>m.type==="cobro").forEach(m=>{
+      collectionTargetMovementIds(m).forEach(id=>futureTargetLocks.set(String(id),(futureTargetLocks.get(String(id))||0)+1));
+    });
+
     const applyCredit=(debt)=>{
       if(credit<=0 || debt.remaining<=0) return;
       const applied=Math.min(credit,debt.remaining);
@@ -2749,9 +2866,29 @@ function pendingAccountDebtsFor(client){
       }
       if(m.type==="cobro"){
         let payment=Math.max(0,Number(m.amount||0));
+
+        // V35.3.64: respetar primero los comprobantes elegidos manualmente.
+        // Antes, en clientes con checkpoint (ej. MORON/INTENDENCIA), esta rama
+        // ignoraba IMPUTA_MOVEMENT_IDS y siempre consumía la deuda más antigua.
+        const targetIds=collectionTargetMovementIds(m);
+        for(const targetId of targetIds){
+          if(payment<=0) break;
+          const target=debts.find(d=>String(d.movement.id||"")===String(targetId) && d.remaining>0);
+          if(target){
+            const applied=Math.min(payment,target.remaining);
+            target.remaining-=applied;
+            payment-=applied;
+          }
+          const key=String(targetId);
+          if(futureTargetLocks.has(key)) futureTargetLocks.set(key,Math.max(0,(futureTargetLocks.get(key)||0)-1));
+        }
+
+        // Solo el remanente no imputado continúa por antigüedad (FIFO),
+        // sin tocar comprobantes reservados para cobranzas vinculadas.
         for(const debt of debts){
           if(payment<=0) break;
           if(debt.remaining<=0) continue;
+          if((futureTargetLocks.get(String(debt.movement.id||""))||0)>0) continue;
           const applied=Math.min(payment,debt.remaining);
           debt.remaining-=applied;
           payment-=applied;
@@ -2781,6 +2918,11 @@ function pendingAccountDebtsFor(client){
     credit-=applied;
   };
 
+  const futureTargetLocks=new Map();
+  list.filter(m=>m.type==="cobro").forEach(m=>{
+    collectionTargetMovementIds(m).forEach(id=>futureTargetLocks.set(String(id),(futureTargetLocks.get(String(id))||0)+1));
+  });
+
   list.forEach(m=>{
     const isDebt=m.type==="venta" || isOpeningBalanceMovement(m);
     if(isDebt){
@@ -2796,14 +2938,18 @@ function pendingAccountDebtsFor(client){
       for(const targetId of targetIds){
         if(payment<=0) break;
         const target=debts.find(d=>String(d.movement.id||"")===String(targetId) && d.remaining>0);
-        if(!target) continue;
-        const applied=Math.min(payment,target.remaining);
-        target.remaining-=applied;
-        payment-=applied;
+        if(target){
+          const applied=Math.min(payment,target.remaining);
+          target.remaining-=applied;
+          payment-=applied;
+        }
+        const key=String(targetId);
+        if(futureTargetLocks.has(key)) futureTargetLocks.set(key,Math.max(0,(futureTargetLocks.get(key)||0)-1));
       }
       for(const debt of debts){
         if(payment<=0) break;
         if(debt.remaining<=0) continue;
+        if((futureTargetLocks.get(String(debt.movement.id||""))||0)>0) continue;
         const applied=Math.min(payment,debt.remaining);
         debt.remaining-=applied;
         payment-=applied;
