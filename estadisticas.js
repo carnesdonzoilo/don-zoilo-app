@@ -307,49 +307,12 @@
     </tr>`;
   }
 
-  function printStatsRanking(kind){
-    // V35.3.65: impresión aislada de estadísticas. No modifica datos ni cálculos.
-    renderStatistics();
-    const from=byId('statsDateFrom')?.value || today();
-    const to=byId('statsDateTo')?.value || today();
-    const client=byId('statsClientFilter')?.value || '';
-    const isClients=kind==='clients';
-    const tableBody=byId(isClients?'statsClientRankingBody':'statsRankingBody');
-    if(!tableBody || !tableBody.children.length){
-      alert('No hay datos para imprimir en el período seleccionado.');
-      return;
-    }
-    const title=isClients?'Ranking de ventas a clientes':'Ranking de productos vendidos';
-    const subtitle=`Período: ${displayDate(from)} al ${displayDate(to)}${(!isClients && client)?` · Cliente: ${client}`:''}`;
-    const headers=isClients
-      ? '<tr><th>#</th><th>Cliente</th><th>Kilos</th><th>Pedidos</th><th>Facturación</th></tr>'
-      : '<tr><th>#</th><th>Producto</th><th>Kilos</th><th>Otras unidades</th><th>Remitos</th><th>Facturación</th></tr>';
-    const totalKg=byId('statsTotalKg')?.textContent||'';
-    const totalBilling=byId('statsTotalBilling')?.textContent||'';
-    const remitos=byId('statsRemitoCount')?.textContent||'';
-    const w=window.open('','_blank');
-    if(!w){ alert('El navegador bloqueó la ventana de impresión. Habilitá ventanas emergentes para esta página.'); return; }
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
-      @page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10.5px}
-      h1{font-size:20px;margin:0 0 4px}.brand{font-size:13px;font-weight:700;letter-spacing:.7px;margin-bottom:12px}.period{margin-bottom:12px;color:#444}
-      .summary{display:flex;gap:18px;border:1px solid #bbb;padding:8px 10px;margin-bottom:12px}.summary b{display:block;font-size:12px;margin-top:2px}
-      table{width:100%;border-collapse:collapse}th,td{border:1px solid #aaa;padding:5px 6px;text-align:left}th{background:#eee}td:nth-last-child(1),th:nth-last-child(1){text-align:right}
-      tr:last-child td{font-weight:700;border-top:2px solid #222}.footer{margin-top:10px;font-size:9px;color:#666;text-align:right}
-    </style></head><body><div class="brand">DON ZOILO · ESTADÍSTICAS</div><h1>${title}</h1><div class="period">${subtitle}</div>
-    <div class="summary"><div>Kilos vendidos<b>${totalKg}</b></div><div>Facturación<b>${totalBilling}</b></div><div>Remitos entregados<b>${remitos}</b></div></div>
-    <table><thead>${headers}</thead><tbody>${tableBody.innerHTML}</tbody></table><div class="footer">Don Zoilo · Versión 35.3.65</div>
-    <script>window.onload=()=>setTimeout(()=>window.print(),150);<\/script></body></html>`);
-    w.document.close();
-  }
-
   function initStatistics(){
     if(!byId('statistics')) return;
     setRange('month');
     fillClients();
     document.querySelectorAll('.stats-period-btn').forEach(btn=>btn.addEventListener('click',()=>setRange(btn.dataset.period)));
     byId('statsApply')?.addEventListener('click',renderStatistics);
-    byId('statsPrintProducts')?.addEventListener('click',()=>printStatsRanking('products'));
-    byId('statsPrintClients')?.addEventListener('click',()=>printStatsRanking('clients'));
     byId('statsRefresh')?.addEventListener('click',async()=>{
       const btn=byId('statsRefresh');
       const old=btn.textContent; btn.disabled=true; btn.textContent='Actualizando…';
