@@ -1,0 +1,9 @@
+DON ZOILO V35.3.63 — CORRECCIÓN IMPUTACIÓN DE COBRANZAS
+
+- Corrige la imputación manual de cobranzas en clientes con checkpoint protegido (incluye MORON PLAZA e INTENDENCIA).
+- Si se selecciona un comprobante, el pago se aplica primero a ese comprobante.
+- Se eliminó la preselección automática del comprobante más antiguo.
+- Si no se selecciona ningún comprobante, se mantiene FIFO (más antiguo primero).
+- Antes de guardar una cobranza con comprobantes seleccionados se muestra una confirmación con el importe y los comprobantes elegidos.
+- No modifica movimientos históricos, saldos conciliados ni checkpoints.
+- No requiere SQL ni cambios en Supabase.
