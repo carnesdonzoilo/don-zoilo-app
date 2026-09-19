@@ -1,0 +1,10 @@
+DON ZOILO V35.3.62 — PROVEEDORES: FILTRO POR PERÍODO Y SALDO CORRIDO
+
+- Agrega Desde/Hasta en Cuenta corriente de proveedores.
+- Calcula y muestra Saldo anterior al período elegido.
+- Muestra Compras, Pagos y Saldo al cierre del período.
+- Cada movimiento ahora muestra Debe, Haber y Saldo acumulado.
+- La impresión respeta el período y agrega columna Saldo.
+- No modifica movimientos ni saldos guardados.
+- Mantiene intactos los checkpoints protegidos de proveedores.
+- No requiere SQL.
