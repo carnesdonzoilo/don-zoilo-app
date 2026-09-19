@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.62";
+const APP_VERSION = "35.3.63";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2564,10 +2564,10 @@ function fillCollectionPendingTargets(client,preferredIds=[]){
   const validPreferred=preferred.filter(id=>
     pending.some(d=>String(d.movement.id||"")===String(id))
   );
-  const selectedIds=new Set(validPreferred.length
-    ? validPreferred
-    : [String(pending[0].movement.id||"")]
-  );
+  // V35.3.63: no se preselecciona el comprobante más antiguo.
+  // Si el usuario marca uno o varios, esa selección tiene prioridad real.
+  // Si no marca ninguno, recién ahí se conserva el comportamiento FIFO.
+  const selectedIds=new Set(validPreferred);
 
   pending.forEach((debt,index)=>{
     const m=debt.movement;
@@ -2599,6 +2599,23 @@ async function saveCollection(event){
   if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
 
   const concept=detail||"Cobranza";
+
+  // V35.3.63: confirmar explícitamente la imputación antes de guardar.
+  if(targetMovementIds.length){
+    const selectedDetails=targetMovementIds.map(id=>{
+      const input=[...document.querySelectorAll('#collectionTargets input[type="checkbox"]')]
+        .find(el=>String(el.value||"")===String(id));
+      const label=input?.closest("label")?.innerText?.replace(/\s+/g," ")?.trim();
+      return label||id;
+    });
+    const message=`Vas a registrar ${money(amount)} para ${client} e imputarlo primero a:
+
+${selectedDetails.map(x=>`• ${x}`).join("\n")}
+
+¿Confirmar cobranza?`;
+    if(!confirm(message)) return;
+  }
+
   const movement={
     id:uid(),
     date,
@@ -2749,6 +2766,21 @@ function pendingAccountDebtsFor(client){
       }
       if(m.type==="cobro"){
         let payment=Math.max(0,Number(m.amount||0));
+
+        // V35.3.63: respetar primero los comprobantes elegidos manualmente.
+        // Antes, en clientes con checkpoint (ej. MORON/INTENDENCIA), esta rama
+        // ignoraba IMPUTA_MOVEMENT_IDS y siempre consumía la deuda más antigua.
+        const targetIds=collectionTargetMovementIds(m);
+        for(const targetId of targetIds){
+          if(payment<=0) break;
+          const target=debts.find(d=>String(d.movement.id||"")===String(targetId) && d.remaining>0);
+          if(!target) continue;
+          const applied=Math.min(payment,target.remaining);
+          target.remaining-=applied;
+          payment-=applied;
+        }
+
+        // Solo el remanente no imputado continúa por antigüedad (FIFO).
         for(const debt of debts){
           if(payment<=0) break;
           if(debt.remaining<=0) continue;
