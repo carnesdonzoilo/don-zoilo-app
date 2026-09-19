@@ -1,0 +1,11 @@
+DON ZOILO V35.3.65 — PDF DE ESTADÍSTICAS
+
+- Agrega botón PDF productos en Estadísticas.
+- Agrega botón PDF clientes en Estadísticas.
+- Respeta el período seleccionado.
+- El PDF de productos respeta también el filtro de cliente y el orden actual.
+- El ranking de clientes imprime todos los clientes del período, igual que la pantalla.
+- Incluye kilos, facturación y remitos en el encabezado.
+- Abre el diálogo de impresión del navegador: elegir “Guardar como PDF”.
+- No modifica pedidos, saldos, cobranzas, estadísticas ni Supabase.
+- No requiere SQL.
