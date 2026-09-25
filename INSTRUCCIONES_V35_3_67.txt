@@ -1,0 +1,9 @@
+DON ZOILO V35.3.67 — CORRECCIÓN ESTADO DE CUENTA PROVEEDORES
+
+- Corrige el detalle/impresión de proveedores con saldo conciliado protegido (Jorge y Tito).
+- El estado de cuenta ahora parte del mismo checkpoint del 19/08/2026 que usa el saldo principal.
+- No vuelve a aplicar pagos/compras históricos anteriores al checkpoint.
+- El saldo corrido y el saldo al cierre deben coincidir con la cuenta principal.
+- No modifica, borra ni crea movimientos.
+- No modifica checkpoints ni saldos guardados.
+- No requiere SQL ni cambios en Supabase.
