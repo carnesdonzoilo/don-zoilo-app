@@ -138,7 +138,7 @@ function injectStyles(){if($('dailyBalanceStyles'))return;const s=document.creat
 #dailyBalance .income-detail-head{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px;background:#f3f5f7}
 #dailyBalance .income-detail-head h4{margin:0}
 #dailyBalance .income-detail-row{display:grid;grid-template-columns:100px 120px 1fr auto;gap:10px;padding:9px 12px;border-top:1px solid #eceff3;font-size:.88rem}
-#dailyBalance .income-detail-total{display:flex;justify-content:space-between;padding:12px;font-weight:900;border-top:2px solid #101820}@media(max-width:800px){#dailyBalance .month-summary{grid-template-columns:1fr}#dailyBalance .balance-grid{grid-template-columns:1fr}#dailyBalance .balance-result{grid-template-columns:repeat(2,1fr)}#dailyBalance .history-row{grid-template-columns:90px 1fr 1fr}.history-row>*:last-child{display:none}}`;
+#dailyBalance .income-detail-summary{padding:12px;background:#fbfcfd;border-top:1px solid #eceff3}#dailyBalance .income-detail-summary-title{font-weight:900;margin-bottom:8px}#dailyBalance .income-detail-summary-row{display:grid;grid-template-columns:1fr auto 70px;gap:10px;padding:6px 0;border-top:1px solid #eceff3;font-size:.88rem}#dailyBalance .income-detail-summary-row:first-of-type{border-top:0}#dailyBalance .income-detail-summary-row strong,#dailyBalance .income-detail-summary-row span:last-child{text-align:right;white-space:nowrap}#dailyBalance .income-detail-total{display:flex;justify-content:space-between;padding:12px;font-weight:900;border-top:2px solid #101820}@media(max-width:800px){#dailyBalance .month-summary{grid-template-columns:1fr}#dailyBalance .balance-grid{grid-template-columns:1fr}#dailyBalance .balance-result{grid-template-columns:repeat(2,1fr)}#dailyBalance .history-row{grid-template-columns:90px 1fr 1fr}.history-row>*:last-child{display:none}}`;
 document.head.appendChild(s)}
 function injectUI(){
   if($('dailyBalance'))return;
@@ -303,8 +303,20 @@ function showIncomeDetail(key,title){
     .filter(m=>cats.includes(expenseCategoryForIncome(m)))
     .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
   const total=rows.reduce((s,m)=>s+num(m.amount),0);
+  // V35.3.68 — Resumen informativo dentro de Gastos de casa.
+  // Solo agrupa movimientos ya existentes: no escribe datos ni altera cálculos/saldos.
+  const categorySummary=key==='casa'
+    ? cats.map(category=>{
+        const amount=rows.filter(m=>expenseCategoryForIncome(m)===category).reduce((s,m)=>s+num(m.amount),0);
+        return {category,amount};
+      }).filter(r=>r.amount>0)
+    : [];
+  const summaryHtml=categorySummary.length
+    ? `<div class="income-detail-summary"><div class="income-detail-summary-title">Resumen por categoría</div>${categorySummary.map(r=>`<div class="income-detail-summary-row"><span>${esc(r.category)}</span><strong>${money(r.amount)}</strong><span>${total?((r.amount/total)*100).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1}):'0,0'}%</span></div>`).join('')}</div>`
+    : '';
   box.hidden=false;
   box.innerHTML=`<div class="income-detail-head"><h4>${esc(title)}</h4><button type="button" id="incomeDetailClose" class="secondary">Cerrar</button></div>
+    ${summaryHtml}
     ${rows.map(m=>`<div class="income-detail-row"><span>${new Date(String(m.date).slice(0,10)+'T12:00:00').toLocaleDateString('es-AR')}</span><strong>${esc(expenseCategoryForIncome(m))}</strong><span>${esc(m.concept||'')}</span><strong>${money(m.amount)}</strong></div>`).join('')||'<div style="padding:12px" class="muted">No hay movimientos para este grupo en el mes elegido.</div>'}
     <div class="income-detail-total"><span>Total ${esc(title)}</span><strong>${money(total)}</strong></div>`;
   $('incomeDetailClose')?.addEventListener('click',()=>box.hidden=true);

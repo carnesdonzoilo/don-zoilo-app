@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.67";
+const APP_VERSION = "35.3.68";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3278,7 +3278,7 @@ function supplierStatementData(name){
     return d || String(a.created_at||"").localeCompare(String(b.created_at||""));
   });
 
-  // V35.3.67: Jorge/Tito tienen un saldo conciliado protegido al 19/08/2026.
+  // V35.3.68: Jorge/Tito tienen un saldo conciliado protegido al 19/08/2026.
   // El estado de cuenta debe partir de esa misma fuente de verdad. Antes, al usar
   // "Ver todo", volvía a sumar/restar movimientos históricos previos al corte y
   // podía mostrar un saldo distinto del listado principal (ej. Jorge: diferencia
