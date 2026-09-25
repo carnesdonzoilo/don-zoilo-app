@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.66";
+const APP_VERSION = "35.3.67";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3268,14 +3268,33 @@ function supplierBalanceBefore(name,date){
 }
 
 function supplierStatementData(name){
-  const {from,to}=supplierPeriodBounds();
+  const bounds=supplierPeriodBounds();
+  let from=bounds.from;
+  const to=bounds.to;
+  const checkpoint=supplierCheckpointBalance(name);
+  let protectedCheckpoint=false;
   let list=supplierMovementsFor(name).slice().sort((a,b)=>{
     const d=String(a.date||"").localeCompare(String(b.date||""));
     return d || String(a.created_at||"").localeCompare(String(b.created_at||""));
   });
-  if(from) list=list.filter(m=>String(m.date||"")>=from);
+
+  // V35.3.67: Jorge/Tito tienen un saldo conciliado protegido al 19/08/2026.
+  // El estado de cuenta debe partir de esa misma fuente de verdad. Antes, al usar
+  // "Ver todo", volvía a sumar/restar movimientos históricos previos al corte y
+  // podía mostrar un saldo distinto del listado principal (ej. Jorge: diferencia
+  // exacta por un pago histórico de $2.532.700 del 18/06).
+  if(checkpoint!==null && (!from || from<=SUPPLIER_CHECKPOINT_DATE)){
+    protectedCheckpoint=true;
+    from="";
+    list=list.filter(m=>String(m.date||"")>SUPPLIER_CHECKPOINT_DATE);
+  }else if(from){
+    list=list.filter(m=>String(m.date||"")>=from);
+  }
   if(to) list=list.filter(m=>String(m.date||"")<=to);
-  const opening=from?supplierBalanceBefore(name,from):0;
+
+  const opening=protectedCheckpoint
+    ? checkpoint
+    : (from?supplierBalanceBefore(name,from):0);
   let running=opening;
   const rows=list.map(m=>{
     running += m.type==="compra"?Number(m.amount||0):-Number(m.amount||0);
@@ -3283,7 +3302,11 @@ function supplierStatementData(name){
   });
   const purchases=list.filter(m=>m.type==="compra" && !isSupplierOpeningMovement(m)).reduce((s,m)=>s+Number(m.amount||0),0);
   const payments=list.filter(m=>m.type==="pago").reduce((s,m)=>s+Number(m.amount||0),0);
-  return {from,to,opening,rows,purchases,payments,closing:running};
+  return {
+    from,to,opening,rows,purchases,payments,closing:running,
+    protectedCheckpoint,
+    checkpointDate:protectedCheckpoint?SUPPLIER_CHECKPOINT_DATE:null
+  };
 }
 
 function renderSupplierHistory(name){
@@ -3300,7 +3323,7 @@ function renderSupplierHistory(name){
   const filtered=!!(data.from||data.to);
   if(summary){
     summary.hidden=!filtered;
-    if(filtered) summary.innerHTML=`<strong>Período:</strong> ${data.from?fmtDate(data.from):"Inicio"} a ${data.to?fmtDate(data.to):"Hoy"} · <strong>Saldo anterior:</strong> ${money(data.opening)} · <strong>Compras:</strong> ${money(data.purchases)} · <strong>Pagos:</strong> ${money(data.payments)} · <strong>Saldo al cierre:</strong> ${money(data.closing)}`;
+    if(filtered) summary.innerHTML=`<strong>Período:</strong> ${data.protectedCheckpoint?`Desde saldo conciliado ${fmtDate(data.checkpointDate)}`:(data.from?fmtDate(data.from):"Inicio")} a ${data.to?fmtDate(data.to):"Hoy"} · <strong>Saldo anterior:</strong> ${money(data.opening)} · <strong>Compras:</strong> ${money(data.purchases)} · <strong>Pagos:</strong> ${money(data.payments)} · <strong>Saldo al cierre:</strong> ${money(data.closing)}`;
   }
   if(!data.rows.length){
     box.innerHTML='<div class="supplier-empty">No hay movimientos en el período seleccionado.</div>';
@@ -3404,7 +3427,9 @@ function printSupplierStatement(){
   const supplier=$("supplierAccountSelect")?.value||"";
   if(!supplier) return alert("Elegí un proveedor.");
   const data=supplierStatementData(supplier);
-  const periodText=(data.from||data.to)?`${data.from?fmtDate(data.from):"Inicio"} a ${data.to?fmtDate(data.to):"Hoy"}`:"Todos los movimientos";
+  const periodText=data.protectedCheckpoint
+    ? `Saldo conciliado al ${fmtDate(data.checkpointDate)} + movimientos posteriores${data.to?` hasta ${fmtDate(data.to)}`:""}`
+    : ((data.from||data.to)?`${data.from?fmtDate(data.from):"Inicio"} a ${data.to?fmtDate(data.to):"Hoy"}`:"Todos los movimientos");
   const rows=data.rows.map(({movement:m,balance})=>{
     const debit=m.type==="compra";
     const label=isSupplierOpeningMovement(m)?"Saldo inicial":m.type==="compra"?"Compra":"Pago";
