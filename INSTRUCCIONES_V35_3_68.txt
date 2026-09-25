@@ -1,0 +1,11 @@
+DON ZOILO · V35.3.68
+
+CAMBIO
+- Estado de resultados > Gastos de casa: agrega un resumen informativo por categoría (CASA, LEO, ROMI, SERVICIOS, VACACIONES y TARJETAS), con importe y porcentaje.
+- El detalle original de movimientos continúa debajo sin cambios.
+
+SEGURIDAD
+- No modifica movimientos existentes.
+- No reclasifica gastos.
+- No cambia saldos, cuentas corrientes, balances, patrimonio ni fórmulas del Estado de Resultados.
+- El resumen se calcula en pantalla a partir de los mismos movimientos que ya componen Gastos de casa.
