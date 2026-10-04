@@ -19,8 +19,12 @@ const CONFIG_KEY = "don_zoilo_supabase_config";
 let movements = [];
 let orders = [];
 let productPrices = {};
+let productCatalogMeta = {};
 let supabaseClient = null;
 let deferredPrompt = null;
+let realtimeChannel = null;
+let realtimeReloadTimer = null;
+let lastRealtimeRefresh = 0;
 
 const $ = (id) => document.getElementById(id);
 const on = (id,event,handler) => { const el=$(id); if(el) el.addEventListener(event,handler); return el; };
@@ -40,18 +44,21 @@ function monthStart(){
 
 const ORDERS_STORAGE_KEY = "don_zoilo_orders_v1";
 const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
+const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "30.9";
+const APP_VERSION = "35.3.68";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
   productPrices = JSON.parse(localStorage.getItem(PRICES_STORAGE_KEY) || "{}");
+  productCatalogMeta = JSON.parse(localStorage.getItem(PRICE_META_STORAGE_KEY) || "{}");
 }
 function localSave(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(movements));
   localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
   localStorage.setItem(PRICES_STORAGE_KEY, JSON.stringify(productPrices));
+  localStorage.setItem(PRICE_META_STORAGE_KEY, JSON.stringify(productCatalogMeta));
 }
 
 function buildSafetySnapshot(reason="automático"){
@@ -207,32 +214,59 @@ function getCloudConfig(){
   return null;
 }
 
+async function fetchAllCloudRows(table, select="*", orderColumns=[]){
+  // Supabase limita por defecto la cantidad de filas devueltas.
+  // Leer por páginas evita que movimientos históricos desaparezcan del cálculo
+  // cuando la tabla supera las 1000 filas. Esta función es SOLO LECTURA.
+  const pageSize=1000;
+  const all=[];
+  for(let from=0;;from+=pageSize){
+    let query=supabaseClient.from(table).select(select);
+    orderColumns.forEach(({column,ascending=false})=>{
+      query=query.order(column,{ascending});
+    });
+    const {data,error}=await query.range(from,from+pageSize-1);
+    if(error) throw error;
+    const rows=data||[];
+    all.push(...rows);
+    if(rows.length<pageSize) break;
+    if(all.length>100000) throw new Error("Protección activada: demasiadas filas al sincronizar "+table+".");
+  }
+  return all;
+}
+
 async function fetchCloudPayload(){
-  const {data: movementData, error: movementError} = await supabaseClient
-    .from("movements").select("*")
-    .order("date",{ascending:false})
-    .order("created_at",{ascending:false});
-  if(movementError) throw movementError;
+  const movementData=await fetchAllCloudRows("movements","*",[
+    {column:"date",ascending:false},
+    {column:"created_at",ascending:false}
+  ]);
 
-  const {data: orderData, error: orderError} = await supabaseClient
-    .from("orders").select("*")
-    .order("delivery_date",{ascending:false})
-    .order("created_at",{ascending:false});
-  if(orderError) throw orderError;
+  const orderData=await fetchAllCloudRows("orders","*",[
+    {column:"delivery_date",ascending:false},
+    {column:"created_at",ascending:false}
+  ]);
 
-  const {data: priceData, error: priceError} = await supabaseClient
-    .from("product_prices").select("*");
-  if(priceError) throw priceError;
+  const priceData=await fetchAllCloudRows("product_prices","*",[]);
 
-  validateCloudPayload(movementData||[],orderData||[],priceData||[]);
-  return {movementData:movementData||[],orderData:orderData||[],priceData:priceData||[]};
+  validateCloudPayload(movementData,orderData,priceData);
+  return {movementData,orderData,priceData};
 }
 
 function applyCloudPayload(payload,reason="sincronización correcta"){
   movements=payload.movementData;
   orders=payload.orderData;
   productPrices={};
-  payload.priceData.forEach(row=>productPrices[row.product_key]=Number(row.last_price||0));
+  productCatalogMeta={};
+  payload.priceData.forEach(row=>{
+    const key=row.product_key;
+    productPrices[key]=Number(row.last_price||0);
+    productCatalogMeta[key]={
+      name: row.product_name || key.replace(/\s+/g," "),
+      category: row.category || "Sin categoría",
+      is_catalog: row.is_catalog !== false,
+      sort_order: Number(row.sort_order||0)
+    };
+  });
   localSave();
   saveSafetyBackup(reason);
 }
@@ -253,10 +287,17 @@ async function initCloud(){
     return false;
   }
   try{
-    supabaseClient=window.supabase.createClient(cfg.url,cfg.key);
+    supabaseClient=window.supabase.createClient(cfg.url,cfg.key,{
+      auth:{persistSession:false,autoRefreshToken:false},
+      realtime:{params:{eventsPerSecond:10}}
+    });
+    // Los módulos cargados en otros archivos necesitan acceder al mismo cliente.
+    window.supabaseClient=supabaseClient;
+    window.dispatchEvent(new CustomEvent("donzoilo:cloud-ready",{detail:{client:supabaseClient}}));
     const payload=await fetchCloudPayload();
     applyCloudPayload(payload,"inicio conectado");
     showCloudConnected(cfg.source);
+    startRealtimeSync();
     return true;
   }catch(err){
     console.error(err);
@@ -274,6 +315,52 @@ async function reloadCloudData(){
   showCloudConnected(getCloudConfig()?.source||"integrada");
   return payload;
 }
+
+
+function scheduleRealtimeRefresh(table){
+  clearTimeout(realtimeReloadTimer);
+  realtimeReloadTimer=setTimeout(async()=>{
+    if(!supabaseClient || document.visibilityState==="hidden") return;
+    // Caja/Stock administran sus propias tablas y reciben este aviso.
+    window.dispatchEvent(new CustomEvent("donzoilo:remote-change",{detail:{table}}));
+    if(!["movements","orders","product_prices"].includes(table)) return;
+    try{
+      await reloadCloudData();
+      renderAll();
+      buildOrderSheet();
+      lastRealtimeRefresh=Date.now();
+    }catch(error){
+      console.warn("No se pudo aplicar el cambio remoto",error);
+    }
+  },450);
+}
+
+function startRealtimeSync(){
+  if(!supabaseClient || realtimeChannel) return;
+  realtimeChannel=supabaseClient.channel("don-zoilo-live-v34")
+    .on("postgres_changes",{event:"*",schema:"public",table:"movements"},()=>scheduleRealtimeRefresh("movements"))
+    .on("postgres_changes",{event:"*",schema:"public",table:"orders"},()=>scheduleRealtimeRefresh("orders"))
+    .on("postgres_changes",{event:"*",schema:"public",table:"product_prices"},()=>scheduleRealtimeRefresh("product_prices"))
+    .on("postgres_changes",{event:"*",schema:"public",table:"inventory_stock"},()=>scheduleRealtimeRefresh("inventory_stock"))
+    .on("postgres_changes",{event:"*",schema:"public",table:"current_assets"},()=>scheduleRealtimeRefresh("current_assets"))
+    .subscribe(status=>{
+      if(status==="SUBSCRIBED") console.info("Sincronización en tiempo real activa");
+    });
+}
+
+async function refreshWhenAppReturns(){
+  if(document.visibilityState!=="visible" || !supabaseClient) return;
+  if(Date.now()-lastRealtimeRefresh<1500) return;
+  try{
+    await reloadCloudData();
+    renderAll();
+    buildOrderSheet();
+    window.dispatchEvent(new CustomEvent("donzoilo:app-visible"));
+    lastRealtimeRefresh=Date.now();
+  }catch(error){ console.warn("No se pudo actualizar al volver a la app",error); }
+}
+document.addEventListener("visibilitychange",refreshWhenAppReturns);
+window.addEventListener("focus",refreshWhenAppReturns);
 
 async function synchronizeNow(){
   const btn=$("syncNow");
@@ -423,6 +510,7 @@ async function saveEditedOrderGroup(items, card){
 
   const client=card.querySelector(".edit-client").value.trim();
   const payment=card.querySelector(".edit-payment").value;
+  const remitoNumber=String(card.querySelector(".edit-remito-number")?.value||"").trim();
   const rows=[...card.querySelectorAll(".edit-item-row")];
   const batchId=items[0]?.batch_id||items[0]?.id;
 
@@ -474,7 +562,7 @@ async function saveEditedOrderGroup(items, card){
         unit_price:row.unit_price,
         total:row.total,
         payment_method:payment,
-        notes:first.notes||"",
+        notes:setOrderRemitoNumberNotes(first.notes||"",remitoNumber),
         delivered:false,
         delivered_at:null,
         created_at:existing?.created_at||now
@@ -585,6 +673,188 @@ async function uploadSignedReceipt(batchKey,items,file){
   return data;
 }
 
+
+// V35.3.51 — lectura asistida del remito físico.
+// La foto se archiva como siempre y el OCR SOLO propone cambios. Nada se guarda
+// hasta que el usuario revisa el formulario y toca "Guardar cambios".
+function receiptOcrNorm(value){
+  return String(value||"")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .toUpperCase().replace(/[^A-Z0-9]+/g," ").replace(/\s+/g," ").trim();
+}
+
+function receiptOcrNumber(value){
+  let raw=String(value||"").replace(/\s/g,"").replace(/\$/g,"");
+  if(!raw) return 0;
+  const lastComma=raw.lastIndexOf(","), lastDot=raw.lastIndexOf(".");
+  if(lastComma>=0 && lastDot>=0){
+    if(lastComma>lastDot) raw=raw.replace(/\./g,"").replace(",",".");
+    else raw=raw.replace(/,/g,"");
+  }else if(lastComma>=0){
+    const decimals=raw.length-lastComma-1;
+    raw=decimals<=2 ? raw.replace(/\./g,"").replace(",",".") : raw.replace(/,/g,"");
+  }else if(lastDot>=0){
+    const decimals=raw.length-lastDot-1;
+    if(decimals===3 && /^\d{1,3}(?:\.\d{3})+$/.test(raw)) raw=raw.replace(/\./g,"");
+  }
+  const n=Number(raw.replace(/[^0-9.-]/g,""));
+  return Number.isFinite(n)?n:0;
+}
+
+function receiptOcrNumbers(line){
+  return (String(line||"").match(/\$?\s*\d[\d.]*?(?:,\d+)?(?=\s|$|[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ])/g)||[])
+    .map(receiptOcrNumber).filter(n=>Number.isFinite(n)&&n>0);
+}
+
+function receiptOcrProductTokens(product){
+  const ignored=new Set(["DE","DEL","LA","LAS","EL","LOS","SIN","CON","FRESCO","FRESCA","ENVASADO","ENVASADA","OFERTA","CAJA","KG"]);
+  const aliases={
+    "ROASTBEEF":["ROAST","BEEF","ROSBIF"],
+    "ROAST BEEF":["ROAST","BEEF","ROSBIF"],
+    "NALGA SIN TAPA":["NALGA","TAPA"],
+    "BIFE DE CHORIZO":["BIFE","CHORIZO"],
+    "BIFE CHORIZO":["BIFE","CHORIZO"],
+    "BIFE CON LOMO":["BIFE","LOMO"],
+    "PATA Y MUSLO":["PATA","MUSLO"],
+    "TAPA DE ASADO":["TAPA","ASADO"]
+  };
+  const norm=receiptOcrNorm(product);
+  if(aliases[norm]) return aliases[norm];
+  return norm.split(" ").filter(t=>t.length>=3&&!ignored.has(t));
+}
+
+function receiptOcrLineForProduct(lines,product){
+  const tokens=receiptOcrProductTokens(product);
+  if(!tokens.length) return null;
+  let best=null,score=0;
+  for(const line of lines){
+    const norm=receiptOcrNorm(line);
+    const hits=tokens.filter(t=>norm.includes(t)).length;
+    const ratio=hits/tokens.length;
+    const current=ratio + (hits>=2?0.25:0);
+    if(hits && current>score){best=line;score=current;}
+  }
+  return score>=0.55?best:null;
+}
+
+function receiptOcrRemitoNumber(text){
+  const raw=String(text||"");
+  const patterns=[
+    /(?:REMITO|RTO)\s*(?:NRO\.?|N[°º]?|NUM(?:ERO)?\.?|#)?\s*[:\-]?\s*([A-Z0-9-]{2,20})/i,
+    /(?:NRO\.?|N[°º]|NUM(?:ERO)?\.?)\s*[:\-]?\s*([0-9]{2,20})/i
+  ];
+  for(const re of patterns){const m=raw.match(re);if(m?.[1]) return String(m[1]).replace(/^REMITO\s*/i,"").trim();}
+  return "";
+}
+
+function receiptOcrGuessItem(line,item){
+  if(!line) return null;
+  const nums=receiptOcrNumbers(line);
+  if(!nums.length) return null;
+  const currentQty=Number(item.quantity||0), currentPrice=Number(item.unit_price||0);
+  let quantity=0, unit_price=0;
+  const qtyCandidates=nums.filter(n=>n>0&&n<1000);
+  if(qtyCandidates.length){
+    quantity=qtyCandidates.reduce((best,n)=>Math.abs(n-currentQty)<Math.abs(best-currentQty)?n:best,qtyCandidates[0]);
+  }
+  const priceCandidates=nums.filter(n=>n>=500);
+  if(priceCandidates.length&&currentPrice>0){
+    unit_price=priceCandidates.reduce((best,n)=>Math.abs(n-currentPrice)<Math.abs(best-currentPrice)?n:best,priceCandidates[0]);
+    if(Math.abs(unit_price-currentPrice)>Math.max(5000,currentPrice*.45)) unit_price=0;
+  }
+  if(!unit_price && nums.length>=3){
+    const possible=nums.find(n=>n>=1000&&n<1000000);
+    if(possible) unit_price=possible;
+  }
+  return {quantity:quantity||0,unit_price:unit_price||0,line};
+}
+
+async function analyzeSignedReceiptImage(file,items){
+  if(!window.Tesseract) throw new Error("El lector OCR todavía no está disponible.");
+  const result=await Tesseract.recognize(file,"spa");
+  const text=result?.data?.text||"";
+  const lines=text.split(/\r?\n/).map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean);
+  return {
+    text,
+    remito:receiptOcrRemitoNumber(text),
+    rows:items.map(item=>({item,guess:receiptOcrGuessItem(receiptOcrLineForProduct(lines,item.product),item)}))
+  };
+}
+
+function showReceiptOcrReview(items,card,result){
+  document.getElementById("receiptOcrReviewDialog")?.remove();
+  const detected=result?.rows?.filter(x=>x.guess&&(x.guess.quantity||x.guess.unit_price))||[];
+  const dialog=document.createElement("dialog");
+  dialog.id="receiptOcrReviewDialog";
+  dialog.style.cssText="width:min(760px,94vw);max-height:90vh;border:0;border-radius:16px;padding:0;box-shadow:0 18px 60px #0005";
+  const remitoCurrent=orderRemitoNumberFromNotes(items[0])||"";
+  dialog.innerHTML=`
+    <div style="padding:18px 18px 10px;border-bottom:1px solid #ddd">
+      <h3 style="margin:0 0 5px">📷 Datos detectados del remito</h3>
+      <div class="muted">La foto ya quedó archivada. Revisá todo: <strong>nada se modifica todavía</strong>.</div>
+    </div>
+    <div style="padding:16px;overflow:auto;max-height:62vh">
+      <label style="display:block;margin-bottom:14px"><strong>N.º de remito</strong>
+        <input class="receipt-ocr-remito" value="${escapeHtml(result?.remito||remitoCurrent)}" placeholder="Revisar número" style="width:100%;margin-top:5px">
+      </label>
+      <div style="display:grid;gap:10px">
+        ${items.map((item,i)=>{
+          const found=result?.rows?.[i]?.guess;
+          const q=found?.quantity||Number(item.quantity||0);
+          const p=found?.unit_price||Number(item.unit_price||0);
+          const changedQ=found?.quantity&&Math.abs(found.quantity-Number(item.quantity||0))>.001;
+          const changedP=found?.unit_price&&Math.abs(found.unit_price-Number(item.unit_price||0))>.01;
+          return `<div class="receipt-ocr-row" data-order-id="${escapeHtml(item.id)}" style="border:1px solid #ddd;border-radius:10px;padding:10px">
+            <div style="font-weight:700;margin-bottom:7px">${escapeHtml(item.product)}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <label>Cantidad / kg<input class="receipt-ocr-qty" type="number" min="0" step="0.01" value="${q}" style="width:100%"><small>Actual: ${Number(item.quantity||0).toLocaleString("es-AR")}${changedQ?" · detectado diferente":""}</small></label>
+              <label>Precio<input class="receipt-ocr-price" type="number" min="0" step="0.01" value="${p}" style="width:100%"><small>Actual: ${money(item.unit_price||0)}${changedP?" · detectado diferente":""}</small></label>
+            </div>
+            ${found?.line?`<small class="muted" style="display:block;margin-top:7px">OCR: ${escapeHtml(found.line)}</small>`:`<small class="muted" style="display:block;margin-top:7px">No se detectó una línea clara: se conserva el dato actual.</small>`}
+          </div>`;
+        }).join("")}
+      </div>
+      ${!detected.length?`<div class="notice" style="margin-top:12px">No encontré cambios confiables automáticamente. Podés corregir los campos manualmente antes de continuar.</div>`:""}
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid #ddd;display:flex;justify-content:flex-end;gap:8px">
+      <button type="button" class="secondary receipt-ocr-cancel">Cerrar sin cambiar</button>
+      <button type="button" class="primary receipt-ocr-apply">Confirmar y guardar cambios</button>
+    </div>`;
+  document.body.appendChild(dialog);
+  dialog.querySelector(".receipt-ocr-cancel").onclick=()=>dialog.close();
+  dialog.querySelector(".receipt-ocr-apply").onclick=async()=>{
+    const button=dialog.querySelector(".receipt-ocr-apply");
+    const remito=dialog.querySelector(".receipt-ocr-remito").value.trim();
+    const remitoInput=card.querySelector(".edit-remito-number");
+    if(remitoInput) remitoInput.value=remito;
+    dialog.querySelectorAll(".receipt-ocr-row").forEach(src=>{
+      const id=src.dataset.orderId;
+      const dst=[...card.querySelectorAll(".edit-item-row")].find(r=>r.dataset.orderId===id);
+      if(!dst) return;
+      dst.querySelector(".edit-quantity").value=src.querySelector(".receipt-ocr-qty").value;
+      dst.querySelector(".edit-price").value=src.querySelector(".receipt-ocr-price").value;
+      // Fuerza a que el formulario reconozca el valor cargado por OCR igual que si se hubiera escrito a mano.
+      dst.querySelector(".edit-quantity").dispatchEvent(new Event("input",{bubbles:true}));
+      dst.querySelector(".edit-price").dispatchEvent(new Event("input",{bubbles:true}));
+    });
+    card.querySelector(".edit-group")?.classList.remove("hidden");
+    button.disabled=true;
+    button.textContent="Guardando...";
+    try{
+      // V35.3.55: al confirmar el OCR se guarda el pedido real, no queda sólo precargado visualmente.
+      await saveEditedOrderGroup(items,card);
+      if(document.body.contains(dialog)) dialog.close();
+    }finally{
+      if(document.body.contains(button)){
+        button.disabled=false;
+        button.textContent="Confirmar y guardar cambios";
+      }
+    }
+  };
+  dialog.addEventListener("close",()=>dialog.remove());
+  if(typeof dialog.showModal==="function") dialog.showModal(); else dialog.setAttribute("open","");
+}
+
 async function showSignedReceipt(batchKey,items){
   try{
     const receipt=await signedReceiptForBatch(batchKey);
@@ -604,7 +874,8 @@ async function showSignedReceipt(batchKey,items){
 function remitoHtmlForItems(items){
   const first=items[0];
   const total=items.reduce((sum,item)=>sum+Number(item.total||0),0);
-  const notes=[...new Set(items.map(i=>i.notes).filter(Boolean))].join(" · ") || "—";
+  const updatedBalance=remitoUpdatedBalance(items);
+  const notes=remitoVisibleNotes(items).join(" · ") || "—";
   const remitoNo=remitoSequence(items);
   const rows=items.map(item=>`
     <tr>
@@ -628,7 +899,7 @@ function remitoHtmlForItems(items){
         <div><span>Estado</span><strong>${items.every(i=>i.delivered)?"ENTREGADO":"PENDIENTE"}</strong></div>
       </div>
       <table><thead><tr><th>Cant.</th><th>Unidad</th><th>Descripción</th><th>P. unit.</th><th>Importe</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="bottom"><div class="notes"><span>Observaciones</span><div>${escapeHtml(notes)}</div></div><div class="total"><span>TOTAL</span><strong>${money(total)}</strong></div></div>
+      <div class="bottom"><div class="notes"><span>Observaciones</span><div>${escapeHtml(notes)}</div></div><div class="total-stack"><div class="total"><span>TOTAL REMITO</span><strong>${money(total)}</strong></div><div class="balance"><span>SALDO ACTUALIZADO</span><strong>${money(updatedBalance)}</strong></div></div></div>
       <div class="signatures">
         <div><div class="line"></div><span>Entregó</span></div>
         <div><div class="line"></div><span>Recibió conforme</span></div>
@@ -639,31 +910,117 @@ function remitoHtmlForItems(items){
   return `<main class="sheet">${copy("ORIGINAL")}<div class="cut">CORTAR AQUÍ</div>${copy("COPIA")}</main>`;
 }
 
+function selectedRemitosPrintHtml(batches){
+  const pages=batches.map(items=>`<div class="bulk-remito-page">${remitoHtmlForItems(items)}</div>`).join("");
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Remitos seleccionados</title>
+  <style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111}
+  .bulk-remito-page{page-break-after:always;break-after:page}
+  .bulk-remito-page:last-child{page-break-after:auto;break-after:auto}
+  .sheet{width:210mm;height:297mm;margin:0 auto;background:#fff;padding:6mm;overflow:hidden}
+  .ticket{height:137.5mm;border:1.2px solid #111;padding:5mm;overflow:hidden}
+  .cut{height:10mm;display:flex;align-items:center;gap:4mm;color:#555;font-size:8pt}
+  .cut:before,.cut:after{content:"";flex:1;border-top:1px dashed #777}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}
+  .logo{font-size:18pt;font-weight:900}.tag{font-size:6.5pt;letter-spacing:1.3px}
+  .title{text-align:right}.copy{font-size:7pt;font-weight:900}.title h1{margin:1mm 0 0;font-size:16pt}.number{font-size:8pt;font-weight:800}
+  .info{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #111;margin-bottom:3mm}
+  .info>div{padding:2mm;border-right:1px solid #111;min-height:10mm}.info>div:last-child{border-right:0}
+  .info span{display:block;font-size:6pt;font-weight:800;color:#555}.info strong{font-size:8pt}
+  table{width:100%;border-collapse:collapse;margin-bottom:2.5mm}
+  th,td{border:1px solid #111;padding:1.4mm}
+  th{font-size:6pt;background:#f1f1f1}td{font-size:7.2pt}
+  th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}
+  th:nth-child(2),td:nth-child(2){width:17mm}
+  th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
+  .bottom{display:grid;grid-template-columns:1fr 58mm;gap:4mm}
+  .notes{border:1px solid #111;min-height:16mm;padding:2mm}.notes span{font-size:6pt;font-weight:900}.notes div{font-size:7pt}
+  .total-stack{display:grid;gap:2mm}.total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:9pt}.total strong{font-size:12pt}.balance{border-top:1px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:7pt}.balance strong{font-size:10pt}
+  .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}
+  .signatures>div{text-align:center}.line{border-top:1px solid #111}.signatures span{font-size:6.5pt}
+  @page{size:A4 portrait;margin:0}
+  @media print{html,body{width:210mm}.sheet{margin:0}}
+  </style></head><body>${pages}</body></html>`;
+}
+
+function isMobilePrintDevice(){
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent||"")
+    || (navigator.maxTouchPoints>1 && window.innerWidth<900);
+}
+
 function printSelectedRemitos(){
   const batches=[...selectedRemitoBatches]
     .map(key=>batchItemsByKey(key))
     .filter(items=>items.length);
+
   if(!batches.length) return alert("Seleccioná al menos un pedido.");
 
-  const pages=batches.map(items=>`<div class="bulk-remito-page">${remitoHtmlForItems(items)}</div>`).join("");
+  const printHtml=selectedRemitosPrintHtml(batches);
+
+  // En Android/Chrome, imprimir desde window.open("","_blank") puede dejar un
+  // about:blank y generar un PDF vacío o inválido. En móvil imprimimos desde
+  // un iframe oculto que permanece en la misma página hasta que finaliza.
+  if(isMobilePrintDevice()){
+    document.getElementById("mobileRemitosPrintFrame")?.remove();
+
+    const frame=document.createElement("iframe");
+    frame.id="mobileRemitosPrintFrame";
+    frame.setAttribute("title","Impresión de remitos");
+    frame.style.position="fixed";
+    frame.style.right="0";
+    frame.style.bottom="0";
+    frame.style.width="1px";
+    frame.style.height="1px";
+    frame.style.opacity="0";
+    frame.style.pointerEvents="none";
+    frame.style.border="0";
+    document.body.appendChild(frame);
+
+    const doc=frame.contentDocument||frame.contentWindow?.document;
+    if(!doc){
+      frame.remove();
+      return alert("No se pudo preparar la impresión en este dispositivo.");
+    }
+
+    doc.open();
+    doc.write(printHtml);
+    doc.close();
+
+    const doPrint=()=>{
+      try{
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      }catch(error){
+        console.error("Impresión móvil:",error);
+        alert("No se pudo abrir la impresión. Probá nuevamente.");
+      }
+      // Dar tiempo al servicio de impresión/PDF de Android antes de retirar el documento.
+      setTimeout(()=>frame.remove(),15000);
+    };
+
+    // Esperar a que el contenido esté realmente renderizado antes de abrir
+    // el diálogo de impresión; evita PDFs blancos.
+    if(frame.contentDocument?.readyState==="complete"){
+      setTimeout(doPrint,700);
+    }else{
+      frame.onload=()=>setTimeout(doPrint,700);
+      setTimeout(()=>{
+        if(document.body.contains(frame)) doPrint();
+      },1800);
+    }
+    return;
+  }
+
+  // Escritorio: se mantiene la vista previa en ventana nueva.
   const popup=window.open("","_blank");
   if(!popup) return alert("El navegador bloqueó la impresión. Habilitá ventanas emergentes.");
 
   popup.document.open();
-  popup.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Remitos seleccionados</title>
-  <style>
-  *{box-sizing:border-box}body{margin:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111}
-  .actions{position:sticky;top:0;z-index:10;background:#101820;padding:10px;text-align:center}
-  .actions button{border:0;border-radius:9px;padding:11px 18px;font-weight:800;background:#b38a3e}
-  .bulk-remito-page{page-break-after:always;break-after:page}.bulk-remito-page:last-child{page-break-after:auto;break-after:auto}
-  .sheet{width:210mm;height:297mm;margin:0 auto;background:#fff;padding:6mm;overflow:hidden}
-  .ticket{height:137.5mm;border:1.2px solid #111;padding:5mm;overflow:hidden}.cut{height:10mm;display:flex;align-items:center;gap:4mm;color:#555;font-size:8pt}.cut:before,.cut:after{content:"";flex:1;border-top:1px dashed #777}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}.logo{font-size:18pt;font-weight:900}.tag{font-size:6.5pt;letter-spacing:1.3px}.title{text-align:right}.copy{font-size:7pt;font-weight:900}.title h1{margin:1mm 0 0;font-size:16pt}.number{font-size:8pt;font-weight:800}
-  .info{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #111;margin-bottom:3mm}.info>div{padding:2mm;border-right:1px solid #111;min-height:10mm}.info>div:last-child{border-right:0}.info span{display:block;font-size:6pt;font-weight:800;color:#555}.info strong{font-size:8pt}
-  table{width:100%;border-collapse:collapse;margin-bottom:2.5mm}th,td{border:1px solid #111;padding:1.4mm}th{font-size:6pt;background:#f1f1f1}td{font-size:7.2pt}th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}th:nth-child(2),td:nth-child(2){width:17mm}th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
-  .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm}.notes{border:1px solid #111;min-height:16mm;padding:2mm}.notes span{font-size:6pt;font-weight:900}.notes div{font-size:7pt}.total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;font-size:9pt}.total strong{font-size:12pt}.signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}.signatures>div{text-align:center}.line{border-top:1px solid #111}.signatures span{font-size:6.5pt}
-  @page{size:A4 portrait;margin:0}@media print{.actions{display:none}.sheet{margin:0}}
-  </style></head><body><div class="actions"><button onclick="window.print()">Imprimir ${batches.length} remitos</button></div>${pages}</body></html>`);
+  popup.document.write(printHtml.replace("<body>",`<body><div class="actions"><button onclick="window.print()">Imprimir ${batches.length} remitos</button></div>`)
+    .replace("</style>",`.actions{position:sticky;top:0;z-index:10;background:#101820;padding:10px;text-align:center}.actions button{border:0;border-radius:9px;padding:11px 18px;font-weight:800;background:#b38a3e}@media print{.actions{display:none}}</style>`));
   popup.document.close();
   popup.focus();
 }
@@ -679,6 +1036,7 @@ function showDeliveryToast(message){
 }
 
 function deliveryMovementId(batchKey){ return `delivery-${batchKey}`; }
+function deliveryPaymentMovementId(batchKey){ return `delivery-payment-${batchKey}`; }
 function orderBatchTotal(items){ return items.reduce((s,i)=>s+Number(i.total||0),0); }
 function orderBatchKg(items){ return items.reduce((s,i)=>s+(((i.unit||"kg")==="kg")?Number(i.quantity||0):0),0); }
 
@@ -689,6 +1047,7 @@ function openDeliveryConfirmation(batchKey,items){
   $("deliveryConfirmNumber").textContent=`N.º ${remitoSequence(items)}`;
   $("deliveryConfirmTotal").textContent=money(orderBatchTotal(items));
   $("deliveryConfirmDate").textContent=fmtDate(items[0].delivery_date);
+  if($("deliveryPaidCash")) $("deliveryPaidCash").checked=false;
   const d=$("deliveryConfirmDialog");
   if(typeof d.showModal==="function") d.showModal(); else d.setAttribute("open","");
 }
@@ -699,6 +1058,7 @@ async function confirmBatchDelivery(){
   if(items.every(i=>i.delivered)) return alert("Este pedido ya fue entregado.");
 
   const btn=$("confirmDeliveryBtn");
+  const paidCash=Boolean($("deliveryPaidCash")?.checked);
   btn.disabled=true;
   try{
     const deliveredAt=new Date().toISOString();
@@ -719,41 +1079,74 @@ async function confirmBatchDelivery(){
     buildOrderSheet();
 
     const movementId=deliveryMovementId(batchKey);
-    const exists=movements.some(m=>m.id===movementId);
-    if(!exists){
-      const movement={
+    const paymentMovementId=deliveryPaymentMovementId(batchKey);
+    const batchTotal=orderBatchTotal(items);
+    const saleExists=movements.some(m=>m.id===movementId);
+    const paymentExists=movements.some(m=>m.id===paymentMovementId);
+
+    const newMovements=[];
+    if(!saleExists){
+      newMovements.push({
         id:movementId,
         date:items[0].delivery_date||todayISO(),
         type:"venta",
         party:items[0].client||"",
         concept:`Remito ${remitoSequence(items)}`,
         kg:orderBatchKg(items),
-        amount:orderBatchTotal(items),
+        amount:batchTotal,
         payment_method:items[0].payment_method||"cuenta_corriente",
         status:"confirmado",
-        notes:`Entrega confirmada ${new Date(deliveredAt).toLocaleString("es-AR")}`,
+        notes:setMovementDocumentMetaNotes(
+          `Entrega confirmada ${new Date(deliveredAt).toLocaleString("es-AR")}`,
+          orderRemitoNumberFromNotes(items[0]),
+          ""
+        ),
         source_order_id:batchKey,
         created_at:deliveredAt
-      };
+      });
+    }
 
+    if(paidCash && !paymentExists){
+      const paymentCreatedAt=new Date(new Date(deliveredAt).getTime()+1).toISOString();
+      newMovements.push({
+        id:paymentMovementId,
+        date:items[0].delivery_date||todayISO(),
+        type:"cobro",
+        party:items[0].client||"",
+        concept:`Cobro contado · Remito ${remitoSequence(items)}`,
+        kg:0,
+        amount:batchTotal,
+        payment_method:"efectivo",
+        status:"confirmado",
+        notes:`IMPUTA_MOVEMENT_IDS:${movementId} | PAGADO_CONTADO_AL_ENTREGAR`,
+        source_order_id:batchKey,
+        created_at:paymentCreatedAt
+      });
+    }
+
+    if(newMovements.length){
       try{
         if(supabaseClient){
-          const {error}=await supabaseClient.from("movements").insert(movement);
+          const {error}=await supabaseClient.from("movements").insert(newMovements);
           if(error && error.code!=="23505") throw error;
         }
-        if(!movements.some(m=>m.id===movementId)) movements.unshift(movement);
+        newMovements.forEach(m=>{
+          if(!movements.some(existing=>existing.id===m.id)) movements.unshift(m);
+        });
         localSave();
         renderDashboard();
         renderMovements();
+        renderBalances();
+        renderAccounts();
       }catch(movementError){
-        console.error("No se pudo registrar la actividad de entrega:",movementError);
-        showDeliveryToast("Pedido entregado. La actividad se reintentará al actualizar.");
+        console.error("No se pudo registrar la actividad de entrega/cobro:",movementError);
+        showDeliveryToast("Pedido entregado. Revisá la cuenta corriente y actualizá si hace falta.");
       }
     }
     const d=$("deliveryConfirmDialog");
     if(typeof d.close==="function") d.close(); else d.removeAttribute("open");
     pendingDeliveryBatch=null;
-    showDeliveryToast("Pedido entregado correctamente.");
+    showDeliveryToast(paidCash ? "Pedido entregado y cobrado de contado." : "Pedido entregado correctamente.");
   }catch(e){
     alert("No se pudo confirmar la entrega: "+e.message);
   }finally{
@@ -798,7 +1191,11 @@ async function reconcileDeliveredOrders(){
       amount:orderBatchTotal(items),
       payment_method:items[0].payment_method||"cuenta_corriente",
       status:"confirmado",
-      notes:"Movimiento reconstruido automáticamente desde pedido entregado.",
+      notes:setMovementDocumentMetaNotes(
+        "Movimiento reconstruido automáticamente desde pedido entregado.",
+        orderRemitoNumberFromNotes(items[0]),
+        ""
+      ),
       source_order_id:batchKey,
       created_at:deliveredAt
     };
@@ -857,26 +1254,99 @@ function expenseMovements(){
   return movements.filter(m=>m.type==="gasto");
 }
 
+function renderExpenseListCategoryOptions(){
+  const select=$("expenseListCategory");
+  if(!select) return;
+
+  const current=select.value||"";
+
+  // Usa las mismas categorías base del módulo + las detectadas en movimientos reales.
+  const categories=[...new Set([
+    ...EXPENSE_CATEGORIES,
+    ...expenseMovements().map(m=>expenseCategoryFromMovement(m))
+  ])]
+    .filter(Boolean)
+    .sort((a,b)=>String(a).localeCompare(String(b),"es",{sensitivity:"base"}));
+
+  select.innerHTML="";
+  const all=document.createElement("option");
+  all.value="";
+  all.textContent="Todas";
+  select.appendChild(all);
+
+  categories.forEach(category=>{
+    const option=document.createElement("option");
+    option.value=category;
+    option.textContent=category;
+    select.appendChild(option);
+  });
+
+  if(current && categories.includes(current)) select.value=current;
+}
+
+function ensureExpenseListDefaults(){
+  const from=$("expenseListFrom");
+  const to=$("expenseListTo");
+  const month=todayISO().slice(0,7);
+
+  if(from && !from.value) from.value=`${month}-01`;
+  if(to && !to.value) to.value=todayISO();
+}
+
 function renderExpenseRecent(){
   const box=$("expenseRecentList");
   if(!box) return;
+
+  ensureExpenseListDefaults();
+  renderExpenseListCategoryOptions();
+
+  const category=$("expenseListCategory")?.value||"";
+  const from=$("expenseListFrom")?.value||"";
+  const to=$("expenseListTo")?.value||"";
+
+  // IMPORTANTE: la fuente es exactamente la misma que usa el resumen mensual:
+  // expenseMovements(), que toma movements.filter(type==="gasto").
+  const source=expenseMovements();
+
+  const list=source
+    .filter(m=>{
+      const date=String(m.date||"").slice(0,10);
+      const cat=expenseCategoryFromMovement(m);
+
+      if(category && cat!==category) return false;
+      if(from && date<from) return false;
+      if(to && date>to) return false;
+      return true;
+    })
+    .slice()
+    .sort((a,b)=>{
+      const da=String(a.date||"").slice(0,10);
+      const db=String(b.date||"").slice(0,10);
+      const dateCmp=db.localeCompare(da);
+      if(dateCmp!==0) return dateCmp;
+      return String(b.created_at||"").localeCompare(String(a.created_at||""));
+    });
+
+  const total=list.reduce((sum,m)=>sum+Number(m.amount||0),0);
+
+  if($("expenseFilteredCount")) $("expenseFilteredCount").textContent=String(list.length);
+  if($("expenseFilteredTotal")) $("expenseFilteredTotal").textContent=money(total);
+
   box.innerHTML="";
-  const list=expenseMovements().slice()
-    .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)))
-    .slice(0,10);
 
   if(!list.length){
-    box.innerHTML='<div class="expense-empty">Todavía no hay gastos cargados.</div>';
+    box.innerHTML='<div class="expense-empty">No hay gastos que coincidan con los filtros elegidos.</div>';
     return;
   }
 
   list.forEach(m=>{
     const row=document.createElement("div");
     row.className="expense-row";
-    const category=expenseCategoryFromMovement(m);
+    const cat=expenseCategoryFromMovement(m);
+
     row.innerHTML=`
       <div class="expense-row-main">
-        <strong>${escapeHtml(category)} · ${escapeHtml(m.concept||"Sin detalle")}</strong>
+        <strong>${escapeHtml(cat)} · ${escapeHtml(m.concept||"Sin detalle")}</strong>
         <small>${fmtDate(m.date)} · ${escapeHtml((m.payment_method||"efectivo").replace("_"," "))}</small>
       </div>
       <strong>${money(m.amount||0)}</strong>
@@ -889,6 +1359,18 @@ function renderExpenseRecent(){
     row.querySelector(".expense-delete-btn").addEventListener("click",()=>deleteExpenseMovement(m));
     box.append(row);
   });
+}
+
+
+
+function ensureExpenseListDefaults(){
+  const from=$("expenseListFrom");
+  const to=$("expenseListTo");
+  const month=todayISO().slice(0,7);
+
+  // Al entrar por primera vez: mes corriente completo hasta hoy.
+  if(from && !from.value) from.value=`${month}-01`;
+  if(to && !to.value) to.value=todayISO();
 }
 
 
@@ -1009,6 +1491,46 @@ function monthBounds(monthValue){
   return {first,nextMonth};
 }
 
+function renderExpenseCategoryDetail(category){
+  const panel=$("expenseCategoryDetail");
+  const listBox=$("expenseCategoryDetailList");
+  if(!panel||!listBox) return;
+
+  const monthValue=$("expenseMonth")?.value||todayISO().slice(0,7);
+  const {first,nextMonth}=monthBounds(monthValue);
+
+  const list=expenseMovements()
+    .filter(m=>m.date>=first && m.date<nextMonth)
+    .filter(m=>expenseCategoryFromMovement(m)===category)
+    .slice()
+    .sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+
+  const total=list.reduce((sum,m)=>sum+Number(m.amount||0),0);
+
+  $("expenseCategoryDetailTitle").textContent=category;
+  const [year,month]=monthValue.split("-").map(Number);
+  const label=new Date(year,month-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"});
+  $("expenseCategoryDetailPeriod").textContent=`Movimientos de ${label}`;
+  $("expenseCategoryDetailTotal").textContent=money(total);
+
+  listBox.innerHTML="";
+  list.forEach(m=>{
+    const row=document.createElement("div");
+    row.className="expense-row expense-category-detail-row";
+    row.innerHTML=`
+      <div class="expense-row-main">
+        <strong>${escapeHtml(m.concept||category)}</strong>
+        <small>${fmtDate(m.date)} · ${escapeHtml((m.payment_method||"efectivo").replace("_"," "))}</small>
+      </div>
+      <strong>${money(m.amount||0)}</strong>`;
+    listBox.append(row);
+  });
+
+  if(!list.length) listBox.innerHTML='<div class="expense-empty">No hay movimientos para esta categoría en el mes elegido.</div>';
+  panel.hidden=false;
+  panel.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
 function renderExpenseSummary(){
   const box=$("expenseSummaryList");
   if(!box) return;
@@ -1030,16 +1552,17 @@ function renderExpenseSummary(){
     .filter(([,amount])=>amount>0)
     .sort((a,b)=>b[1]-a[1])
     .forEach(([category,amount])=>{
-      const row=document.createElement("div");
-      row.className="expense-summary-row";
+      const row=document.createElement("button");
+      row.type="button";
+      row.className="expense-summary-row expense-summary-link";
       row.innerHTML=`<span>${escapeHtml(category)}</span><strong>${money(amount)}</strong>`;
+      row.addEventListener("click",()=>renderExpenseCategoryDetail(category));
       box.append(row);
     });
 
-  if(!box.children.length){
-    box.innerHTML='<div class="expense-empty">No hay gastos en este mes.</div>';
-  }
+  if(!box.children.length) box.innerHTML='<div class="expense-empty">No hay gastos en este mes.</div>';
   $("expenseMonthTotal").textContent=money(total);
+  if($("expenseCategoryDetail")) $("expenseCategoryDetail").hidden=true;
 }
 
 
@@ -1052,6 +1575,7 @@ function ensureTodayExpenseDate(){
 
 function renderExpenses(){
   ensureTodayExpenseDate();
+  ensureExpenseListDefaults();
   renderExpenseCategories();
   renderExpenseKpis();
   renderExpenseRecent();
@@ -1142,7 +1666,7 @@ function renderOrders(){
       <div class="order-group-head"><div>${items.every(i=>i.delivered)?`<span class="delivered-stamp">✅ ENTREGADO</span><div class="delivery-time">${items[0].delivered_at?new Date(items[0].delivered_at).toLocaleString("es-AR"):""}</div>`:""}</div>
         <div>
           <div class="order-client">${escapeHtml(first.client)}</div>
-          <div class="order-info">${fmtDate(first.delivery_date)} · ${escapeHtml((first.payment_method||"").replace("_"," "))}</div>
+          <div class="order-info">${fmtDate(first.delivery_date)} · ${escapeHtml((first.payment_method||"").replace("_"," "))} · Remito ${escapeHtml(remitoDisplayNumber(items))}</div>
         </div>
         <label class="delivery-check"><input type="checkbox" class="delivery-checkbox" ${allDelivered?"checked":""} ${allDelivered?"disabled":""}>Entregado</label>
       </div>
@@ -1176,6 +1700,9 @@ function renderOrders(){
       <div class="edit-group hidden">
         <div class="edit-client-row">
           <label>Cliente<input class="edit-client" value="${escapeHtml(first.client)}"></label>
+          <label>N.º de remito
+            <input class="edit-remito-number" value="${escapeHtml(orderRemitoNumberFromNotes(first))}" placeholder="Vacío = automático">
+          </label>
           <label>Forma de cobro
             <select class="edit-payment">
               ${["cuenta_corriente","efectivo","transferencia"].map(p=>`<option value="${p}" ${p===first.payment_method?"selected":""}>${p.replace("_"," ")}</option>`).join("")}
@@ -1216,7 +1743,18 @@ function renderOrders(){
       try{
         label.childNodes[0].textContent=" Subiendo... ";
         await uploadSignedReceipt(batchId,items,file);
-        alert("Remito firmado guardado correctamente.");
+        if(allDelivered){
+          alert("Remito firmado guardado correctamente. Como el pedido ya está entregado, no se modificaron sus datos.");
+          return;
+        }
+        label.childNodes[0].textContent=" Leyendo remito... ";
+        try{
+          const detected=await analyzeSignedReceiptImage(file,items);
+          showReceiptOcrReview(items,card,detected);
+        }catch(ocrError){
+          console.warn("OCR de remito:",ocrError);
+          alert("La foto quedó archivada correctamente, pero no se pudo leer automáticamente. Podés editar el pedido de forma manual.");
+        }
       }catch(e){
         alert("No se pudo guardar la foto: "+e.message);
       }finally{
@@ -1472,6 +2010,17 @@ function isOpeningBalanceMovement(m){
   return m.type==="ajuste" && String(m.notes||"").includes("SALDO_INICIAL");
 }
 
+// V35.3.44: las correcciones usadas para cuadrar una cuenta no deben
+// reemplazar visualmente a los remitos pendientes reales.
+// Se mantienen en el saldo matemático, pero se ocultan del listado operativo.
+function isBalanceCorrectionMovement(m){
+  if(!isOpeningBalanceMovement(m)) return false;
+  const text=`${m.concept||""} ${m.notes||""}`.toUpperCase();
+  return text.includes("AJUSTE SALDO REAL") ||
+         text.includes("CORRECCION SALDO REAL") ||
+         text.includes("CORRECCIÓN SALDO REAL");
+}
+
 
 function normalizeClientName(name){
   return String(name||"")
@@ -1490,8 +2039,10 @@ function canonicalClientKey(name){
 
   if(
     normalized==="DUMPLING" ||
+    normalized==="PRINGLES" ||
     normalized==="PRINGLES1272" ||
-    normalized==="GUATEMALA4450" ||
+    normalized==="GUATEMALA" ||
+    normalized.startsWith("GUATEMALA4450") ||
     normalized.startsWith("GORRITI56")
   ){
     return "DUMPLING";
@@ -1538,12 +2089,52 @@ function accountMovementsFor(client){
   );
 }
 
+const CC_CHECKPOINT_DATE="2026-08-19";
+const CC_CHECKPOINT_BALANCES=Object.freeze({"BELGRANO": 2656700, "CLINICA HAEDO": 1713270, "RAMOS": 772150, "HAEDO": 769980, "INTENDENCIA": 629650, "ARDENTE": 502500, "NOI": 185000, "CASEROS": 922500, "CONGRESO 1111": 149770, "GINO": 0, "ITUZAINGÓ": 333250, "SIFÓN": 981500, "VILLA DEL PARQUE": 965000, "SIMPLE": 602420, "DUMPLING": -568243, "SENDERO": 856750, "PALERMO": 7870150, "MORON PLAZA": 10736775, "VITTORINO": 2127523});
+
+function checkpointBalanceForClient(client){
+  const canonical=canonicalClientDisplayName(client);
+  if(Object.prototype.hasOwnProperty.call(CC_CHECKPOINT_BALANCES,canonical)){
+    return Number(CC_CHECKPOINT_BALANCES[canonical]||0);
+  }
+  // Todo cliente no incluido en el cierre conciliado comienza en $0 al 19/08.
+  // Así ningún movimiento histórico anterior vuelve a entrar por una vía alternativa.
+  return 0;
+}
+
+function isAfterCcCheckpoint(m){
+  return String(m?.date||"")>CC_CHECKPOINT_DATE;
+}
+
+function ccPostCheckpointMovements(client){
+  return accountMovementsFor(client).filter(isAfterCcCheckpoint);
+}
+
 function accountTotals(client){
+  const checkpoint=checkpointBalanceForClient(client);
+
+  // V35.3.44: para las cuentas conciliadas al 19/08, ese cierre es la base
+  // inmutable. Solo los movimientos posteriores pueden modificar el saldo.
+  if(checkpoint!==null){
+    const newer=accountMovementsFor(client).filter(isAfterCcCheckpoint);
+    const sales=newer.filter(m=>m.type==="venta").reduce((s,m)=>s+Number(m.amount||0),0);
+    const collected=newer.filter(m=>m.type==="cobro").reduce((s,m)=>s+Number(m.amount||0),0);
+    return {
+      opening:checkpoint,
+      sales,
+      collected,
+      balance:checkpoint+sales-collected,
+      checkpoint:true,
+      checkpoint_date:CC_CHECKPOINT_DATE
+    };
+  }
+
+  // Clientes no incluidos en el cierre 19/08 mantienen la lógica histórica.
   const list=accountMovementsFor(client);
   const opening=list.filter(isOpeningBalanceMovement).reduce((s,m)=>s+Number(m.amount||0),0);
   const sales=list.filter(m=>m.type==="venta").reduce((s,m)=>s+Number(m.amount||0),0);
   const collected=list.filter(m=>m.type==="cobro").reduce((s,m)=>s+Number(m.amount||0),0);
-  return {opening,sales,collected,balance:opening+sales-collected};
+  return {opening,sales,collected,balance:opening+sales-collected,checkpoint:false};
 }
 
 function fillClientSelects(){
@@ -1563,6 +2154,166 @@ function fillClientSelects(){
   });
 }
 
+function movementDocumentMeta(movement){
+  const notes=String(movement?.notes||"");
+  const remitoMatch=notes.match(/(?:^|\|)\s*REMITO_FISICO:([^|]*?)(?=\s*\||$)/);
+  const invoiceMatch=notes.match(/(?:^|\|)\s*FACTURA:([^|]*?)(?=\s*\||$)/);
+  return {
+    remito: remitoMatch ? String(remitoMatch[1]||"").trim() : "",
+    invoice: invoiceMatch ? String(invoiceMatch[1]||"").trim() : ""
+  };
+}
+
+function setMovementDocumentMetaNotes(notes,remito,invoice){
+  let clean=String(notes||"")
+    .replace(/(?:^|\|)\s*REMITO_FISICO:[^|]*(?=\||$)/g,"")
+    .replace(/(?:^|\|)\s*FACTURA:[^|]*(?=\||$)/g,"")
+    .replace(/^\s*\|\s*|\s*\|\s*$/g,"")
+    .replace(/\s*\|\s*/g," | ")
+    .trim();
+
+  const parts=[];
+  if(clean) parts.push(clean);
+  if(String(remito||"").trim()) parts.push(`REMITO_FISICO:${String(remito).trim()}`);
+  if(String(invoice||"").trim()) parts.push(`FACTURA:${String(invoice).trim()}`);
+  return parts.join(" | ");
+}
+
+function movementDisplayDocument(movement){
+  const meta=movementDocumentMeta(movement);
+  const parts=[];
+  if(meta.remito) parts.push(`Remito ${meta.remito}`);
+  if(meta.invoice) parts.push(`Factura ${meta.invoice}`);
+  return parts.join(" · ");
+}
+
+function openAccountDocumentEdit(movement){
+  if(!movement || movement.type!=="venta") return;
+  const meta=movementDocumentMeta(movement);
+  $("accountDocumentMovementId").value=String(movement.id||"");
+  $("accountDocumentRemito").value=meta.remito;
+  $("accountDocumentInvoice").value=meta.invoice;
+  $("accountDocumentEditInfo").textContent=`${fmtDate(movement.date)} · ${movement.party||""} · ${movement.concept||"Venta"}`;
+  const d=$("accountDocumentEditDialog");
+  if(typeof d?.showModal==="function") d.showModal(); else d?.setAttribute("open","");
+}
+
+async function saveAccountDocumentEdit(event){
+  event.preventDefault();
+  const id=String($("accountDocumentMovementId")?.value||"").trim();
+  const movement=movements.find(m=>String(m.id||"")===id);
+  if(!movement) return alert("No se encontró el movimiento.");
+  if(movement.type!=="venta") return alert("Solo se pueden editar datos de ventas/remitos.");
+
+  const remito=String($("accountDocumentRemito")?.value||"").trim();
+  const invoice=String($("accountDocumentInvoice")?.value||"").trim();
+  const notes=setMovementDocumentMetaNotes(movement.notes,remito,invoice);
+
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").update({notes}).eq("id",movement.id);
+      if(error) throw error;
+    }
+    movement.notes=notes;
+    localSave();
+    const d=$("accountDocumentEditDialog");
+    if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open");
+    renderAccounts();
+    showDeliveryToast("Datos del comprobante guardados.");
+  }catch(error){
+    alert("No se pudieron guardar los datos del comprobante: "+error.message);
+  }
+}
+
+function accountCollectionAllocationLabel(movement){
+  const ids=collectionTargetMovementIds(movement);
+  if(!ids.length) return "Sin imputación específica · aplica por antigüedad";
+  const sales=accountMovementsFor(movement.party||"").filter(m=>m.type==="venta");
+  const labels=ids.map(id=>{
+    const sale=sales.find(m=>String(m.id||"")===String(id));
+    if(!sale) return `Comprobante ${id}`;
+    const meta=movementDocumentMeta(sale);
+    if(meta.remito) return `Remito ${meta.remito}`;
+    if(meta.invoice) return `Factura ${meta.invoice}`;
+    return `${fmtDate(sale.date)} · ${sale.concept||"Venta"}`;
+  });
+  return `Imputado a: ${labels.join(" · ")}`;
+}
+
+async function editCollectionAllocation(movement){
+  if(!movement || movement.type!=="cobro") return;
+  const client=canonicalClientDisplayName(movement.party||"");
+  const sales=accountMovementsFor(client)
+    .filter(m=>m.type==="venta" && !isBalanceCorrectionMovement(m))
+    .slice()
+    .sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
+  if(!sales.length) return alert("No hay ventas/remitos disponibles para vincular.");
+
+  const currentIds=collectionTargetMovementIds(movement);
+  const currentDocs=currentIds.map(id=>{
+    const m=sales.find(x=>String(x.id||"")===String(id));
+    if(!m) return "";
+    const meta=movementDocumentMeta(m);
+    return meta.remito||meta.invoice||"";
+  }).filter(Boolean);
+
+  const recent=sales.slice(-30).map(m=>{
+    const meta=movementDocumentMeta(m);
+    const doc=meta.remito?`Remito ${meta.remito}`:meta.invoice?`Factura ${meta.invoice}`:"Sin número";
+    return `${fmtDate(m.date)} · ${doc} · ${money(m.amount||0)}`;
+  }).join("\n");
+
+  const entered=prompt(
+    `Corregir imputación de esta cobranza (${money(movement.amount||0)} · ${fmtDate(movement.date)}).\n\n`+
+    `Escribí el/los NÚMEROS DE REMITO o FACTURA separados por coma.\n`+
+    `Esto NO cambia importe, fecha ni saldo total; solo vincula la cobranza con los comprobantes correctos.\n\n`+
+    `Comprobantes recientes:\n${recent}`,
+    currentDocs.join(", ")
+  );
+  if(entered===null) return;
+  const docs=entered.split(",").map(x=>x.trim()).filter(Boolean);
+  if(!docs.length) return alert("No se hizo ningún cambio. Para cobranzas sin imputación específica se mantiene la regla por antigüedad.");
+
+  const matched=[];
+  const missing=[];
+  for(const doc of docs){
+    const normalized=String(doc).toUpperCase().replace(/^(REMITO|FACTURA|FC)\s*/i,"").trim();
+    const sale=sales.find(m=>{
+      const meta=movementDocumentMeta(m);
+      return [meta.remito,meta.invoice].some(v=>String(v||"").toUpperCase().trim()===normalized);
+    });
+    if(sale && !matched.some(x=>String(x.id)===String(sale.id))) matched.push(sale);
+    else if(!sale) missing.push(doc);
+  }
+  if(missing.length) return alert(`No encontré estos comprobantes para ${client}: ${missing.join(", ")}. No se modificó nada.`);
+
+  const summary=matched.map(m=>{
+    const meta=movementDocumentMeta(m);
+    return `${fmtDate(m.date)} · ${meta.remito?`Remito ${meta.remito}`:`Factura ${meta.invoice}`} · ${money(m.amount||0)}`;
+  }).join("\n");
+  if(!confirm(`Vincular ${money(movement.amount||0)} del ${fmtDate(movement.date)} a:\n\n${summary}\n\nNo se modifica el monto de la cobranza ni el saldo total. ¿Confirmar?`)) return;
+
+  const cleaned=String(movement.notes||"")
+    .replace(/(?:^|\|)\s*IMPUTA_MOVEMENT_IDS?:[^|]+(?=\||$)/g,"")
+    .replace(/^\s*\|\s*|\s*\|\s*$/g,"")
+    .trim();
+  const allocation=`IMPUTA_MOVEMENT_IDS:${matched.map(m=>m.id).join(",")}`;
+  const notes=[allocation,cleaned].filter(Boolean).join(" | ");
+
+  try{
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").update({notes}).eq("id",movement.id);
+      if(error) throw error;
+    }
+    movement.notes=notes;
+    localSave();
+    renderAll();
+    showDeliveryToast("Imputación corregida sin modificar el saldo total.");
+  }catch(error){
+    alert("No se pudo corregir la imputación: "+error.message);
+  }
+}
+
 function renderAccountHistory(client){
   const box=$("accountHistoryList");
   if(!box) return;
@@ -1572,9 +2323,20 @@ function renderAccountHistory(client){
     return;
   }
 
+  const checkpoint=checkpointBalanceForClient(client);
   const list=accountMovementsFor(client)
     .slice()
     .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)));
+
+  if(checkpoint!==null){
+    const checkpointRow=document.createElement("div");
+    checkpointRow.className="account-history-row opening";
+    checkpointRow.innerHTML=`
+      <div class="date">19/08/2026</div>
+      <div><strong>Saldo conciliado · Punto de corte</strong><small>Base protegida V35.3.44</small></div>
+      <div class="amount">+${money(checkpoint)}</div>`;
+    box.append(checkpointRow);
+  }
 
   if(!list.length){
     box.innerHTML='<div class="account-empty">Este cliente todavía no tiene movimientos.</div>';
@@ -1585,17 +2347,28 @@ function renderAccountHistory(client){
     const row=document.createElement("div");
     const debit=m.type==="venta" || isOpeningBalanceMovement(m);
     row.className=`account-history-row ${debit?"positive":"negative"}`;
-    const label=isOpeningBalanceMovement(m)
-      ? "Saldo anterior"
-      : m.type==="venta" ? "Venta" : "Cobranza";
+    const label=isBalanceCorrectionMovement(m)
+      ? "Ajuste de saldo"
+      : isOpeningBalanceMovement(m)
+        ? "Saldo anterior"
+        : m.type==="venta" ? "Venta" : "Cobranza";
     const sign=debit?"+":"−";
+    const documentInfo=m.type==="venta" ? movementDisplayDocument(m) : "";
     row.innerHTML=`
       <div>${fmtDate(m.date)}</div>
       <div class="history-main">
         <strong>${label} · ${escapeHtml(m.concept||"")}</strong>
-        <small>${escapeHtml(m.payment_method||"")} ${m.notes?`· ${escapeHtml(m.notes.replace("SALDO_INICIAL","").replace("|","").trim())}`:""}</small>
+        ${documentInfo?`<small class="account-document-meta">${escapeHtml(documentInfo)}</small>`:""}
+        <small>${escapeHtml(m.payment_method||"")} ${cleanAccountMovementNotes(m)?`· ${escapeHtml(cleanAccountMovementNotes(m))}`:""}</small>
+        ${m.type==="cobro"?`<small class="account-document-meta">${escapeHtml(accountCollectionAllocationLabel(m))}</small>`:""}
       </div>
-      <div class="history-amount">${sign}${money(m.amount||0)}</div>`;
+      <div class="history-amount">${sign}${money(m.amount||0)}</div>
+      ${m.type==="venta"?'<button type="button" class="secondary account-edit-document-btn">✏️ Comprobante</button>':m.type==="cobro"?'<button type="button" class="secondary account-edit-allocation-btn">🔗 Imputación</button>':""}`;
+    if(m.type==="venta"){
+      row.querySelector(".account-edit-document-btn")?.addEventListener("click",()=>openAccountDocumentEdit(m));
+    }else if(m.type==="cobro"){
+      row.querySelector(".account-edit-allocation-btn")?.addEventListener("click",()=>editCollectionAllocation(m));
+    }
     box.append(row);
   });
 }
@@ -1609,6 +2382,150 @@ function renderAccounts(){
   if($("accountTotalCollected")) $("accountTotalCollected").textContent=money(totals.collected);
   if($("accountOpeningBalance")) $("accountOpeningBalance").textContent=money(totals.opening);
   renderAccountHistory(client);
+  const collectionClient=$("collectionClient")?.value||"";
+  const currentTargets=selectedCollectionTargetIds();
+  fillCollectionPendingTargets(collectionClient,currentTargets);
+}
+
+
+
+const MASTER_ACCOUNT_TARGETS_1908 = Object.freeze({"BELGRANO": 2656700, "CLINICA HAEDO": 1713270, "RAMOS": 772150, "HAEDO": 769980, "INTENDENCIA": 629650, "ARDENTE": 502500, "NOI": 185000, "CASEROS": 922500, "CONGRESO 1111": 149770, "GINO": 0, "ITUZAINGÓ": 333250, "SIFÓN": 981500, "VILLA DEL PARQUE": 965000, "SIMPLE": 602420, "DUMPLING": -568243, "SENDERO": 856750, "PALERMO": 7870150, "MORON PLAZA": 10736775, "VITTORINO": 2127523});
+const MASTER_OPENINGS_1908 = Object.freeze({"CLINICA HAEDO": 5417050, "RAMOS": 1464250, "HAEDO": 6643565, "INTENDENCIA": 4174600, "ARDENTE": 2688100, "NOI": 2393392, "SIFÓN": 1381400, "VILLA DEL PARQUE": 1035000, "SIMPLE": 1024035, "DUMPLING": 5944452, "SENDERO": 1071800, "PALERMO": 4612750, "MORON PLAZA": 10814920, "VITTORINO": 2127523});
+const MASTER_BAD_MOVEMENT_IDS_1908 = Object.freeze(["530a086f-6a55-47b2-96e9-b016f735faea", "72f37988-fd79-4972-8ee9-60d4fe97ce5e", "08e1a495-5c3f-4fb0-b078-9442a0961f15", "a17aeb1b-3740-4420-929c-feeff5bd9a4c", "884e5f03-1fb0-4861-a871-cffb937af890", "4a439a19-73cd-4e03-8ce8-7824714fa238"]);
+
+function repairClientCanonicalName1908(name){
+  return canonicalClientDisplayName(String(name||"").trim());
+}
+
+function repairOpeningId1908(display){
+  // No depende de funciones auxiliares externas.
+  const slug=String(display||"CLIENTE")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-+|-+$/g,"") || "cliente";
+  return `repair-opening-2026-08-19-${slug}`;
+}
+
+async function repairAccounts1908(){
+  if(!confirm(
+    "RECUPERACIÓN MAESTRA 19/08/2026\n\n"+
+    "Esta versión está preparada para continuar incluso si la reparación anterior quedó a mitad de camino.\n\n"+
+    "1) elimina únicamente los movimientos artificiales identificados;\n"+
+    "2) reemplaza los saldos anteriores de las cuentas de control;\n"+
+    "3) conserva ventas y cobranzas reales;\n"+
+    "4) verifica todos los saldos antes de informar éxito.\n\n"+
+    "¿Continuar?"
+  )) return;
+
+  const btn=$("repairAccounts1908");
+  if(btn){btn.disabled=true;btn.textContent="Recuperando…";}
+
+  try{
+    saveSafetyBackup("ANTES recuperación maestra CC 19-08 V35.3.44");
+
+    if(!supabaseClient){
+      const connected=await initCloud();
+      if(!connected) throw new Error("No se pudo conectar con Supabase.");
+    }
+
+    await reloadCloudData();
+
+    // Preparar TODO antes de borrar. No hay cálculos que puedan fallar después.
+    const targetNames=Object.keys(MASTER_ACCOUNT_TARGETS_1908);
+    const openingRows=Object.entries(MASTER_OPENINGS_1908).map(([display,amount])=>({
+      id:repairOpeningId1908(display),
+      date:"2026-08-19",
+      type:"ajuste",
+      party:repairClientCanonicalName1908(display),
+      concept:"Saldo anterior",
+      kg:0,
+      amount:Number(amount),
+      payment_method:"cuenta_corriente",
+      status:"confirmado",
+      notes:"SALDO_INICIAL | REPARACION_MAESTRA_19_08_2026_V35338",
+      source_order_id:null,
+      created_at:new Date().toISOString()
+    }));
+
+    // Localizar todos los saldos anteriores actuales de las cuentas controladas.
+    const openingIds=[];
+    targetNames.forEach(display=>{
+      const canonical=repairClientCanonicalName1908(display);
+      accountMovementsFor(canonical)
+        .filter(isOpeningBalanceMovement)
+        .forEach(m=>{ if(m.id) openingIds.push(String(m.id)); });
+    });
+
+    // A) Quitar movimientos artificiales exactos. Es idempotente.
+    if(MASTER_BAD_MOVEMENT_IDS_1908.length){
+      const {error}=await supabaseClient
+        .from("movements")
+        .delete()
+        .in("id",[...MASTER_BAD_MOVEMENT_IDS_1908]);
+      if(error) throw new Error("No se pudieron quitar los movimientos artificiales: "+error.message);
+    }
+
+    // B) Quitar saldos anteriores actuales SOLO de las cuentas de control.
+    const uniqueOpeningIds=[...new Set(openingIds)];
+    if(uniqueOpeningIds.length){
+      const {error}=await supabaseClient
+        .from("movements")
+        .delete()
+        .in("id",uniqueOpeningIds);
+      if(error) throw new Error("No se pudieron reemplazar los saldos anteriores: "+error.message);
+    }
+
+    // C) Insertar saldos anteriores fijos y conocidos.
+    if(openingRows.length){
+      const {error}=await supabaseClient
+        .from("movements")
+        .upsert(openingRows,{onConflict:"id"});
+      if(error) throw new Error("No se pudieron guardar los saldos de recuperación: "+error.message);
+    }
+
+    await reloadCloudData();
+
+    // D) Verificar cliente por cliente. Se acepta diferencia menor a $1 por decimales históricos.
+    const failures=[];
+    const oks=[];
+    for(const [display,target] of Object.entries(MASTER_ACCOUNT_TARGETS_1908)){
+      const canonical=repairClientCanonicalName1908(display);
+      const got=Number(accountTotals(canonical).balance||0);
+      if(Math.abs(got-Number(target))>=1){
+        failures.push(`${display} — esperado ${money(target)} / quedó ${money(got)}`);
+      } else {
+        oks.push(`${display} — ${money(got)}`);
+      }
+    }
+
+    renderAll();
+    buildOrderSheet();
+
+    if(failures.length){
+      saveSafetyBackup("DESPUÉS recuperación PARCIAL V35.3.44");
+      throw new Error(
+        "La reparación terminó pero estas cuentas no cerraron:\n\n"+
+        failures.join("\n")+
+        "\n\nNo cargues movimientos nuevos. Mandame esta pantalla."
+      );
+    }
+
+    saveSafetyBackup("DESPUÉS recuperación maestra CC 19-08 V35.3.44 VERIFICADA");
+
+    alert(
+      "RECUPERACIÓN COMPLETA Y VERIFICADA ✅\n\n"+
+      `${oks.length} cuentas coinciden con las hojas de control del 19/08.\n\n`+
+      "No se borraron ventas ni cobranzas históricas reales.\n"+
+      "Ahora revisá la solapa SALDOS antes de seguir operando."
+    );
+  }catch(error){
+    console.error(error);
+    alert("RECUPERACIÓN DETENIDA\n\n"+(error.message||error));
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent="🛡 Reparar cuentas 19/08";}
+  }
 }
 
 async function saveOpeningBalance(event){
@@ -1619,13 +2536,22 @@ async function saveOpeningBalance(event){
   const detail=String($("openingDetail")?.value||"").trim();
 
   if(!client) return alert("Elegí un cliente.");
-  if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
+  if(!Number.isFinite(amount) || amount<0) return alert("Ingresá un importe válido. Para anular el saldo anterior usá 0.");
 
-  const movement={
+  // V35.3.44: el saldo anterior es ÚNICO por cliente.
+  // Antes cada corrección agregaba otro movimiento SALDO_INICIAL y podía dejar
+  // cuentas desajustadas. Ahora reemplaza exclusivamente los saldos anteriores
+  // del cliente seleccionado. Un importe 0 los anula sin tocar otros clientes.
+  const previousOpeningIds=accountMovementsFor(client)
+    .filter(isOpeningBalanceMovement)
+    .map(m=>m.id)
+    .filter(Boolean);
+
+  const movement=amount>0 ? {
     id:uid(),
     date,
     type:"ajuste",
-    party:client,
+    party:canonicalClientDisplayName(client),
     concept:"Saldo anterior",
     kg:0,
     amount,
@@ -1634,23 +2560,121 @@ async function saveOpeningBalance(event){
     notes:`SALDO_INICIAL${detail?` | ${detail}`:""}`,
     source_order_id:null,
     created_at:new Date().toISOString()
-  };
+  } : null;
 
   try{
-    if(supabaseClient){
+    if(supabaseClient && previousOpeningIds.length){
+      const {error}=await supabaseClient.from("movements").delete().in("id",previousOpeningIds);
+      if(error) throw error;
+    }
+    if(supabaseClient && movement){
       const {error}=await supabaseClient.from("movements").insert(movement);
       if(error) throw error;
     }
-    movements.unshift(movement);
+
+    const removeIds=new Set(previousOpeningIds.map(String));
+    movements=movements.filter(m=>!removeIds.has(String(m.id||"")));
+    if(movement) movements.unshift(movement);
     localSave();
-    $("accountClientSelect").value=client;
+
+    $("accountClientSelect").value=canonicalClientDisplayName(client);
     renderAll();
     $("openingAmount").value="";
     $("openingDetail").value="";
-    showDeliveryToast("Saldo anterior guardado.");
+    showDeliveryToast(movement?"Saldo anterior reemplazado solo para este cliente.":"Saldo anterior anulado solo para este cliente.");
   }catch(error){
-    alert("No se pudo guardar el saldo anterior: "+error.message);
+    alert("No se pudo actualizar el saldo anterior: "+error.message);
   }
+}
+
+function collectionTargetMovementIds(movement){
+  const notes=String(movement?.notes||"");
+
+  // Formato nuevo: varios comprobantes en el orden elegido.
+  const multi=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_IDS:([^|]+?)(?:\s*\||$)/);
+  if(multi){
+    return String(multi[1]||"")
+      .split(",")
+      .map(x=>x.trim())
+      .filter(Boolean);
+  }
+
+  // Compatibilidad total con cobranzas guardadas en V35.3.17–V35.3.33.
+  const single=notes.match(/(?:^|\|)\s*IMPUTA_MOVEMENT_ID:([^|]+?)(?:\s*\||$)/);
+  return single ? [String(single[1]||"").trim()].filter(Boolean) : [];
+}
+
+function collectionTargetMovementId(movement){
+  return collectionTargetMovementIds(movement)[0] || "";
+}
+
+function cleanAccountMovementNotes(movement){
+  let notes=String(movement?.notes||"");
+  notes=notes.replace(/(?:^|\|)\s*IMPUTA_MOVEMENT_IDS?:[^|]+(?=\||$)/g,"");
+  notes=notes.replace(/SALDO_INICIAL/g,"");
+  notes=notes.replace(/(?:^|\|)\s*REMITO_FISICO:[^|]*(?=\||$)/g,"");
+  notes=notes.replace(/(?:^|\|)\s*FACTURA:[^|]*(?=\||$)/g,"");
+  notes=notes.replace(/^\s*\|\s*|\s*\|\s*$/g,"");
+  notes=notes.replace(/\s*\|\s*/g," · ");
+  return notes.trim();
+}
+
+function selectedCollectionTargetIds(){
+  return [...document.querySelectorAll('#collectionTargets input[type="checkbox"]:checked')]
+    .map(input=>String(input.value||"").trim())
+    .filter(Boolean);
+}
+
+function fillCollectionPendingTargets(client,preferredIds=[]){
+  const box=$("collectionTargets");
+  if(!box) return;
+
+  const preferred=Array.isArray(preferredIds)
+    ? preferredIds.map(String)
+    : String(preferredIds||"").split(",").map(x=>x.trim()).filter(Boolean);
+
+  box.innerHTML="";
+  if(!client){
+    box.innerHTML='<div class="muted small">Elegí primero un cliente</div>';
+    return;
+  }
+
+  const pending=pendingAccountDebtsFor(client)
+    .filter(d=>!isBalanceCorrectionMovement(d.movement))
+    .slice()
+    .sort((a,b)=>{
+      const da=`${String(a.movement?.date||"")} ${String(a.movement?.created_at||"")}`;
+      const db=`${String(b.movement?.date||"")} ${String(b.movement?.created_at||"")}`;
+      return da.localeCompare(db);
+    });
+
+  if(!pending.length){
+    box.innerHTML='<div class="muted small">Sin comprobantes pendientes</div>';
+    return;
+  }
+
+  const validPreferred=preferred.filter(id=>
+    pending.some(d=>String(d.movement.id||"")===String(id))
+  );
+  // V35.3.64: no se preselecciona el comprobante más antiguo.
+  // Si el usuario marca uno o varios, esa selección tiene prioridad real.
+  // Si no marca ninguno, recién ahí se conserva el comportamiento FIFO.
+  const selectedIds=new Set(validPreferred);
+
+  pending.forEach((debt,index)=>{
+    const m=debt.movement;
+    const id=String(m.id||"");
+    const type=isOpeningBalanceMovement(m)?"Saldo anterior":String(m.concept||"Remito");
+    const row=document.createElement("label");
+    row.className="collection-target-option";
+    row.innerHTML=`
+      <input type="checkbox" value="${escapeHtml(id)}" ${selectedIds.has(id)?"checked":""}>
+      <span>
+        <strong>${index===0?"Más antiguo · ":""}${fmtDate(m.date)} · ${escapeHtml(type)}</strong>
+        <small>Pendiente ${money(debt.remaining)}</small>
+      </span>`;
+    box.append(row);
+  });
 }
 
 async function saveCollection(event){
@@ -1661,11 +2685,29 @@ async function saveCollection(event){
   const method=$("collectionMethod")?.value||"efectivo";
   const detail=String($("collectionDetail")?.value||"").trim();
   const reference=String($("collectionReference")?.value||"").trim();
+  const targetMovementIds=selectedCollectionTargetIds();
 
   if(!client) return alert("Elegí un cliente.");
   if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
 
   const concept=detail||"Cobranza";
+
+  // V35.3.64: confirmar explícitamente la imputación antes de guardar.
+  if(targetMovementIds.length){
+    const selectedDetails=targetMovementIds.map(id=>{
+      const input=[...document.querySelectorAll('#collectionTargets input[type="checkbox"]')]
+        .find(el=>String(el.value||"")===String(id));
+      const label=input?.closest("label")?.innerText?.replace(/\s+/g," ")?.trim();
+      return label||id;
+    });
+    const message=`Vas a registrar ${money(amount)} para ${client} e imputarlo primero a:
+
+${selectedDetails.map(x=>`• ${x}`).join("\n")}
+
+¿Confirmar cobranza?`;
+    if(!confirm(message)) return;
+  }
+
   const movement={
     id:uid(),
     date,
@@ -1676,7 +2718,10 @@ async function saveCollection(event){
     amount,
     payment_method:method,
     status:"confirmado",
-    notes:reference?`REFERENCIA: ${reference}`:"",
+    notes:[
+      targetMovementIds.length?`IMPUTA_MOVEMENT_IDS:${targetMovementIds.join(",")}`:"",
+      reference?`REFERENCIA: ${reference}`:""
+    ].filter(Boolean).join(" | "),
     source_order_id:null,
     created_at:new Date().toISOString()
   };
@@ -1693,6 +2738,7 @@ async function saveCollection(event){
     $("collectionAmount").value="";
     $("collectionDetail").value="";
     $("collectionReference").value="";
+    fillCollectionPendingTargets(client);
     showDeliveryToast("Cobranza guardada.");
   }catch(error){
     alert("No se pudo guardar la cobranza: "+error.message);
@@ -1705,6 +2751,7 @@ function collectFullBalance(){
   const balance=accountTotals(client).balance;
   if(balance<=0) return alert("El cliente no tiene saldo pendiente.");
   $("collectionClient").value=client;
+  fillCollectionPendingTargets(client);
   $("collectionAmount").value=balance.toFixed(2);
   document.querySelector('.tab[data-view="accounts"]')?.click();
   $("collectionDetail").value="Cancelación total";
@@ -1721,10 +2768,12 @@ function printAccountStatement(){
     .map(m=>{
       const debit=m.type==="venta"||isOpeningBalanceMovement(m);
       const label=isOpeningBalanceMovement(m)?"Saldo anterior":m.type==="venta"?"Venta":"Cobranza";
+      const meta=m.type==="venta" ? movementDocumentMeta(m) : {remito:"",invoice:""};
       return `<tr>
         <td>${fmtDate(m.date)}</td>
         <td>${escapeHtml(label)}</td>
-        <td>${escapeHtml(m.concept||"")}</td>
+        <td>${escapeHtml(meta.remito || m.concept || "")}</td>
+        <td>${escapeHtml(meta.invoice || "—")}</td>
         <td class="num">${debit?money(m.amount):""}</td>
         <td class="num">${!debit?money(m.amount):""}</td>
       </tr>`;
@@ -1740,7 +2789,7 @@ function printAccountStatement(){
   @page{size:A4 portrait;margin:10mm}@media print{body{padding:0}}
   </style></head><body>
   <div class="head"><div><h1>DON ZOILO</h1><div>Estado de cuenta</div></div><div><strong>${escapeHtml(client)}</strong><br>${new Date().toLocaleDateString("es-AR")}</div></div>
-  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${rows}</tbody></table>
+  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Remito</th><th>Factura</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="summary">
     <div><span>Saldo anterior</span><strong>${money(totals.opening)}</strong></div>
     <div><span>Ventas</span><strong>${money(totals.sales)}</strong></div>
@@ -1753,28 +2802,306 @@ function printAccountStatement(){
 }
 
 
-function totalClientCurrentAccounts(){
-  const totals=new Map();
+// V35.3.2 — Calcula comprobantes con saldo pendiente sin modificar la base de datos.
+// Las cobranzas se imputan por antigüedad (FIFO). Si existe un saldo a favor,
+// se conserva y se aplica contra la siguiente venta, igual que en el saldo general.
+function pendingAccountDebtsFor(client){
+  const checkpoint=checkpointBalanceForClient(client);
 
-  movements
-    .filter(m=>m.status!=="pendiente" && ["venta","cobro","ajuste"].includes(m.type))
-    .forEach(m=>{
-      const raw=String(m.party||"").trim();
-      if(!raw) return;
+  if(checkpoint!==null){
+    // Desde el 20/08 en adelante, los movimientos nuevos se imputan sobre
+    // el saldo conciliado del 19/08. No se vuelven a reinterpretar 1000+
+    // movimientos históricos.
+    const synthetic={
+      id:`cc-checkpoint-${canonicalClientKey(client)}`,
+      date:CC_CHECKPOINT_DATE,
+      type:"ajuste",
+      party:canonicalClientDisplayName(client),
+      concept:"Saldo conciliado 19/08",
+      kg:0,
+      amount:Math.max(0,Number(checkpoint||0)),
+      payment_method:"cuenta_corriente",
+      status:"confirmado",
+      notes:"CC_CHECKPOINT_19_08",
+      created_at:"2026-08-19T23:59:59.999Z"
+    };
 
-      const key=canonicalClientKey(raw);
-      const current=totals.get(key)||0;
-      const value=Number(m.amount||0);
+    const debts=[];
+    let credit=Math.max(0,-Number(checkpoint||0));
 
-      if(m.type==="venta" || isOpeningBalanceMovement(m)){
-        totals.set(key,current+value);
-      }else if(m.type==="cobro"){
-        totals.set(key,current-value);
+    if(Number(checkpoint||0)>0){
+      debts.push({movement:synthetic,original:Number(checkpoint),remaining:Number(checkpoint)});
+    }
+
+    const newer=accountMovementsFor(client)
+      .filter(isAfterCcCheckpoint)
+      .slice()
+      .sort((a,b)=>{
+        const da=`${String(a.date||"")} ${String(a.created_at||"")}`;
+        const db=`${String(b.date||"")} ${String(b.created_at||"")}`;
+        return da.localeCompare(db);
+      });
+
+    // V35.3.64: una cobranza vinculada reserva su comprobante.
+    // Así una cobranza FIFO anterior no puede consumir por error un remito
+    // que sabemos que fue cancelado específicamente después.
+    const futureTargetLocks=new Map();
+    newer.filter(m=>m.type==="cobro").forEach(m=>{
+      collectionTargetMovementIds(m).forEach(id=>futureTargetLocks.set(String(id),(futureTargetLocks.get(String(id))||0)+1));
+    });
+
+    const applyCredit=(debt)=>{
+      if(credit<=0 || debt.remaining<=0) return;
+      const applied=Math.min(credit,debt.remaining);
+      debt.remaining-=applied;
+      credit-=applied;
+    };
+
+    newer.forEach(m=>{
+      if(m.type==="venta"){
+        const debt={movement:m,original:Math.max(0,Number(m.amount||0)),remaining:Math.max(0,Number(m.amount||0))};
+        applyCredit(debt);
+        debts.push(debt);
+        return;
+      }
+      if(m.type==="cobro"){
+        let payment=Math.max(0,Number(m.amount||0));
+
+        // V35.3.64: respetar primero los comprobantes elegidos manualmente.
+        // Antes, en clientes con checkpoint (ej. MORON/INTENDENCIA), esta rama
+        // ignoraba IMPUTA_MOVEMENT_IDS y siempre consumía la deuda más antigua.
+        const targetIds=collectionTargetMovementIds(m);
+        for(const targetId of targetIds){
+          if(payment<=0) break;
+          const target=debts.find(d=>String(d.movement.id||"")===String(targetId) && d.remaining>0);
+          if(target){
+            const applied=Math.min(payment,target.remaining);
+            target.remaining-=applied;
+            payment-=applied;
+          }
+          const key=String(targetId);
+          if(futureTargetLocks.has(key)) futureTargetLocks.set(key,Math.max(0,(futureTargetLocks.get(key)||0)-1));
+        }
+
+        // Solo el remanente no imputado continúa por antigüedad (FIFO),
+        // sin tocar comprobantes reservados para cobranzas vinculadas.
+        for(const debt of debts){
+          if(payment<=0) break;
+          if(debt.remaining<=0) continue;
+          if((futureTargetLocks.get(String(debt.movement.id||""))||0)>0) continue;
+          const applied=Math.min(payment,debt.remaining);
+          debt.remaining-=applied;
+          payment-=applied;
+        }
+        if(payment>0) credit+=payment;
       }
     });
 
-  return [...totals.values()].reduce((sum,value)=>sum+value,0);
+    return debts.filter(d=>Math.round(Number(d.remaining||0))>0);
+  }
+
+  // Compatibilidad para clientes sin checkpoint.
+  const list=accountMovementsFor(client)
+    .slice()
+    .sort((a,b)=>{
+      const da=String(a.created_at||a.date||"");
+      const db=String(b.created_at||b.date||"");
+      return da.localeCompare(db);
+    });
+
+  const debts=[];
+  let credit=0;
+  const applyCreditToDebt=(debt)=>{
+    if(credit<=0 || debt.remaining<=0) return;
+    const applied=Math.min(credit,debt.remaining);
+    debt.remaining-=applied;
+    credit-=applied;
+  };
+
+  const futureTargetLocks=new Map();
+  list.filter(m=>m.type==="cobro").forEach(m=>{
+    collectionTargetMovementIds(m).forEach(id=>futureTargetLocks.set(String(id),(futureTargetLocks.get(String(id))||0)+1));
+  });
+
+  list.forEach(m=>{
+    const isDebt=m.type==="venta" || isOpeningBalanceMovement(m);
+    if(isDebt){
+      const original=Math.max(0,Number(m.amount||0));
+      const debt={movement:m,original,remaining:original};
+      applyCreditToDebt(debt);
+      debts.push(debt);
+      return;
+    }
+    if(m.type==="cobro"){
+      let payment=Math.max(0,Number(m.amount||0));
+      const targetIds=collectionTargetMovementIds(m);
+      for(const targetId of targetIds){
+        if(payment<=0) break;
+        const target=debts.find(d=>String(d.movement.id||"")===String(targetId) && d.remaining>0);
+        if(target){
+          const applied=Math.min(payment,target.remaining);
+          target.remaining-=applied;
+          payment-=applied;
+        }
+        const key=String(targetId);
+        if(futureTargetLocks.has(key)) futureTargetLocks.set(key,Math.max(0,(futureTargetLocks.get(key)||0)-1));
+      }
+      for(const debt of debts){
+        if(payment<=0) break;
+        if(debt.remaining<=0) continue;
+        if((futureTargetLocks.get(String(debt.movement.id||""))||0)>0) continue;
+        const applied=Math.min(payment,debt.remaining);
+        debt.remaining-=applied;
+        payment-=applied;
+      }
+      if(payment>0) credit+=payment;
+    }
+  });
+
+  return debts.filter(d=>Math.round(Number(d.remaining||0))>0);
 }
+
+function printPendingAccountStatement(){
+  const client=$("accountClientSelect")?.value||"";
+  if(!client) return alert("Elegí un cliente.");
+
+  // V35.3.33: el detalle impreso trabaja con la misma precisión visible ($ enteros).
+  // Evita listar residuos de centavos que money() muestra como $ 0 y que antes
+  // incrementaban incorrectamente el contador de comprobantes pendientes.
+  const allPending=pendingAccountDebtsFor(client)
+    .filter(d=>Math.round(Number(d.remaining||0))>0);
+
+  // Mostrar solo remitos/saldos anteriores históricos reales.
+  // Las correcciones de cuadratura siguen formando parte del saldo actual,
+  // pero no desplazan el último remito pendiente en este informe.
+  const pending=allPending.filter(d=>!isBalanceCorrectionMovement(d.movement));
+  const totalPending=pending.reduce((sum,d)=>sum+Number(d.remaining||0),0);
+  const correctionPending=allPending
+    .filter(d=>isBalanceCorrectionMovement(d.movement))
+    .reduce((sum,d)=>sum+Number(d.remaining||0),0);
+  const currentBalance=accountTotals(client).balance;
+
+  if(!pending.length && currentBalance<=0){
+    return alert("Este cliente no tiene comprobantes pendientes.");
+  }
+
+  const rows=pending.map(d=>{
+    const m=d.movement;
+    const label=isOpeningBalanceMovement(m)?"Saldo anterior":"Venta";
+    const meta=movementDocumentMeta(m);
+    return `<tr>
+      <td>${fmtDate(m.date)}</td>
+      <td>${escapeHtml(label)}</td>
+      <td>${escapeHtml(meta.remito || m.concept || "")}</td>
+      <td>${escapeHtml(meta.invoice || "—")}</td>
+      <td class="num">${money(d.original)}</td>
+      <td class="num strong">${money(d.remaining)}</td>
+    </tr>`;
+  }).join("");
+
+  const popup=window.open("","_blank");
+  if(!popup) return alert("El navegador bloqueó la ventana.");
+
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8">
+  <title>Pendientes ${escapeHtml(client)}</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:18mm;color:#111}
+    h1{margin:0}
+    .head{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid #111;padding-bottom:10px;margin-bottom:16px}
+    .subtitle{font-size:14px;margin-top:4px}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #999;padding:7px;font-size:12px}
+    th{background:#eee}
+    .num{text-align:right;white-space:nowrap}
+    .strong{font-weight:900}
+    .summary{margin-top:14px;margin-left:auto;width:340px}
+    .summary div{display:flex;justify-content:space-between;padding:7px;border-bottom:1px solid #ccc}
+    .summary .final{font-size:18px;font-weight:900;border-top:3px solid #111}
+    .note{margin-top:14px;font-size:10px;color:#555}
+    @page{size:A4 portrait;margin:10mm}
+    @media print{body{padding:0}}
+  </style></head><body>
+    <div class="head">
+      <div><h1>DON ZOILO</h1><div class="subtitle">Cuenta corriente · Solo pendientes</div></div>
+      <div><strong>${escapeHtml(client)}</strong><br>${new Date().toLocaleDateString("es-AR")}</div>
+    </div>
+
+    <table>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Remito</th><th>Factura</th><th>Importe original</th><th>Pendiente</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <div class="summary">
+      <div><span>Comprobantes pendientes</span><strong>${pending.length}</strong></div>
+      <div class="final"><span>Total remitos pendientes</span><strong>${money(totalPending)}</strong></div>
+      ${Math.round(correctionPending)!==0?`<div><span>Ajuste de regularización</span><strong>${money(correctionPending)}</strong></div>`:""}
+      <div><span>Saldo actual de cuenta</span><strong>${money(currentBalance)}</strong></div>
+    </div>
+
+    <div class="note">Los ajustes usados para regularizar el saldo no reemplazan ni ocultan los remitos pendientes reales.</div>
+
+    <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script>
+  </body></html>`);
+  popup.document.close();
+}
+
+
+function totalClientCurrentAccounts(){
+  return clientNames().reduce((sum,client)=>{
+    return sum+Number(accountTotals(client).balance||0);
+  },0);
+}
+
+// Fuente única para que Balance Diario muestre exactamente el mismo total que Saldos.
+window.DonZoiloFinancialTotals = window.DonZoiloFinancialTotals || {};
+
+window.DonZoiloFinancialTotals.clientCurrentAccounts = totalClientCurrentAccounts;
+
+// V35.3.44 — SOLO LECTURA.
+// Expone al Balance Diario el detalle de cuentas corrientes sin crear,
+// modificar, borrar ni recalcular movimientos.
+window.DonZoiloFinancialTotals.clientAccountDetail = function(){
+  return clientNames()
+    .map(client=>{
+      const totals=accountTotals(client);
+      const allPending=pendingAccountDebtsFor(client)
+        .filter(d=>Math.round(Number(d.remaining||0))>0);
+
+      const operational=allPending.filter(d=>!isBalanceCorrectionMovement(d.movement));
+      const corrections=allPending.filter(d=>isBalanceCorrectionMovement(d.movement));
+
+      const pending=operational.map(d=>{
+        const m=d.movement;
+        const meta=movementDocumentMeta(m);
+        return {
+          date:String(m.date||""),
+          type:isOpeningBalanceMovement(m)?"Saldo anterior":"Venta",
+          remito:String(meta.remito || m.concept || "").trim(),
+          invoice:String(meta.invoice || "").trim(),
+          original:Number(d.original||0),
+          remaining:Number(d.remaining||0)
+        };
+      });
+
+      const correctionPending=corrections.reduce((sum,d)=>sum+Number(d.remaining||0),0);
+      const pendingTotal=pending.reduce((sum,d)=>sum+Number(d.remaining||0),0);
+      const balance=Number(totals.balance||0);
+
+      return {
+        client,
+        balance,
+        pending,
+        pendingTotal,
+        correctionPending,
+        // Diferencia informativa para que el PDF pueda cerrar exactamente
+        // contra el saldo del cliente sin alterar la cuenta.
+        reconciliation: balance-pendingTotal-correctionPending
+      };
+    })
+    .filter(row=>Math.abs(Number(row.balance||0))>=0.5)
+    .sort((a,b)=>Number(b.balance||0)-Number(a.balance||0));
+};
+
 
 function openBalanceDetail(client){
   const totals=accountTotals(client);
@@ -1842,24 +3169,53 @@ function supplierMovementsFor(name){
   );
 }
 
+// V35.3.45: punto de corte protegido para proveedores conciliados.
+// IMPORTANTE: no crea, borra ni modifica movimientos. Solo evita que movimientos
+// históricos anteriores al cierre vuelvan a alterar el saldo ya verificado.
+const SUPPLIER_CHECKPOINT_DATE="2026-08-19";
+const SUPPLIER_CHECKPOINT_BALANCES=Object.freeze({
+  JORGE: 6192165,
+  TITO: 6964750
+});
+
+function supplierCheckpointBalance(name){
+  const key=normalizeClientName(name);
+  return Object.prototype.hasOwnProperty.call(SUPPLIER_CHECKPOINT_BALANCES,key)
+    ? Number(SUPPLIER_CHECKPOINT_BALANCES[key]||0)
+    : null;
+}
+
 function supplierTotals(name){
   const list=supplierMovementsFor(name);
+  const checkpoint=supplierCheckpointBalance(name);
+
+  if(checkpoint!==null){
+    const newer=list.filter(m=>String(m?.date||"")>SUPPLIER_CHECKPOINT_DATE);
+    const purchases=newer.filter(m=>m.type==="compra").reduce((s,m)=>s+Number(m.amount||0),0);
+    const payments=newer.filter(m=>m.type==="pago").reduce((s,m)=>s+Number(m.amount||0),0);
+    return {
+      opening:checkpoint, purchases, payments,
+      balance:checkpoint+purchases-payments,
+      checkpoint:true, checkpoint_date:SUPPLIER_CHECKPOINT_DATE
+    };
+  }
+
+  // Los demás proveedores conservan exactamente la lógica histórica existente.
   const opening=list.filter(isSupplierOpeningMovement).reduce((s,m)=>s+Number(m.amount||0),0);
   const purchases=list.filter(m=>m.type==="compra" && !isSupplierOpeningMovement(m)).reduce((s,m)=>s+Number(m.amount||0),0);
   const payments=list.filter(m=>m.type==="pago").reduce((s,m)=>s+Number(m.amount||0),0);
-  return {opening,purchases,payments,balance:opening+purchases-payments};
+  return {opening,purchases,payments,balance:opening+purchases-payments,checkpoint:false};
 }
 
 function allSuppliersDebt(){
-  const grouped=new Map();
-  movements.filter(m=>m.status!=="pendiente" && ["compra","pago"].includes(m.type)).forEach(m=>{
-    const key=normalizeClientName(m.party);
-    if(!key) return;
-    const current=grouped.get(key)||0;
-    grouped.set(key,current+(m.type==="compra"?Number(m.amount||0):-Number(m.amount||0)));
-  });
-  return [...grouped.values()].reduce((sum,value)=>sum+value,0);
+  // Usar la misma fuente de verdad que la pantalla de cada proveedor.
+  return supplierNames().reduce((sum,name)=>sum+Number(supplierTotals(name).balance||0),0);
 }
+
+// V35.3.50 — Balance Diario usa exactamente el mismo total que Proveedores.
+window.DonZoiloFinancialTotals.supplierDebt = allSuppliersDebt;
+// V35.3.50 — detalle por proveedor para el cierre de Balance Diario.
+window.DonZoiloFinancialTotals.supplierDebtDetail = supplierDebtRows;
 
 function fillSupplierSelectors(){
   const names=supplierNames();
@@ -1886,21 +3242,98 @@ function fillSupplierSelectors(){
   }
 }
 
+function supplierPeriodBounds(){
+  return {
+    from:String($("supplierDateFrom")?.value||""),
+    to:String($("supplierDateTo")?.value||"")
+  };
+}
+
+function supplierRawBalanceBefore(name,date){
+  const list=supplierMovementsFor(name).filter(m=>!date || String(m.date||"")<date);
+  const opening=list.filter(isSupplierOpeningMovement).reduce((s,m)=>s+Number(m.amount||0),0);
+  const purchases=list.filter(m=>m.type==="compra" && !isSupplierOpeningMovement(m)).reduce((s,m)=>s+Number(m.amount||0),0);
+  const payments=list.filter(m=>m.type==="pago").reduce((s,m)=>s+Number(m.amount||0),0);
+  return opening+purchases-payments;
+}
+
+function supplierBalanceBefore(name,date){
+  if(!date) return 0;
+  const checkpoint=supplierCheckpointBalance(name);
+  if(checkpoint!==null && date>SUPPLIER_CHECKPOINT_DATE){
+    const newer=supplierMovementsFor(name).filter(m=>String(m.date||"")>SUPPLIER_CHECKPOINT_DATE && String(m.date||"")<date);
+    return checkpoint + newer.reduce((saldo,m)=>saldo+(m.type==="compra"?Number(m.amount||0):-Number(m.amount||0)),0);
+  }
+  return supplierRawBalanceBefore(name,date);
+}
+
+function supplierStatementData(name){
+  const bounds=supplierPeriodBounds();
+  let from=bounds.from;
+  const to=bounds.to;
+  const checkpoint=supplierCheckpointBalance(name);
+  let protectedCheckpoint=false;
+  let list=supplierMovementsFor(name).slice().sort((a,b)=>{
+    const d=String(a.date||"").localeCompare(String(b.date||""));
+    return d || String(a.created_at||"").localeCompare(String(b.created_at||""));
+  });
+
+  // V35.3.68: Jorge/Tito tienen un saldo conciliado protegido al 19/08/2026.
+  // El estado de cuenta debe partir de esa misma fuente de verdad. Antes, al usar
+  // "Ver todo", volvía a sumar/restar movimientos históricos previos al corte y
+  // podía mostrar un saldo distinto del listado principal (ej. Jorge: diferencia
+  // exacta por un pago histórico de $2.532.700 del 18/06).
+  if(checkpoint!==null && (!from || from<=SUPPLIER_CHECKPOINT_DATE)){
+    protectedCheckpoint=true;
+    from="";
+    list=list.filter(m=>String(m.date||"")>SUPPLIER_CHECKPOINT_DATE);
+  }else if(from){
+    list=list.filter(m=>String(m.date||"")>=from);
+  }
+  if(to) list=list.filter(m=>String(m.date||"")<=to);
+
+  const opening=protectedCheckpoint
+    ? checkpoint
+    : (from?supplierBalanceBefore(name,from):0);
+  let running=opening;
+  const rows=list.map(m=>{
+    running += m.type==="compra"?Number(m.amount||0):-Number(m.amount||0);
+    return {movement:m,balance:running};
+  });
+  const purchases=list.filter(m=>m.type==="compra" && !isSupplierOpeningMovement(m)).reduce((s,m)=>s+Number(m.amount||0),0);
+  const payments=list.filter(m=>m.type==="pago").reduce((s,m)=>s+Number(m.amount||0),0);
+  return {
+    from,to,opening,rows,purchases,payments,closing:running,
+    protectedCheckpoint,
+    checkpointDate:protectedCheckpoint?SUPPLIER_CHECKPOINT_DATE:null
+  };
+}
+
 function renderSupplierHistory(name){
   const box=$("supplierHistoryList");
+  const summary=$("supplierPeriodSummary");
   if(!box) return;
   box.innerHTML="";
   if(!name){
+    if(summary) summary.hidden=true;
     box.innerHTML='<div class="supplier-empty">Elegí un proveedor para ver su cuenta corriente.</div>';
     return;
   }
-  const list=supplierMovementsFor(name).slice()
-    .sort((a,b)=>String(b.created_at||b.date).localeCompare(String(a.created_at||a.date)));
-  if(!list.length){
-    box.innerHTML='<div class="supplier-empty">Este proveedor todavía no tiene movimientos.</div>';
+  const data=supplierStatementData(name);
+  const filtered=!!(data.from||data.to);
+  if(summary){
+    summary.hidden=!filtered;
+    if(filtered) summary.innerHTML=`<strong>Período:</strong> ${data.protectedCheckpoint?`Desde saldo conciliado ${fmtDate(data.checkpointDate)}`:(data.from?fmtDate(data.from):"Inicio")} a ${data.to?fmtDate(data.to):"Hoy"} · <strong>Saldo anterior:</strong> ${money(data.opening)} · <strong>Compras:</strong> ${money(data.purchases)} · <strong>Pagos:</strong> ${money(data.payments)} · <strong>Saldo al cierre:</strong> ${money(data.closing)}`;
+  }
+  if(!data.rows.length){
+    box.innerHTML='<div class="supplier-empty">No hay movimientos en el período seleccionado.</div>';
     return;
   }
-  list.forEach(movement=>{
+  const header=document.createElement("div");
+  header.className="supplier-history-header";
+  header.innerHTML='<div>Fecha</div><div>Tipo / detalle</div><div>Debe</div><div>Haber</div><div>Saldo</div><div></div>';
+  box.append(header);
+  data.rows.slice().reverse().forEach(({movement,balance})=>{
     const isDebt=movement.type==="compra";
     const label=isSupplierOpeningMovement(movement)?"Saldo inicial":movement.type==="compra"?"Compra":"Pago";
     const dueMatch=String(movement.notes||"").match(/VENCE:\s*(\d{4}-\d{2}-\d{2})/);
@@ -1909,15 +3342,11 @@ function renderSupplierHistory(name){
     row.className=`supplier-history-row ${isDebt?"debt":"payment"}`;
     row.innerHTML=`
       <div class="date">${fmtDate(movement.date)}</div>
-      <div>
-        <strong>${label} · ${escapeHtml(movement.concept||"")}${dueText}</strong>
-        <small>${escapeHtml(movement.payment_method||"")}</small>
-      </div>
-      <div class="amount">${isDebt?"+":"−"}${money(movement.amount||0)}</div>
-      <div class="supplier-history-actions">
-        <button type="button" class="supplier-edit-btn">Editar</button>
-        <button type="button" class="supplier-delete-btn">Eliminar</button>
-      </div>`;
+      <div><strong>${label} · ${escapeHtml(movement.concept||"")}${dueText}</strong><small>${escapeHtml(movement.payment_method||"")}</small></div>
+      <div class="amount debit-col">${isDebt?money(movement.amount||0):""}</div>
+      <div class="amount credit-col">${!isDebt?money(movement.amount||0):""}</div>
+      <div class="amount balance-col">${money(balance)}</div>
+      <div class="supplier-history-actions"><button type="button" class="supplier-edit-btn">Editar</button><button type="button" class="supplier-delete-btn">Eliminar</button></div>`;
     row.querySelector(".supplier-edit-btn").addEventListener("click",()=>editSupplierMovement(movement));
     row.querySelector(".supplier-delete-btn").addEventListener("click",()=>deleteSupplierMovement(movement));
     box.append(row);
@@ -1963,62 +3392,25 @@ function payFullSupplierBalance(){
   $("supplierPaymentDate").value=todayISO();
   $("supplierPaymentAmount").focus();
 }
-// V35.3.69 — Conciliación de proveedores: edición segura de movimientos.
-// Permite corregir detalle, importe y fecha sin crear un movimiento nuevo.
-// Al actualizar el movimiento original, todos los saldos y cálculos derivados
-// se vuelven a renderizar con el valor corregido.
-function parseSupplierEditAmount(value){
-  let text=String(value??"").trim().replace(/\s/g,"").replace(/\$/g,"");
-  if(!text) return NaN;
-  // Formato habitual AR: 1.835.640 / 1.835.640,50
-  if(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(text)){
-    text=text.replace(/\./g,"").replace(",",".");
-  }else if(/^\d+(,\d+)?$/.test(text)){
-    text=text.replace(",",".");
-  }else{
-    // También admite 1835640.50 y limpia separadores visuales.
-    const lastComma=text.lastIndexOf(",");
-    const lastDot=text.lastIndexOf(".");
-    if(lastComma>lastDot){
-      text=text.replace(/\./g,"").replace(",",".");
-    }else if(lastDot>=0){
-      text=text.replace(/,/g,"");
-    }
-  }
-  return Number(text);
-}
 async function editSupplierMovement(movement){
-  if(!movement?.id) return alert("No se pudo identificar el movimiento.");
   const detail=prompt("Detalle:",movement.concept||"");
   if(detail===null) return;
-  const currentAmount=Number(movement.amount||0);
-  const amountText=prompt("Importe (podés escribir 1835640 o 1.835.640):",
-    currentAmount.toLocaleString("es-AR",{maximumFractionDigits:2}));
+  const amountText=prompt("Importe:",String(Number(movement.amount||0)));
   if(amountText===null) return;
-  const amount=parseSupplierEditAmount(amountText);
-  if(!Number.isFinite(amount)||amount<=0) return alert("Importe inválido.");
+  const amount=Number(String(amountText).replace(",","."));
+  if(!(amount>0)) return alert("Importe inválido.");
   const date=prompt("Fecha (AAAA-MM-DD):",movement.date||todayISO());
   if(date===null) return;
-  const cleanDate=String(date).trim();
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) return alert("Fecha inválida. Usá AAAA-MM-DD.");
-  const concept=String(detail).trim()||movement.type;
-  if(!confirm(`¿Guardar corrección?\n\n${movement.type==="compra"?"Compra":"Pago"}: ${money(currentAmount)} → ${money(amount)}\nFecha: ${fmtDate(movement.date)} → ${fmtDate(cleanDate)}\n\nEl saldo del proveedor se recalculará automáticamente.`)) return;
+  const updated={...movement,concept:String(detail).trim()||movement.type,amount,date};
   try{
     if(supabaseClient){
-      // Actualizamos sólo campos editables para no tocar proveedor, tipo, medio de pago ni metadatos.
-      const {error}=await supabaseClient.from("movements")
-        .update({concept,amount,date:cleanDate})
-        .eq("id",movement.id);
+      const {error}=await supabaseClient.from("movements").update(updated).eq("id",movement.id);
       if(error) throw error;
     }
     const idx=movements.findIndex(m=>m.id===movement.id);
-    if(idx>=0) movements[idx]={...movements[idx],concept,amount,date:cleanDate};
-    localSave();
-    renderAll();
-    showDeliveryToast(`Movimiento corregido. Nuevo saldo de ${movement.party||"proveedor"}: ${money(supplierTotals(movement.party||"").balance)}`);
-  }catch(error){
-    alert("No se pudo editar el movimiento. No se aplicaron cambios locales.\n"+(error?.message||error));
-  }
+    if(idx>=0) movements[idx]=updated;
+    localSave(); renderAll(); showDeliveryToast("Movimiento actualizado.");
+  }catch(error){ alert("No se pudo editar: "+error.message); }
 }
 async function deleteSupplierMovement(movement){
   if(!confirm(`¿Eliminar este movimiento por ${money(movement.amount||0)}?`)) return;
@@ -2034,24 +3426,26 @@ async function deleteSupplierMovement(movement){
 function printSupplierStatement(){
   const supplier=$("supplierAccountSelect")?.value||"";
   if(!supplier) return alert("Elegí un proveedor.");
-  const totals=supplierTotals(supplier);
-  const rows=supplierMovementsFor(supplier).slice()
-    .sort((a,b)=>String(a.date).localeCompare(String(b.date)))
-    .map(m=>{
-      const debit=m.type==="compra";
-      const label=isSupplierOpeningMovement(m)?"Saldo inicial":m.type==="compra"?"Compra":"Pago";
-      return `<tr><td>${fmtDate(m.date)}</td><td>${escapeHtml(label)}</td><td>${escapeHtml(m.concept||"")}</td><td class="num">${debit?money(m.amount):""}</td><td class="num">${!debit?money(m.amount):""}</td></tr>`;
-    }).join("");
+  const data=supplierStatementData(supplier);
+  const periodText=data.protectedCheckpoint
+    ? `Saldo conciliado al ${fmtDate(data.checkpointDate)} + movimientos posteriores${data.to?` hasta ${fmtDate(data.to)}`:""}`
+    : ((data.from||data.to)?`${data.from?fmtDate(data.from):"Inicio"} a ${data.to?fmtDate(data.to):"Hoy"}`:"Todos los movimientos");
+  const rows=data.rows.map(({movement:m,balance})=>{
+    const debit=m.type==="compra";
+    const label=isSupplierOpeningMovement(m)?"Saldo inicial":m.type==="compra"?"Compra":"Pago";
+    return `<tr><td>${fmtDate(m.date)}</td><td>${escapeHtml(label)}</td><td>${escapeHtml(m.concept||"")}</td><td class="num">${debit?money(m.amount):""}</td><td class="num">${!debit?money(m.amount):""}</td><td class="num"><strong>${money(balance)}</strong></td></tr>`;
+  }).join("");
   const popup=window.open("","_blank");
   if(!popup) return alert("El navegador bloqueó la ventana.");
   popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(supplier)}</title>
-  <style>body{font-family:Arial;padding:18mm}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:7px;font-size:12px}th{background:#eee}.num{text-align:right}.summary{margin-top:14px;margin-left:auto;width:320px}.summary div{display:flex;justify-content:space-between;padding:6px;border-bottom:1px solid #ccc}.final{font-size:18px;font-weight:900;border-top:3px solid #111}@page{size:A4 portrait;margin:10mm}</style>
-  </head><body><h1>DON ZOILO</h1><h2>Estado de cuenta de proveedor: ${escapeHtml(supplier)}</h2>
-  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="summary"><div><span>Saldo inicial</span><strong>${money(totals.opening)}</strong></div><div><span>Compras</span><strong>${money(totals.purchases)}</strong></div><div><span>Pagos</span><strong>${money(totals.payments)}</strong></div><div class="final"><span>Saldo actual</span><strong>${money(totals.balance)}</strong></div></div>
+  <style>body{font-family:Arial;padding:24px;color:#111}h1{margin:0;font-size:20px}h2{margin:5px 0 4px;font-size:16px}.period{margin:0 0 16px;color:#555}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #bbb;padding:7px;text-align:left}th{background:#eee}.num{text-align:right;white-space:nowrap}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.summary div{border:1px solid #bbb;padding:9px}.summary span{display:block;font-size:10px;color:#555}.summary strong{display:block;margin-top:4px}.final{background:#eee}</style>
+  </head><body><h1>DON ZOILO</h1><h2>Estado de cuenta de proveedor: ${escapeHtml(supplier)}</h2><p class="period">Período: ${periodText}</p>
+  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Debe</th><th>Haber</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="summary"><div><span>Saldo anterior</span><strong>${money(data.opening)}</strong></div><div><span>Compras período</span><strong>${money(data.purchases)}</strong></div><div><span>Pagos período</span><strong>${money(data.payments)}</strong></div><div class="final"><span>Saldo al cierre</span><strong>${money(data.closing)}</strong></div></div>
   <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script></body></html>`);
   popup.document.close();
 }
+
 function renderSuppliers(){
   fillSupplierSelectors();
   renderSupplierDirectory();
@@ -2114,15 +3508,71 @@ async function submitSupplierPurchase(event){
   const amount=Number($("supplierPurchaseAmount")?.value||0);
   const date=$("supplierPurchaseDate")?.value||todayISO();
   const detail=String($("supplierPurchaseDetail")?.value||"").trim();
+  const isPaid=Boolean($("supplierPurchasePaid")?.checked);
+  const paymentMethod=$("supplierPurchasePaymentMethod")?.value||"efectivo";
+
   if(!name.trim()) return alert("Ingresá el proveedor.");
   if(!(amount>0)) return alert("Ingresá un importe mayor a cero.");
+
   try{
     const dueDate=$("supplierPurchaseDueDate")?.value||"";
     const purchaseDetail=dueDate?`${detail}${detail?" | ":""}VENCE: ${dueDate}`:detail;
-    await saveSupplierMovement({type:"compra",name,amount,date,detail:purchaseDetail,method:"cuenta_corriente"});
+
+    const purchaseMovement={
+      id:uid(),
+      date,
+      type:"compra",
+      party:name.trim(),
+      concept:purchaseDetail||"compra",
+      kg:0,
+      amount:Number(amount),
+      payment_method:isPaid?paymentMethod:"cuenta_corriente",
+      status:"confirmado",
+      notes:isPaid?"COMPRA_PAGADA_AL_CARGAR":"",
+      source_order_id:null,
+      created_at:new Date().toISOString()
+    };
+
+    const newMovements=[purchaseMovement];
+
+    // Si la compra se marca como pagada, se registra también el pago por el mismo importe.
+    // Así queda el historial completo pero la compra no aumenta la deuda del proveedor.
+    if(isPaid){
+      newMovements.push({
+        id:uid(),
+        date,
+        type:"pago",
+        party:name.trim(),
+        concept:`Pago de compra${purchaseDetail?` | ${purchaseDetail}`:""}`,
+        kg:0,
+        amount:Number(amount),
+        payment_method:paymentMethod,
+        status:"confirmado",
+        notes:`PAGO_AUTOMATICO_COMPRA | COMPRA_ID:${purchaseMovement.id}`,
+        source_order_id:null,
+        created_at:new Date(Date.now()+1).toISOString()
+      });
+    }
+
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("movements").insert(newMovements);
+      if(error) throw error;
+    }
+
+    // Mantener el mismo orden visual que el resto del módulo: lo más nuevo primero.
+    movements.unshift(...newMovements.slice().reverse());
+    localSave();
+    if($("supplierAccountSelect")) $("supplierAccountSelect").value=name.trim();
+
     $("supplierPurchaseAmount").value="";
     $("supplierPurchaseDetail").value="";
-    showDeliveryToast("Compra del proveedor guardada.");
+    if($("supplierPurchaseDueDate")) $("supplierPurchaseDueDate").value="";
+    if($("supplierPurchasePaid")) $("supplierPurchasePaid").checked=false;
+
+    renderAll();
+    showDeliveryToast(isPaid
+      ?"Compra guardada como pagada. No genera deuda con el proveedor."
+      :"Compra del proveedor guardada.");
   }catch(error){
     alert("No se pudo guardar la compra: "+error.message);
   }
@@ -2152,69 +3602,56 @@ function renderBalances(){
     $("allClientBalancesTotal").textContent=money(totalClientCurrentAccounts());
   }
 
-  const map=new Map();
+  const rows=[];
 
-  movements
-    .filter(m=>m.status!=="pendiente")
-    .forEach(m=>{
-      const rawName=(m.party||"Sin nombre").trim();
-      const isClientMovement=["venta","cobro","ajuste"].includes(m.type);
+  // CLIENTES: una única fuente de verdad.
+  // Jamás recalcular desde el historial acá: usar accountTotals(), que aplica
+  // el punto de corte conciliado del 19/08 + movimientos posteriores.
+  clientNames().forEach(name=>{
+    const balance=Number(accountTotals(name).balance||0);
+    if(Math.abs(balance)>0.001){
+      rows.push({name,client:balance,supplier:0});
+    }
+  });
 
-      const key=isClientMovement
-        ? canonicalClientKey(rawName)
-        : normalizeClientName(rawName);
-
-      if(!map.has(key)){
-        map.set(key,{
-          name:isClientMovement ? canonicalClientDisplayName(rawName) : rawName,
-          client:0,
-          supplier:0
-        });
-      }
-
-      const record=map.get(key);
-      const amount=Number(m.amount||0);
-
-      if(m.type==="venta" || isOpeningBalanceMovement(m)){
-        record.client+=amount;
-      }else if(m.type==="cobro"){
-        record.client-=amount;
-      }else if(m.type==="compra"){
-        record.supplier+=amount;
-      }else if(m.type==="pago"){
-        record.supplier-=amount;
-      }
-    });
+  // V35.3.46: SALDOS debe leer exactamente la misma fuente que PROVEEDORES.
+  // Solo lectura: no crea, borra ni modifica movimientos ni saldos almacenados.
+  supplierNames().forEach(name=>{
+    const balance=Number(supplierTotals(name).balance||0);
+    if(Math.abs(balance)>0.001){
+      rows.push({name,client:0,supplier:balance});
+    }
+  });
 
   const list=$("balanceList");
   if(!list) return;
   list.innerHTML="";
 
-  const rows=[...map.values()]
-    .filter(row=>Math.abs(row.client)>0.001 || Math.abs(row.supplier)>0.001)
-    .sort((a,b)=>{
-      const av=Math.max(a.client,a.supplier);
-      const bv=Math.max(b.client,b.supplier);
-      return bv-av;
-    });
+  rows.sort((a,b)=>{
+    const av=Math.max(a.client,a.supplier);
+    const bv=Math.max(b.client,b.supplier);
+    return bv-av;
+  });
 
   if(!rows.length){
     list.innerHTML='<p class="muted">Todavía no hay saldos.</p>';
     return;
   }
 
+  let activeClientNumber=0;
   rows.forEach(row=>{
     const item=document.createElement("div");
-    item.className="balance-row";
-
     const isClient=Math.abs(row.client)>0.001;
+    if(isClient) activeClientNumber+=1;
+    item.className=isClient ? "balance-row" : "balance-row balance-row-supplier";
+
     const balance=isClient ? row.client : row.supplier;
     const label=isClient ? "Saldo cliente" : "Saldo proveedor";
 
     item.innerHTML=`
       <div>
         ${isClient
-          ? `<button type="button" class="balance-client-link" data-client="${escapeHtml(row.name)}">${escapeHtml(row.name)}</button>`
+          ? `<span class="balance-client-number">${activeClientNumber}.</span> <button type="button" class="balance-client-link" data-client="${escapeHtml(row.name)}">${escapeHtml(row.name)}</button>`
           : `<strong>${escapeHtml(row.name)}</strong>`}
         <small>${label}</small>
       </div>
@@ -2224,7 +3661,222 @@ function renderBalances(){
   });
 }
 
-function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderAccounts(); renderPrices(); renderPricePrintSheet();  renderSuppliers(); }
+
+// V35.3.61 — Centro de costos: comparación y edición del precio vigente de la Lista de precios.
+const COST_CENTER_STORAGE_KEY = "don_zoilo_cost_center_v1";
+const COST_CENTER_SETTINGS_KEY = "don_zoilo_cost_center_settings_v1";
+
+function costCenterSettings(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(COST_CENTER_SETTINGS_KEY)||"{}");
+    return {
+      vat:Number.isFinite(Number(saved.vat))?Number(saved.vat):10.5,
+      iibb:Number.isFinite(Number(saved.iibb))?Number(saved.iibb):3,
+      margin:Number.isFinite(Number(saved.margin))?Number(saved.margin):12
+    };
+  }catch(_){ return {vat:10.5,iibb:3,margin:12}; }
+}
+function costCenterRows(){
+  try{
+    const rows=JSON.parse(localStorage.getItem(COST_CENTER_STORAGE_KEY)||"[]");
+    return Array.isArray(rows)?rows:[];
+  }catch(_){ return []; }
+}
+function saveCostCenterRows(rows){ localStorage.setItem(COST_CENTER_STORAGE_KEY,JSON.stringify(rows||[])); }
+function saveCostCenterSettings(settings){ localStorage.setItem(COST_CENTER_SETTINGS_KEY,JSON.stringify(settings)); }
+
+function calculateCostCenter(purchase,vatMode,vatPct,iibbPct,marginPct){
+  const input=Math.max(0,Number(purchase||0));
+  const vatRate=Math.max(0,Number(vatPct||0))/100;
+  const iibbRate=Math.max(0,Number(iibbPct||0))/100;
+  const marginRate=Math.max(0,Number(marginPct||0))/100;
+  // Si el costo ya incluye IVA no se vuelve a agregar. IIBB se calcula sobre el costo ingresado.
+  const vatAmount=vatMode==="included"?0:input*vatRate;
+  const iibbAmount=input*iibbRate;
+  const totalCost=input+vatAmount+iibbAmount;
+  const marginAmount=totalCost*marginRate;
+  const suggested=totalCost+marginAmount;
+  return {input,vatAmount,iibbAmount,totalCost,marginAmount,suggested};
+}
+
+function fillCostProductList(){
+  const list=$("costProductList"); if(!list) return;
+  const names=new Set();
+  try{ Object.values(PRICE_CATALOG||{}).forEach(items=>items.forEach(([name])=>names.add(String(name)))); }catch(_){ }
+  Object.values(productCatalogMeta||{}).forEach(meta=>{ if(meta?.name) names.add(String(meta.name)); });
+  list.innerHTML=[...names].sort((a,b)=>a.localeCompare(b,"es")).map(name=>`<option value="${escapeHtml(name)}"></option>`).join("");
+}
+
+function inferCostCategory(product){
+  const target=String(product||"").trim().toLocaleLowerCase("es");
+  if(!target) return "Otros";
+  try{
+    for(const [category,items] of Object.entries(PRICE_CATALOG||{})){
+      if((items||[]).some(([name])=>String(name||"").trim().toLocaleLowerCase("es")===target)) return category;
+    }
+  }catch(_){ }
+  try{
+    for(const meta of Object.values(productCatalogMeta||{})){
+      if(String(meta?.name||"").trim().toLocaleLowerCase("es")===target && meta?.category) return String(meta.category);
+    }
+  }catch(_){ }
+  return "Otros";
+}
+
+function normalizedCostCategory(row){
+  return String(row?.category||inferCostCategory(row?.product)||"Otros");
+}
+
+function costListPriceEntry(product){
+  const directKey=productKey(product);
+  if(directKey && Object.prototype.hasOwnProperty.call(productPrices,directKey)){
+    return {key:directKey,value:Number(productPrices[directKey]||0),meta:productCatalogMeta[directKey]||{}};
+  }
+  const target=normalizeProductKey(product);
+  const matchedKey=Object.keys(productPrices||{}).find(key=>{
+    const metaName=productCatalogMeta[key]?.name||key;
+    return normalizeProductKey(key)===target || normalizeProductKey(metaName)===target;
+  });
+  if(!matchedKey) return null;
+  return {key:matchedKey,value:Number(productPrices[matchedKey]||0),meta:productCatalogMeta[matchedKey]||{}};
+}
+
+function renderCostResult(row){
+  const box=$("costResult"); if(!box) return;
+  if(!row){ box.classList.add("hidden"); box.innerHTML=""; return; }
+  box.classList.remove("hidden");
+  box.innerHTML=`
+    <div class="cost-result-title"><strong>${escapeHtml(row.product||"Producto")}</strong><span>Precio sugerido <b>${money(row.suggested)}</b></span></div>
+    <div class="cost-result-grid">
+      <div><span>Costo ingresado</span><strong>${money(row.purchase)}</strong></div>
+      <div><span>IVA ${Number(row.vatPct||0).toLocaleString("es-AR")}%${row.vatMode==="included"?" (incluido)":""}</span><strong>${row.vatMode==="included"?"Ya incluido":money(row.vatAmount)}</strong></div>
+      <div><span>IIBB ${Number(row.iibbPct||0).toLocaleString("es-AR")}%</span><strong>${money(row.iibbAmount)}</strong></div>
+      <div><span>Costo total</span><strong>${money(row.totalCost)}</strong></div>
+      <div><span>Margen ${Number(row.marginPct||0).toLocaleString("es-AR")}%</span><strong>${money(row.marginAmount)}</strong></div>
+      <div class="highlight"><span>Precio de venta sugerido</span><strong>${money(row.suggested)}</strong></div>
+    </div>`;
+}
+
+function renderCostCenter(){
+  if(!$("costCenter")) return;
+  fillCostProductList();
+  const settings=costCenterSettings();
+  if($("costDefaultVat") && document.activeElement!==$("costDefaultVat")) $("costDefaultVat").value=settings.vat;
+  if($("costDefaultIibb") && document.activeElement!==$("costDefaultIibb")) $("costDefaultIibb").value=settings.iibb;
+  if($("costDefaultMargin") && document.activeElement!==$("costDefaultMargin")) $("costDefaultMargin").value=settings.margin;
+  if($("costMargin") && !$("costMargin").dataset.userChanged) $("costMargin").value=settings.margin;
+  const q=String($("costSearch")?.value||"").trim().toLowerCase();
+  const categoryFilter=String($("costCategoryFilter")?.value||"");
+  const sortMode=String($("costSort")?.value||"name_asc");
+  const rows=costCenterRows()
+    .map(r=>({...r,category:normalizedCostCategory(r)}))
+    .filter(r=>(!q||String(r.product||"").toLowerCase().includes(q)) && (!categoryFilter||r.category===categoryFilter));
+  rows.sort((a,b)=>{
+    if(sortMode==="name_desc") return String(b.product||"").localeCompare(String(a.product||""),"es",{sensitivity:"base"});
+    if(sortMode==="price_asc") return Number(a.suggested||0)-Number(b.suggested||0) || String(a.product||"").localeCompare(String(b.product||""),"es",{sensitivity:"base"});
+    if(sortMode==="price_desc") return Number(b.suggested||0)-Number(a.suggested||0) || String(a.product||"").localeCompare(String(b.product||""),"es",{sensitivity:"base"});
+    return String(a.product||"").localeCompare(String(b.product||""),"es",{sensitivity:"base"});
+  });
+  const list=$("costCenterList"); if(!list) return;
+  if(!rows.length){ list.innerHTML='<div class="empty-state">No hay productos para mostrar con esos filtros.</div>'; return; }
+  list.innerHTML=rows.map(r=>{
+    const listEntry=costListPriceEntry(r.product);
+    const listPrice=listEntry?Number(listEntry.value||0):"";
+    return `
+    <div class="cost-row" data-cost-id="${escapeHtml(r.id)}">
+      <div><strong>${escapeHtml(r.product)}</strong><small>${escapeHtml(r.category)} · ${r.vatMode==="included"?"Costo con IVA incluido":"Costo sin IVA"} · IVA ${Number(r.vatPct).toLocaleString("es-AR")}% · IIBB ${Number(r.iibbPct).toLocaleString("es-AR")}% · margen ${Number(r.marginPct).toLocaleString("es-AR")}%</small></div>
+      <div><span>Costo</span><strong>${money(r.purchase)}</strong></div>
+      <div><span>Costo total</span><strong>${money(r.totalCost)}</strong></div>
+      <div class="cost-price"><span>Sugerido</span><strong>${money(r.suggested)}</strong></div>
+      <div class="cost-list-price">
+        <span>Precio lista</span>
+        <div class="cost-list-price-edit">
+          <input class="cost-list-price-input" type="number" min="0" step="0.01" value="${listPrice}" placeholder="Sin precio">
+          <button type="button" class="secondary cost-save-list-price">Guardar</button>
+        </div>
+        <small>${listEntry?"Precio vigente de Lista de precios":"No está en la Lista de precios"}</small>
+      </div>
+      <div class="cost-row-actions"><button type="button" class="secondary cost-reuse">Editar costo</button><button type="button" class="danger cost-delete">Eliminar</button></div>
+    </div>`;
+  }).join("");
+}
+
+function persistCostDefaults(){
+  const settings={vat:Number($("costDefaultVat")?.value||10.5),iibb:Number($("costDefaultIibb")?.value||3),margin:Number($("costDefaultMargin")?.value||12)};
+  saveCostCenterSettings(settings);
+  if($("costMargin") && !$("costMargin").dataset.userChanged) $("costMargin").value=settings.margin;
+}
+
+async function submitCostCenter(e){
+  e.preventDefault();
+  const settings=costCenterSettings();
+  const product=String($("costProduct")?.value||"").trim();
+  const purchase=Number($("costPurchase")?.value||0);
+  const vatMode=$("costVatMode")?.value||"without";
+  const category=String($("costCategory")?.value||inferCostCategory(product)||"Otros");
+  const marginPct=Number($("costMargin")?.value||settings.margin);
+  if(!product || !(purchase>0)) return alert("Ingresá el producto y un costo de compra mayor a 0.");
+  const calc=calculateCostCenter(purchase,vatMode,settings.vat,settings.iibb,marginPct);
+  const row={id:uid(),product,category,purchase,vatMode,vatPct:settings.vat,iibbPct:settings.iibb,marginPct,...calc,created_at:new Date().toISOString()};
+  let rows=costCenterRows();
+  const key=product.toLocaleLowerCase("es");
+  const existing=rows.findIndex(r=>String(r.product||"").toLocaleLowerCase("es")===key);
+  if(existing>=0){ row.id=rows[existing].id; rows[existing]=row; } else rows.unshift(row);
+  saveCostCenterRows(rows);
+  renderCostResult(row);
+  renderCostCenter();
+}
+
+on("costCenterForm","submit",submitCostCenter);
+on("costSearch","input",renderCostCenter);
+on("costCategoryFilter","change",renderCostCenter);
+on("costSort","change",renderCostCenter);
+on("costProduct","change",()=>{ if($("costCategory")) $("costCategory").value=inferCostCategory($("costProduct")?.value); });
+on("costDefaultVat","change",persistCostDefaults);
+on("costDefaultIibb","change",persistCostDefaults);
+on("costDefaultMargin","change",persistCostDefaults);
+on("costMargin","input",()=>{ if($("costMargin")) $("costMargin").dataset.userChanged="1"; });
+on("clearCostCenter","click",()=>{
+  if(confirm("¿Limpiar todos los cálculos guardados del Centro de costos en este dispositivo?")){ saveCostCenterRows([]); renderCostResult(null); renderCostCenter(); }
+});
+document.addEventListener("click",e=>{
+  const rowEl=e.target.closest(".cost-row"); if(!rowEl) return;
+  const rows=costCenterRows(); const row=rows.find(r=>String(r.id)===String(rowEl.dataset.costId)); if(!row) return;
+  if(e.target.closest(".cost-delete")){ saveCostCenterRows(rows.filter(r=>String(r.id)!==String(row.id))); renderCostCenter(); return; }
+  if(e.target.closest(".cost-save-list-price")){
+    const btn=e.target.closest(".cost-save-list-price");
+    const input=rowEl.querySelector(".cost-list-price-input");
+    const value=Number(input?.value||0);
+    if(!(value>=0)) return alert("Ingresá un precio válido.");
+    const found=costListPriceEntry(row.product);
+    const meta=found?.meta||{};
+    btn.disabled=true;
+    btn.textContent="Guardando…";
+    (async()=>{
+      try{
+        await saveCatalogProduct({
+          oldKey:found?.key||null,
+          name:meta.name||row.product,
+          category:meta.category||normalizedCostCategory(row),
+          value
+        });
+        renderPrices();
+        renderPricePrintSheet();
+        renderCostCenter();
+      }catch(err){
+        btn.disabled=false;
+        btn.textContent="Guardar";
+        alert("No se pudo actualizar el precio de lista: "+err.message);
+      }
+    })();
+    return;
+  }
+  if(e.target.closest(".cost-reuse")){
+    $("costProduct").value=row.product; if($("costCategory")) $("costCategory").value=normalizedCostCategory(row); $("costPurchase").value=row.purchase; $("costVatMode").value=row.vatMode; $("costMargin").value=row.marginPct; $("costMargin").dataset.userChanged="1"; renderCostResult(row); $("costPurchase").focus();
+  }
+});
+
+function renderAll(){ renderHomePanel(); renderDashboard(); renderOrders(); renderMovements(); renderBalances(); renderAccounts(); renderPrices(); renderPricePrintSheet(); renderCostCenter(); renderSuppliers(); }
 
 function exportCSV(){
   const cols=["date","type","party","concept","kg","amount","payment_method","status","notes"];
@@ -2317,22 +3969,37 @@ function suggestedPrice(product){
   return Number(productPrices[productKey(product)] || 0);
 }
 
-async function rememberProductPrice(product, price){
+async function rememberProductPrice(product, price, category=null, catalogMode=null){
   const key=productKey(product);
   const value=Number(price||0);
-  if(!key || value<=0) return;
+  if(!key || value<0) return;
+  const cleanName=normalizeProductName(product);
+  const currentMeta=productCatalogMeta[key]||{};
+  const cleanCategory=String(category ?? currentMeta.category ?? "Sin categoría").trim() || "Sin categoría";
+
+  // v35.3.13: un precio aprendido desde pedidos/remitos NO debe convertir
+  // automáticamente el producto en parte de la lista A4. Si ya existía,
+  // conserva su estado; si es histórico/nuevo, queda fuera del catálogo.
+  const isCatalog = catalogMode === true
+    ? true
+    : catalogMode === false
+      ? false
+      : (Object.prototype.hasOwnProperty.call(currentMeta,"is_catalog") ? currentMeta.is_catalog !== false : false);
 
   productPrices[key]=value;
+  productCatalogMeta[key]={...currentMeta,name:cleanName,category:cleanCategory,is_catalog:isCatalog};
   localSave();
 
   if(supabaseClient){
     const {error}=await supabaseClient.from("product_prices").upsert({
       product_key:key,
-      product_name:normalizeProductName(product),
+      product_name:cleanName,
       last_price:value,
+      category:cleanCategory,
+      is_catalog:isCatalog,
       updated_at:new Date().toISOString()
     },{onConflict:"product_key"});
-    if(error) console.warn("No se pudo guardar precio sugerido",error);
+    if(error) throw error;
   }
 }
 
@@ -2592,7 +4259,7 @@ $("saveImportedOrder").addEventListener("click",async()=>{
           product:item.product,quantity:Number(item.quantity||0),unit:item.unit,
           unit_price:Number(item.unit_price||0),
           total:Number(item.quantity||0)*Number(item.unit_price||0),
-          payment_method:payment,notes:"Importado desde texto",
+          payment_method:payment,notes:"",
           delivered:false,delivered_at:null,created_at:new Date().toISOString()
         });
         await rememberProductPrice(item.product,item.unit_price);
@@ -2628,10 +4295,12 @@ $("ordersFilterDate").addEventListener("change",renderOrders);
 $("orderForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const quantity=Number($("orderQty").value||0), unit_price=Number($("orderUnitPrice").value||0);
+  const manualRemitoNumber=String($("orderRemitoNumber")?.value||"").trim();
   const order={
     id:uid(),delivery_date:$("orderDate").value,client:$("orderClient").value.trim(),
     product:$("orderProduct").value.trim(),quantity,unit:$("orderUnit").value,unit_price,total:quantity*unit_price,
-    payment_method:$("orderPayment").value,notes:$("orderNotes").value.trim(),
+    payment_method:$("orderPayment").value,
+    notes:setOrderRemitoNumberNotes($("orderNotes").value.trim(),manualRemitoNumber),
     batch_id:uid(),delivered:false,delivered_at:null,created_at:new Date().toISOString()
   };
   try{
@@ -2663,20 +4332,77 @@ function remitoSequence(items){
   return raw ? raw.slice(-8).toUpperCase() : "—";
 }
 
+function saleMovementForItems(items){
+  if(!items?.length) return null;
+  const batchKey=items[0]?.batch_id||items[0]?.id;
+  return movements.find(m=>m.type==="venta" && movementMatchesBatch(m,batchKey,items)) || null;
+}
+
+function remitoDisplayNumber(items){
+  const orderPhysical=orderRemitoNumberFromNotes(items?.[0]);
+  if(orderPhysical) return orderPhysical;
+  const sale=saleMovementForItems(items);
+  const movementPhysical=sale ? movementDocumentMeta(sale).remito : "";
+  return movementPhysical || remitoSequence(items);
+}
+
+// V35.3.14 — El remito muestra el saldo que queda luego de sumar ese comprobante.
+// Si la venta ya fue registrada al confirmar la entrega, accountTotals() ya la incluye
+// y no se vuelve a sumar.
+function remitoUpdatedBalance(items){
+  if(!items?.length) return 0;
+  const first=items[0];
+  const current=accountTotals(first.client||"").balance;
+  const batchKey=first.batch_id||first.id;
+  const alreadyPosted=movements.some(m=>
+    m.type==="venta" && movementMatchesBatch(m,batchKey,items)
+  );
+  const total=items.reduce((sum,item)=>sum+Number(item.total||0),0);
+  return current + (alreadyPosted?0:total);
+}
+
+function orderRemitoNumberFromNotes(item){
+  const notes=String(item?.notes||"");
+  const match=notes.match(/(?:^|\|)\s*REMITO_FISICO:([^|]*?)(?=\s*\||$)/);
+  return match ? String(match[1]||"").trim() : "";
+}
+
+function setOrderRemitoNumberNotes(notes,number){
+  let clean=String(notes||"")
+    .replace(/(?:^|\|)\s*REMITO_FISICO:[^|]*(?=\||$)/g,"")
+    .replace(/^\s*\|\s*|\s*\|\s*$/g,"")
+    .replace(/\s*\|\s*/g," | ")
+    .trim();
+  const value=String(number||"").trim();
+  if(value) clean=[clean,`REMITO_FISICO:${value}`].filter(Boolean).join(" | ");
+  return clean;
+}
+
+function remitoVisibleNotes(items){
+  return [...new Set(items
+    .map(i=>String(i.notes||"")
+      .replace(/(?:^|\|)\s*REMITO_FISICO:[^|]*(?=\||$)/g,"")
+      .replace(/^\s*\|\s*|\s*\|\s*$/g,"")
+      .replace(/\s*\|\s*/g," · ")
+      .trim())
+    .filter(note=>note && note.toLowerCase()!=="importado desde texto"))];
+}
+
 function openRemito(items){
   if(!items?.length) return;
   currentRemitoItems=items;
   const first=items[0];
   const total=items.reduce((sum,item)=>sum+Number(item.total||0),0);
 
-  $("remitoNumber").textContent=`N.º ${remitoSequence(items)}`;
+  $("remitoNumber").textContent=`N.º ${remitoDisplayNumber(items)}`;
   $("remitoDate").textContent=fmtDate(first.delivery_date);
   $("remitoClient").textContent=first.client||"";
   $("remitoPayment").textContent=(first.payment_method||"").replace("_"," ");
   $("remitoStatus").textContent=items.every(i=>i.delivered)?"ENTREGADO":"PENDIENTE";
   $("remitoTotal").textContent=money(total);
+  if($("remitoUpdatedBalance")) $("remitoUpdatedBalance").textContent=money(remitoUpdatedBalance(items));
 
-  const notes=[...new Set(items.map(i=>i.notes).filter(Boolean))];
+  const notes=remitoVisibleNotes(items);
   $("remitoNotes").textContent=notes.join(" · ") || "—";
 
   const tbody=$("remitoItems");
@@ -2710,8 +4436,9 @@ $("printRemito").addEventListener("click",()=>{
 
   const first=currentRemitoItems[0];
   const total=currentRemitoItems.reduce((sum,item)=>sum+Number(item.total||0),0);
-  const notes=[...new Set(currentRemitoItems.map(i=>i.notes).filter(Boolean))].join(" · ") || "—";
-  const remitoNo=remitoSequence(currentRemitoItems);
+  const updatedBalance=remitoUpdatedBalance(currentRemitoItems);
+  const notes=remitoVisibleNotes(currentRemitoItems).join(" · ") || "—";
+  const remitoNo=remitoDisplayNumber(currentRemitoItems);
 
   const rows=currentRemitoItems.map(item=>`
     <tr>
@@ -2750,7 +4477,10 @@ $("printRemito").addEventListener("click",()=>{
 
       <div class="bottom">
         <div class="notes"><span>Observaciones</span><div>${escapeHtml(notes)}</div></div>
-        <div class="total"><span>TOTAL</span><strong>${money(total)}</strong></div>
+        <div class="total-stack">
+          <div class="total"><span>TOTAL REMITO</span><strong>${money(total)}</strong></div>
+          <div class="balance"><span>SALDO ACTUALIZADO</span><strong>${money(updatedBalance)}</strong></div>
+        </div>
       </div>
 
       <div class="signatures">
@@ -2790,10 +4520,10 @@ $("printRemito").addEventListener("click",()=>{
       th:nth-child(1),td:nth-child(1){width:13mm;text-align:right}
       th:nth-child(2),td:nth-child(2){width:17mm}
       th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){width:27mm;text-align:right}
-      .bottom{display:grid;grid-template-columns:1fr 48mm;gap:4mm;align-items:start}
+      .bottom{display:grid;grid-template-columns:1fr 58mm;gap:4mm;align-items:start}
       .notes{border:1px solid #111;min-height:16mm;padding:2mm}
       .notes span{display:block;font-size:6pt;font-weight:900;text-transform:uppercase;margin-bottom:1.5mm}.notes div{font-size:7pt}
-      .total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;align-items:center;font-size:9pt}.total strong{font-size:12pt}
+      .total-stack{display:grid;gap:2mm}.total{border-top:2px solid #111;padding-top:2mm;display:flex;justify-content:space-between;align-items:center;font-size:9pt}.total strong{font-size:12pt}.balance{border-top:1px solid #111;padding-top:2mm;display:flex;justify-content:space-between;align-items:center;font-size:7pt}.balance strong{font-size:10pt}
       .signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:11mm}
       .signatures>div{text-align:center}.line{border-top:1px solid #111;margin-bottom:1mm}.signatures span{font-size:6.5pt;font-weight:700}
       @page{size:A4 portrait;margin:0}
@@ -3148,13 +4878,27 @@ function catalogPrice(name,defaultPrice){
 }
 
 
+function dynamicPriceCatalog(){
+  const catalog={};
+  for(const row of priceEntries()){
+    const meta=productCatalogMeta[row.key]||{};
+    if(meta.is_catalog===false) continue;
+    const category=String(row.category||"Sin categoría").trim()||"Sin categoría";
+    if(!catalog[category]) catalog[category]=[];
+    catalog[category].push([row.name,Number(row.value||0)]);
+  }
+  return catalog;
+}
+
 function buildBalancedPriceColumns(){
   const columns=[[],[],[]];
   const maxUnits=30.5;
   let col=0;
   let used=0;
+  const liveCatalog=dynamicPriceCatalog();
 
-  for(const [category,items] of Object.entries(PRICE_CATALOG)){
+  for(const [category,itemsRaw] of Object.entries(liveCatalog)){
+    const items=[...itemsRaw].sort((a,b)=>String(a[0]||"").localeCompare(String(b[0]||""),"es",{sensitivity:"base"}));
     let offset=0;
     let continuation=false;
 
@@ -3224,8 +4968,10 @@ function renderPricePrintSheet(){
   if($("priceSheetTitle")) $("priceSheetTitle").textContent=($("pricePrintTitle")?.value||"LISTA DE PRECIOS").toUpperCase();
   if($("priceSheetPhone")) $("priceSheetPhone").textContent=$("pricePrintPhone")?.value||"11 3039 0331";
   const date=$("pricePrintDate")?.value;
+  const dateLabel=date ? new Date(date+"T12:00:00").toLocaleDateString("es-AR") : new Date().toLocaleDateString("es-AR");
+  if($("priceUpdatedDate")) $("priceUpdatedDate").textContent=`▦ Actualizado: ${dateLabel}`;
   if($("priceSheetDate")) $("priceSheetDate").textContent=date
-    ? `VIGENTE A PARTIR DEL ${new Date(date+"T12:00:00").toLocaleDateString("es-AR")}`
+    ? `VIGENTE A PARTIR DEL ${dateLabel}`
     : "";
 }
 
@@ -3235,7 +4981,7 @@ async function loadBaseCatalogPrices(){
     for(const [name,value] of items){
       const key=normalizeProductKey(name);
       if(!Object.prototype.hasOwnProperty.call(productPrices,key)){
-        await rememberProductPrice(name,value);
+        await rememberProductPrice(name,value,null,true);
         saved++;
       }
     }
@@ -3245,53 +4991,110 @@ async function loadBaseCatalogPrices(){
   alert(saved ? `Se cargaron ${saved} precios base.` : "El catálogo base ya estaba cargado.");
 }
 
+const PRICE_CATEGORIES=["Vacunos","Pollos","Cerdo","Achuras","Embutidos","Granja","Preparados","Sin categoría"];
+
+function priceCategoryRank(category){
+  const idx=PRICE_CATEGORIES.indexOf(String(category||"Sin categoría"));
+  return idx>=0 ? idx : PRICE_CATEGORIES.length-1;
+}
+
 function priceEntries(){
   return Object.entries(productPrices)
-    .map(([key,value])=>({key,name:key.replace(/\s+/g," "),value:Number(value||0)}))
-    .sort((a,b)=>a.name.localeCompare(b.name,"es"));
+    .map(([key,value])=>({
+      key,
+      name: productCatalogMeta[key]?.name || key.replace(/\s+/g," "),
+      category: productCatalogMeta[key]?.category || "Sin categoría",
+      is_catalog: productCatalogMeta[key]?.is_catalog !== false,
+      value:Number(value||0)
+    }))
+    // Regla fija: Vacunos siempre primero; Sin categoría siempre al final.
+    .sort((a,b)=>priceCategoryRank(a.category)-priceCategoryRank(b.category) || a.name.localeCompare(b.name,"es"));
+}
+
+function priceCategoryOptions(selected){
+  const current=String(selected||"Sin categoría");
+  const values=PRICE_CATEGORIES.includes(current) ? PRICE_CATEGORIES : [current,...PRICE_CATEGORIES];
+  return values.map(cat=>`<option value="${escapeHtml(cat)}" ${cat===current?"selected":""}>${escapeHtml(cat)}</option>`).join("");
+}
+
+async function saveCatalogProduct({oldKey=null,name,category,value}){
+  const cleanName=normalizeProductName(name||"");
+  const newKey=productKey(cleanName);
+  const price=Number(value||0);
+  if(!cleanName || !newKey) throw new Error("Ingresá un nombre de producto.");
+  if(price<0) throw new Error("El precio no puede ser negativo.");
+  if(oldKey && newKey!==oldKey && Object.prototype.hasOwnProperty.call(productPrices,newKey)){
+    throw new Error("Ya existe otro producto con ese nombre.");
+  }
+
+  await rememberProductPrice(cleanName,price,category,true);
+
+  if(oldKey && oldKey!==newKey){
+    delete productPrices[oldKey];
+    delete productCatalogMeta[oldKey];
+    localSave();
+    if(supabaseClient){
+      const {error}=await supabaseClient.from("product_prices").delete().eq("product_key",oldKey);
+      if(error) throw error;
+    }
+  }
+  return newKey;
 }
 
 function renderPrices(){
   const list=$("priceList");
   if(!list) return;
   const search=($("priceSearch")?.value||"").trim().toLowerCase();
-  const entries=priceEntries().filter(row=>row.name.includes(search));
+  const entries=priceEntries().filter(row=>`${row.name} ${row.category}`.toLowerCase().includes(search));
   if($("priceCount")) $("priceCount").textContent=`${entries.length} producto${entries.length===1?"":"s"}`;
   list.innerHTML="";
 
   if(!entries.length){
-    list.innerHTML='<div class="price-empty">No hay precios guardados con ese nombre.</div>';
+    list.innerHTML='<div class="price-empty">No hay productos con ese nombre.</div>';
     return;
   }
 
   entries.forEach(row=>{
     const div=document.createElement("div");
-    div.className="price-row";
+    div.className="price-row price-row-catalog";
     div.innerHTML=`
-      <div class="price-name">${escapeHtml(row.name)}</div>
-      <input type="number" min="0" step="0.01" value="${row.value}">
+      <label class="price-edit-field"><span>Producto</span><input class="price-name-input" value="${escapeHtml(row.name)}"></label>
+      <label class="price-edit-field"><span>Rubro</span><select class="price-category-input">${priceCategoryOptions(row.category)}</select></label>
+      <label class="price-edit-field"><span>Precio</span><input class="price-value-input" type="number" min="0" step="0.01" value="${row.value}"></label>
+      <div class="price-catalog-state ${row.is_catalog?"is-visible":"is-hidden"}">${row.is_catalog?"✓ Visible en lista A4":"○ Fuera de lista A4"}</div>
       <div class="price-actions">
-        <button type="button" class="secondary save-price-row">Guardar</button>
-        <button type="button" class="danger delete-price-row">Eliminar</button>
+        <button type="button" class="secondary save-price-row">Guardar cambios</button>
+        <button type="button" class="${row.is_catalog?"danger":"secondary"} toggle-price-catalog">${row.is_catalog?"Quitar de la lista":"Volver a mostrar"}</button>
       </div>`;
-    const input=div.querySelector("input");
+    const nameInput=div.querySelector(".price-name-input");
+    const categoryInput=div.querySelector(".price-category-input");
+    const valueInput=div.querySelector(".price-value-input");
     div.querySelector(".save-price-row").addEventListener("click",async()=>{
       try{
-        await rememberProductPrice(row.name,Number(input.value||0));
+        await saveCatalogProduct({oldKey:row.key,name:nameInput.value,category:categoryInput.value,value:valueInput.value});
         renderPrices();
-      }catch(e){ alert("No se pudo guardar el precio: "+e.message); }
+        renderPricePrintSheet();
+        alert("Producto actualizado. La lista A4 también quedó actualizada.");
+      }catch(e){ alert("No se pudo guardar: "+e.message); }
     });
-    div.querySelector(".delete-price-row").addEventListener("click",async()=>{
-      if(!confirm(`¿Eliminar el precio guardado de ${row.name}?`)) return;
+    div.querySelector(".toggle-price-catalog").addEventListener("click",async()=>{
+      const nextVisible=!row.is_catalog;
+      const message=nextVisible
+        ? `¿Volver a mostrar ${row.name} en la lista de precios?`
+        : `¿Quitar ${row.name} de la lista de precios?\n\nEl registro se conserva. No se borran pedidos, remitos ni datos históricos.`;
+      if(!confirm(message)) return;
       try{
-        delete productPrices[row.key];
-        localSave();
         if(supabaseClient){
-          const {error}=await supabaseClient.from("product_prices").delete().eq("product_key",row.key);
+          const {error}=await supabaseClient.from("product_prices")
+            .update({is_catalog:nextVisible,updated_at:new Date().toISOString()})
+            .eq("product_key",row.key);
           if(error) throw error;
         }
+        productCatalogMeta[row.key]={...(productCatalogMeta[row.key]||{}),is_catalog:nextVisible};
+        localSave();
         renderPrices();
-      }catch(e){ alert("No se pudo eliminar: "+e.message); }
+        renderPricePrintSheet();
+      }catch(e){ alert("No se pudo cambiar la visibilidad: "+e.message); }
     });
     list.append(div);
   });
@@ -3389,7 +5192,16 @@ function drawHeaderBrand(ctx,title,subtitle=""){
   ctx.stroke();
 }
 
-function buildPriceCanvas(){
+async function loadCanvasImage(src){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>resolve(img);
+    img.onerror=()=>reject(new Error(`No se pudo cargar ${src}`));
+    img.src=src;
+  });
+}
+
+async function buildPriceCanvas(){
   const canvas=document.createElement("canvas");
   canvas.width=A4_W;
   canvas.height=A4_H;
@@ -3397,14 +5209,29 @@ function buildPriceCanvas(){
   ctx.fillStyle="#fff";
   ctx.fillRect(0,0,A4_W,A4_H);
 
+  // Marca de agua aprobada, centrada y muy tenue.
+  try{
+    const watermark=await loadCanvasImage("don-zoilo-watermark.png");
+    const size=690;
+    ctx.save();
+    ctx.globalAlpha=.075;
+    ctx.drawImage(watermark,(A4_W-size)/2,470,size,size);
+    ctx.restore();
+  }catch(_){ /* La lista sigue funcionando aunque la imagen no cargue. */ }
+
   drawHeaderBrand(ctx,($("pricePrintTitle")?.value||"LISTA DE PRECIOS").toUpperCase(),"CORTES SELECCIONADOS");
 
   const phone=$("pricePrintPhone")?.value||"11 3039 0331";
-  ctx.fillStyle="#b5232a";
-  canvasText(ctx,"PEDIDOS POR WHATSAPP",A4_W-55,36,300,"16px Arial","bold","right");
-  canvasText(ctx,phone,A4_W-55,62,300,"28px Arial","bold","right");
+  const boxX=A4_W-355, boxY=24, boxW=310, boxH=91;
+  ctx.fillStyle="#fff";
+  ctx.strokeStyle="#d52b35";
+  ctx.lineWidth=3;
+  ctx.strokeRect(boxX,boxY,boxW,boxH);
+  ctx.fillStyle="#d52b35";
+  canvasText(ctx,"PEDIDOS POR WHATSAPP",boxX+boxW/2,boxY+11,boxW-20,"15px Arial","bold","center");
+  canvasText(ctx,phone,boxX+boxW/2,boxY+35,boxW-20,"27px Arial","bold","center");
   ctx.fillStyle="#0c2748";
-  canvasText(ctx,"ENTREGAS EN CABA Y GBA OESTE",A4_W-55,100,300,"13px Arial","bold","right");
+  canvasText(ctx,"ENTREGAS EN CABA Y GBA OESTE",boxX+boxW/2,boxY+69,boxW-20,"12px Arial","bold","center");
 
   const margin=42;
   const gap=14;
@@ -3415,45 +5242,42 @@ function buildPriceCanvas(){
   columns.forEach((chunks,col)=>{
     const x=margin+col*(colW+gap);
     let y=top;
-
     chunks.forEach(({category,items})=>{
       ctx.fillStyle="#0c2748";
       ctx.fillRect(x,y,colW,34);
       ctx.fillStyle="#fff";
       canvasText(ctx,category.toUpperCase(),x+colW/2,y+7,colW-10,"18px Arial","bold","center");
       y+=38;
-
       items.forEach(([name,defaultPrice])=>{
+        ctx.fillStyle="rgba(255,255,255,.82)";
+        ctx.fillRect(x,y-2,colW,30);
         ctx.fillStyle="#111";
         canvasText(ctx,name.toUpperCase(),x+5,y,colW-118,"15px Arial","bold");
         canvasText(ctx,moneyPlain(catalogPrice(name,defaultPrice)),x+colW-5,y,112,"16px Arial","bold","right");
-        ctx.strokeStyle="#c2c7cc";
+        ctx.strokeStyle="#d9dde2";
         ctx.lineWidth=1;
-        ctx.beginPath();
-        ctx.moveTo(x+5,y+22);
-        ctx.lineTo(x+colW-5,y+22);
-        ctx.stroke();
-        y+=25;
+        ctx.beginPath(); ctx.moveTo(x+5,y+27); ctx.lineTo(x+colW-5,y+27); ctx.stroke();
+        y+=30;
       });
-
       y+=8;
     });
   });
 
-  ctx.strokeStyle="#0c2748";
-  ctx.lineWidth=4;
-  ctx.beginPath();
-  ctx.moveTo(42,1680);
-  ctx.lineTo(A4_W-42,1680);
-  ctx.stroke();
-
+  const footerTop=1650;
+  ctx.strokeStyle="#0c2748"; ctx.lineWidth=4;
+  ctx.beginPath(); ctx.moveTo(42,footerTop); ctx.lineTo(A4_W-42,footerTop); ctx.stroke();
   ctx.fillStyle="#0c2748";
-  canvasText(ctx,"LOS PRECIOS INCLUYEN I.V.A. · SUJETOS A VARIACIÓN SIN PREVIO AVISO",A4_W/2,1688,A4_W-84,"14px Arial","bold","center");
+  canvasText(ctx,`◉ ${phone}`,62,footerTop+13,240,"15px Arial","bold");
+  canvasText(ctx,"◎ carnesdonzoilo.com.ar",350,footerTop+13,300,"15px Arial","bold");
+  canvasText(ctx,"▣ Entrega en CABA y GBA",690,footerTop+13,300,"15px Arial","bold");
   const date=$("pricePrintDate")?.value;
-  if(date){
-    canvasText(ctx,`VIGENTE A PARTIR DEL ${new Date(date+"T12:00:00").toLocaleDateString("es-AR")}`,A4_W/2,1710,A4_W-84,"12px Arial","normal","center");
-  }
-  canvasText(ctx,"CARNES DON ZOILO · CASTELAR · WWW.CARNESDONZOILO.COM.AR",A4_W/2,1728,A4_W-84,"11px Arial","normal","center");
+  const dateLabel=date ? new Date(date+"T12:00:00").toLocaleDateString("es-AR") : new Date().toLocaleDateString("es-AR");
+  canvasText(ctx,`▦ Actualizado: ${dateLabel}`,A4_W-55,footerTop+13,250,"15px Arial","bold","right");
+  ctx.strokeStyle="#cbd1d8"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(42,footerTop+42); ctx.lineTo(A4_W-42,footerTop+42); ctx.stroke();
+  canvasText(ctx,"LOS PRECIOS INCLUYEN I.V.A. · SUJETOS A VARIACIÓN SIN PREVIO AVISO",A4_W/2,footerTop+51,A4_W-84,"14px Arial","bold","center");
+  if(date) canvasText(ctx,`VIGENTE A PARTIR DEL ${dateLabel}`,A4_W/2,footerTop+73,A4_W-84,"12px Arial","normal","center");
+  canvasText(ctx,"CARNES DON ZOILO · CASTELAR, BUENOS AIRES · WWW.CARNESDONZOILO.COM.AR",A4_W/2,footerTop+91,A4_W-84,"11px Arial","normal","center");
   return canvas;
 }
 
@@ -3539,6 +5363,7 @@ function buildRemitoCanvas(){
 
   const first=currentRemitoItems[0];
   const total=currentRemitoItems.reduce((sum,item)=>sum+Number(item.total||0),0);
+  const updatedBalance=remitoUpdatedBalance(currentRemitoItems);
   const remitoNo=remitoSequence(currentRemitoItems);
 
   const drawCopy=(top,label)=>{
@@ -3607,8 +5432,10 @@ function buildRemitoCanvas(){
     });
 
     const totalY=top+h-135;
-    canvasText(ctx,"TOTAL",right-330,totalY,130,"19px Arial","bold");
-    canvasText(ctx,moneyPlain(total),right-20,totalY-4,200,"25px Arial","bold","right");
+    canvasText(ctx,"TOTAL REMITO",right-390,totalY-14,190,"18px Arial","bold");
+    canvasText(ctx,moneyPlain(total),right-20,totalY-18,230,"24px Arial","bold","right");
+    canvasText(ctx,"SALDO ACTUALIZADO",right-390,totalY+23,190,"14px Arial","bold");
+    canvasText(ctx,moneyPlain(updatedBalance),right-20,totalY+18,230,"20px Arial","bold","right");
 
     const sigY=top+h-55;
     ["ENTREGÓ","RECIBIÓ CONFORME","ACLARACIÓN / DNI"].forEach((lab,i)=>{
@@ -3685,54 +5512,34 @@ function buildPricePrintDocument(autoPrint=false){
 
   const printableCss=`
     *{box-sizing:border-box}
-    html,body{width:210mm;height:297mm;overflow:hidden} body{margin:0;padding:5mm;font-family:Arial,sans-serif;color:#111;background:#fff}
-    .price-print-sheet{display:block;width:196mm;min-height:283mm;margin:0 auto}
-    .price-print-header{display:grid;grid-template-columns:1fr 1.6fr 1fr;align-items:center;gap:12px;border-bottom:3px solid #0c2748;padding-bottom:9px;margin-bottom:10px}
-    .price-brand-name{font-family:Georgia,serif;font-size:24px;font-weight:900;letter-spacing:1px;color:#0c2748}
-    .price-brand-sub{font-size:7px;letter-spacing:1.3px}
+    html,body{width:210mm;height:297mm;overflow:hidden}
+    body{margin:0;padding:5mm;font-family:Arial,sans-serif;color:#111;background:#fff}
+    .price-print-sheet{display:block;position:relative;isolation:isolate;width:198mm;height:285mm;min-height:285mm;max-height:285mm;margin:0 auto;overflow:hidden;background:#fff}
+    .price-watermark{position:absolute;z-index:0;left:50%;top:51%;width:108mm;height:108mm;object-fit:contain;transform:translate(-50%,-50%);opacity:.075;pointer-events:none}
+    .price-print-header,.price-sheet-grid,.price-print-footer{position:relative;z-index:1}
+    .price-print-header{display:grid;grid-template-columns:1fr 1.55fr 1fr;align-items:center;gap:8px;height:26mm;border-bottom:2px solid #0c2748;padding:0 0 2mm;margin:0 0 3mm}
+    .price-brand-name{font-family:Georgia,serif;font-size:24px;font-weight:900;letter-spacing:.5px;color:#0c2748}
+    .price-brand-sub{font-size:7px;letter-spacing:1px;color:#53606d}
     .price-print-title-wrap{text-align:center}
-    .price-print-title-wrap h1{font-size:27px;margin:0;color:#0c2748;letter-spacing:1px}
-    .price-print-title-wrap div{font-size:11px;color:#b5232a;font-weight:800;letter-spacing:3px}
-    .price-contact{border:2px solid #b5232a;border-radius:6px;padding:7px;text-align:center;display:flex;flex-direction:column}
-    .price-contact strong{font-size:8px;color:#b5232a}
-    .price-contact span{font-size:17px;font-weight:900;color:#b5232a}
-    .price-contact small{font-size:7px;color:#0c2748;font-weight:800}
-    .price-sheet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;align-items:stretch;min-height:238mm}
-    .price-category{display:flex;flex-direction:column;break-inside:avoid;border:1px solid #bfc5cc;margin:0;background:#fff}
-    .price-category h2{font-size:12px;line-height:1.2;margin:0;padding:6px 7px;text-align:center;background:#0c2748;color:#fff;letter-spacing:.5px}
-    .price-category-list{padding:5px 7px;flex:1}
-    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:end;font-size:10px;line-height:1.25;min-height:24px;padding:3px 0;border-bottom:1px dotted #a8adb3}
-    .price-sheet-row:last-child{border-bottom:0}
-    .price-sheet-row .product{font-weight:700;text-transform:uppercase;overflow:hidden}
-    .price-sheet-row .price{font-size:10.5px;font-weight:900;white-space:nowrap}
-    .price-print-footer{margin-top:8px;border-top:3px solid #0c2748;text-align:center;display:flex;flex-direction:column;gap:3px;padding-top:5px;color:#0c2748}
-    .price-print-footer strong{font-size:8px}
-    .price-print-footer span,.price-print-footer small{font-size:7px}
-
-    .price-print-sheet{width:200mm;height:287mm;min-height:287mm;max-height:287mm;overflow:hidden}
-    .price-print-header{height:25mm;margin:0 0 2.5mm;padding:0 0 2mm}
-    .price-sheet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2.2mm;height:242mm;min-height:242mm;align-items:stretch}
-    .price-column{display:flex;flex-direction:column;gap:1.6mm;min-width:0;height:100%}
-    .price-category{display:block;flex:0 0 auto;border:1px solid #aeb6bf;margin:0;break-inside:avoid;overflow:hidden}
-    .price-category h2{font-size:10.5px;line-height:1.1;margin:0;padding:4px 5px;text-align:center;background:#0c2748;color:#fff}
-    .price-category-list{padding:3px 5px}
-    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px;align-items:center;font-size:9.5px;line-height:1.12;min-height:19px;padding:2px 0;border-bottom:1px dotted #a8adb3}
-    .price-sheet-row .product{font-size:9.5px;font-weight:800;white-space:normal}
-    .price-sheet-row .price{font-size:10px;font-weight:900;white-space:nowrap}
-    .price-print-footer{height:11mm;margin:2mm 0 0;padding-top:1.5mm;gap:1px}
-
+    .price-print-title-wrap h1{font-size:28px;margin:0;color:#0c2748;letter-spacing:1px}
+    .price-print-title-wrap div{font-size:10px;color:#c51f2b;font-weight:900;letter-spacing:3px}
+    .price-contact{border:2px solid #d52b35;border-radius:7px;background:#fff;padding:6px 7px;text-align:center;display:flex;flex-direction:column}
+    .price-contact strong{font-size:8px;color:#d52b35}.price-contact span{font-size:17px;font-weight:900;color:#d52b35}.price-contact small{font-size:7px;color:#0c2748;font-weight:800}
+    .price-sheet-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2.6mm;height:238mm;min-height:238mm;align-items:stretch}
+    .price-column{display:flex;flex-direction:column;justify-content:flex-start;gap:2.2mm;min-width:0;height:100%}
+    .price-category{display:block;flex:0 0 auto;border:1px solid #cfd4da;margin:0;break-inside:avoid;overflow:hidden;background:rgba(255,255,255,.86)}
+    .price-category h2{font-size:11px;line-height:1.1;margin:0;padding:5px 6px;text-align:center;background:#0c2748;color:#fff;letter-spacing:.25px}
+    .price-category-list{padding:3px 5px;background:rgba(255,255,255,.72)}
+    .price-sheet-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px;align-items:center;font-size:10.2px;line-height:1.15;min-height:24px;padding:3px 1px;border-bottom:1px solid #e1e4e8}
+    .price-sheet-row:last-child{border-bottom:0}.price-sheet-row .product{font-size:10.2px;font-weight:800;text-transform:uppercase;white-space:normal}.price-sheet-row .price{font-size:10.5px;font-weight:900;white-space:nowrap}
+    .price-print-footer{height:15mm;margin:2mm 0 0;border-top:2px solid #0c2748;text-align:center;display:flex;flex-direction:column;gap:1px;padding-top:1.5mm;color:#0c2748}
+    .price-footer-contact{display:grid;grid-template-columns:1fr 1.35fr 1.45fr 1.25fr;gap:2mm;align-items:center;padding:0 1mm 1.6mm;border-bottom:1px solid #cbd1d8;font-size:7.2px;font-weight:800;text-align:center;white-space:nowrap}
+    .price-print-footer>strong{padding-top:1mm;font-size:8px}.price-print-footer>span,.price-print-footer>small{font-size:7px}
     .print-help{display:none}
-    @page{size:A4 portrait;margin:6mm}
-    @media screen{
-      body{background:#e9ecef}
-      .price-print-sheet{background:#fff;padding:0;box-shadow:0 5px 24px rgba(0,0,0,.18)}
-      .print-help{display:block;position:sticky;top:0;margin:-7mm -7mm 7mm;padding:12px;background:#101820;color:#fff;text-align:center;font-size:14px}
-    }
-    @media print{
-      body{padding:0}
-      .price-print-sheet{box-shadow:none;padding:0}
-      .print-help{display:none!important}
-    }`;
+    @page{size:A4 portrait;margin:5mm}
+    @media screen{body{background:#e9ecef}.price-print-sheet{box-shadow:0 5px 24px rgba(0,0,0,.18)}.print-help{display:block;position:sticky;top:0;margin:-5mm -5mm 5mm;padding:12px;background:#101820;color:#fff;text-align:center;font-size:14px}}
+    @media print{body{padding:0}.price-print-sheet{box-shadow:none}.print-help{display:none!important}.price-watermark{opacity:.07}.price-category,.price-category-list{background:rgba(255,255,255,.82);-webkit-print-color-adjust:exact;print-color-adjust:exact}.price-category h2,.price-contact{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  `
 
   popup.document.open();
   popup.document.write(`<!doctype html>
@@ -3760,7 +5567,7 @@ function buildPricePrintDocument(autoPrint=false){
 
 on("thermalPriceList","click",async()=>{
   try{
-    const canvas=buildPriceCanvas();
+    const canvas=await buildPriceCanvas();
     await shareCanvasWithFxPrint(canvas,"lista-precios-don-zoilo.png","Lista de precios Don Zoilo");
   }catch(e){
     if(e?.name!=="AbortError") alert("No se pudo compartir con FxPrint: "+e.message);
@@ -3804,19 +5611,24 @@ on("priceSearch","input",renderPrices);
 on("priceForm","submit",async(event)=>{
   event.preventDefault();
   const product=normalizeProductName($("priceProduct")?.value||"");
+  const category=$("priceCategory")?.value||"Sin categoría";
   const value=Number($("priceValue")?.value||0);
+  const key=productKey(product);
   if(!product || value<0) return alert("Completá producto y precio.");
+  if(Object.prototype.hasOwnProperty.call(productPrices,key)) return alert("Ese producto ya existe. Buscalo en la lista y usá Guardar cambios.");
   try{
-    await rememberProductPrice(product,value);
+    await saveCatalogProduct({name:product,category,value});
     if($("priceProduct")) $("priceProduct").value="";
     if($("priceValue")) $("priceValue").value="";
     renderPrices();
+    renderPricePrintSheet();
   }catch(e){ alert("No se pudo guardar: "+e.message); }
 });
 on("refreshPrices","click",async()=>{
   try{
     if(supabaseClient) await reloadCloudData();
     renderPrices();
+    renderPricePrintSheet();
   }catch(e){ alert("No se pudieron actualizar los precios: "+e.message); }
 });
 
@@ -3862,12 +5674,20 @@ on("repairDeliveredMovements","click",async()=>{
 
 
 on("closeBalanceDetail","click",()=>{ const d=$("balanceDetailDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
+on("accountDocumentEditForm","submit",saveAccountDocumentEdit);
+on("closeAccountDocumentEdit","click",()=>{ const d=$("accountDocumentEditDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
+on("cancelAccountDocumentEdit","click",()=>{ const d=$("accountDocumentEditDialog"); if(typeof d?.close==="function") d.close(); else d?.removeAttribute("open"); });
+on("repairAccounts1908","click",()=>{
+  alert("La reparación histórica quedó deshabilitada. V35.3.44 usa el cierre conciliado del 19/08 como punto de corte estable.");
+});
 on("openingBalanceForm","submit",saveOpeningBalance);
 on("collectionForm","submit",saveCollection);
+on("collectionClient","change",()=>fillCollectionPendingTargets($("collectionClient")?.value||""));
 on("accountClientSelect","change",renderAccounts);
 on("refreshAccounts","click",renderAccounts);
 on("collectFullBalance","click",collectFullBalance);
 on("printAccountStatement","click",printAccountStatement);
+on("printPendingAccountStatement","click",printPendingAccountStatement);
 
 
 on("importJulyExpenses","click",importJulyExpenses);
@@ -3890,6 +5710,10 @@ on("supplierPurchaseForm","submit",submitSupplierPurchase);
 on("supplierPaymentForm","submit",submitSupplierPayment);
 on("supplierAccountSelect","change",renderSuppliers);
 on("refreshSuppliers","click",renderSuppliers);
+on("applySupplierPeriod","click",()=>renderSupplierHistory($("supplierAccountSelect")?.value||""));
+on("clearSupplierPeriod","click",()=>{ if($("supplierDateFrom")) $("supplierDateFrom").value=""; if($("supplierDateTo")) $("supplierDateTo").value=""; renderSupplierHistory($("supplierAccountSelect")?.value||""); });
+on("supplierDateFrom","change",()=>renderSupplierHistory($("supplierAccountSelect")?.value||""));
+on("supplierDateTo","change",()=>renderSupplierHistory($("supplierAccountSelect")?.value||""));
 on("quickExpenseForm","submit",saveQuickExpense);
 on("expenseCategory","change",()=>{
   selectedExpenseCategory=$("expenseCategory")?.value||"";
@@ -3897,6 +5721,18 @@ on("expenseCategory","change",()=>{
 });
 
 on("expenseMonth","change",renderExpenseSummary);
+on("expenseCategoryDetailClose","click",()=>{
+  if($("expenseCategoryDetail")) $("expenseCategoryDetail").hidden=true;
+});
+on("expenseListCategory","change",renderExpenseRecent);
+on("expenseListFrom","change",renderExpenseRecent);
+on("expenseListTo","change",renderExpenseRecent);
+on("expenseListClear","click",()=>{
+  if($("expenseListCategory")) $("expenseListCategory").value="";
+  if($("expenseListFrom")) $("expenseListFrom").value=todayISO().slice(0,7)+"-01";
+  if($("expenseListTo")) $("expenseListTo").value=todayISO();
+  renderExpenseRecent();
+});
 
 on("selectAllRemitos","change",()=>{
   const checked=$("selectAllRemitos")?.checked||false;
