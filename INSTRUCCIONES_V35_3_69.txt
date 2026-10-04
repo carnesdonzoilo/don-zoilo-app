@@ -1,0 +1,14 @@
+DON ZOILO · V35.3.69
+
+BASE: V35.3.68 enviada por Leandro el 04/10/2026.
+
+CAMBIO ÚNICO:
+- Proveedores > historial: mejora de Editar movimiento.
+- Permite corregir detalle, importe y fecha del movimiento seleccionado.
+- Acepta importes con formato argentino (ej. 1.835.640 o 1.835.640,50).
+- Pide confirmación antes de guardar.
+- En Supabase actualiza solamente concept, amount y date.
+- NO modifica filtros de fecha, checkpoints conciliados, lógica de saldos, compras, pagos ni otros módulos.
+
+IMPORTANTE:
+La corrección de una compra o pago cambia naturalmente el saldo del proveedor porque se modifica el movimiento real.
