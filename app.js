@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.70";
+const APP_VERSION = "35.3.71";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3347,7 +3347,7 @@ function renderSupplierHistory(name){
       <div class="amount credit-col">${!isDebt?money(movement.amount||0):""}</div>
       <div class="amount balance-col">${money(balance)}</div>
       <div class="supplier-history-actions"><button type="button" class="supplier-edit-btn">Editar</button><button type="button" class="supplier-delete-btn">Eliminar</button></div>`;
-    // V35.3.70: asignación directa del evento para que Editar/Eliminar siga
+    // V35.3.71: asignación directa del evento para que Editar/Eliminar siga
     // funcionando aunque el historial se vuelva a renderizar por filtros o saldos.
     const editBtn=row.querySelector(".supplier-edit-btn");
     const deleteBtn=row.querySelector(".supplier-delete-btn");
