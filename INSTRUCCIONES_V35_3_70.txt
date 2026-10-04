@@ -1,0 +1,18 @@
+DON ZOILO · V35.3.70
+
+Base: V35.3.68.
+
+Cambio puntual:
+- Corrige la activación de los botones Editar y Eliminar en movimientos de proveedores.
+- Editar permite corregir detalle, importe y fecha del movimiento.
+- Al guardar, el saldo del proveedor se recalcula con el valor corregido.
+
+Sin cambios en:
+- filtro por fechas
+- lógica de saldos conciliados
+- compras y pagos
+- cuentas corrientes de clientes
+- estadísticas
+- balance diario
+
+Subir el contenido completo de esta carpeta al repositorio, reemplazando los archivos existentes.
