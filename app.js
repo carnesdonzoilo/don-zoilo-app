@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.69";
+const APP_VERSION = "35.3.70";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3347,8 +3347,20 @@ function renderSupplierHistory(name){
       <div class="amount credit-col">${!isDebt?money(movement.amount||0):""}</div>
       <div class="amount balance-col">${money(balance)}</div>
       <div class="supplier-history-actions"><button type="button" class="supplier-edit-btn">Editar</button><button type="button" class="supplier-delete-btn">Eliminar</button></div>`;
-    row.querySelector(".supplier-edit-btn").addEventListener("click",()=>editSupplierMovement(movement));
-    row.querySelector(".supplier-delete-btn").addEventListener("click",()=>deleteSupplierMovement(movement));
+    // V35.3.70: asignación directa del evento para que Editar/Eliminar siga
+    // funcionando aunque el historial se vuelva a renderizar por filtros o saldos.
+    const editBtn=row.querySelector(".supplier-edit-btn");
+    const deleteBtn=row.querySelector(".supplier-delete-btn");
+    editBtn.onclick=(event)=>{
+      event.preventDefault();
+      event.stopPropagation();
+      editSupplierMovement(movement);
+    };
+    deleteBtn.onclick=(event)=>{
+      event.preventDefault();
+      event.stopPropagation();
+      deleteSupplierMovement(movement);
+    };
     box.append(row);
   });
 }
@@ -3393,48 +3405,24 @@ function payFullSupplierBalance(){
   $("supplierPaymentAmount").focus();
 }
 async function editSupplierMovement(movement){
-  // V35.3.69 — Edición puntual de movimientos de proveedores.
-  // No toca filtros, checkpoints ni fórmulas de saldo: sólo corrige el movimiento elegido.
   const detail=prompt("Detalle:",movement.concept||"");
   if(detail===null) return;
-
-  const currentAmount=Number(movement.amount||0);
-  const amountText=prompt("Importe:",currentAmount.toLocaleString("es-AR",{maximumFractionDigits:2}));
+  const amountText=prompt("Importe:",String(Number(movement.amount||0)));
   if(amountText===null) return;
-
-  // Acepta 1835640, 1.835.640, 1.835.640,50 o 1835640,50.
-  let normalized=String(amountText).trim().replace(/\s/g,"").replace(/\$/g,"");
-  if(normalized.includes(",")) normalized=normalized.replace(/\./g,"").replace(",",".");
-  else normalized=normalized.replace(/\./g,"");
-  const amount=Number(normalized);
-  if(!Number.isFinite(amount) || amount<=0) return alert("Importe inválido.");
-
-  const dateText=prompt("Fecha (AAAA-MM-DD):",movement.date||todayISO());
-  if(dateText===null) return;
-  const date=String(dateText).trim();
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)) return alert("Fecha inválida. Usá AAAA-MM-DD.");
-
-  const concept=String(detail).trim()||movement.type;
-  const label=movement.type==="compra"?"Compra":movement.type==="pago"?"Pago":"Movimiento";
-  if(!confirm(`${label} de ${movement.party||"proveedor"}\n\nImporte: ${money(currentAmount)} → ${money(amount)}\nFecha: ${fmtDate(movement.date)} → ${fmtDate(date)}\nDetalle: ${movement.concept||""} → ${concept}\n\n¿Guardar esta corrección?`)) return;
-
+  const amount=Number(String(amountText).replace(",","."));
+  if(!(amount>0)) return alert("Importe inválido.");
+  const date=prompt("Fecha (AAAA-MM-DD):",movement.date||todayISO());
+  if(date===null) return;
+  const updated={...movement,concept:String(detail).trim()||movement.type,amount,date};
   try{
-    // Actualiza exclusivamente los tres campos editables para no alterar
-    // metadatos, tipo, proveedor, medio de pago ni ninguna imputación histórica.
     if(supabaseClient){
-      const {error}=await supabaseClient.from("movements")
-        .update({concept,amount,date})
-        .eq("id",movement.id);
+      const {error}=await supabaseClient.from("movements").update(updated).eq("id",movement.id);
       if(error) throw error;
     }
     const idx=movements.findIndex(m=>m.id===movement.id);
-    if(idx>=0) movements[idx]={...movements[idx],concept,amount,date};
-    localSave();
-    renderAll();
-    showDeliveryToast("Movimiento de proveedor actualizado.");
-  }catch(error){
-    alert("No se pudo editar: "+error.message);
-  }
+    if(idx>=0) movements[idx]=updated;
+    localSave(); renderAll(); showDeliveryToast("Movimiento actualizado.");
+  }catch(error){ alert("No se pudo editar: "+error.message); }
 }
 async function deleteSupplierMovement(movement){
   if(!confirm(`¿Eliminar este movimiento por ${money(movement.amount||0)}?`)) return;
