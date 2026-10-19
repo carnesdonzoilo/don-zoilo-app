@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.71";
+const APP_VERSION = "35.3.72";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -55,10 +55,22 @@ function localLoad(){
   productCatalogMeta = JSON.parse(localStorage.getItem(PRICE_META_STORAGE_KEY) || "{}");
 }
 function localSave(){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(movements));
-  localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
-  localStorage.setItem(PRICES_STORAGE_KEY, JSON.stringify(productPrices));
-  localStorage.setItem(PRICE_META_STORAGE_KEY, JSON.stringify(productCatalogMeta));
+  // V35.3.72: Supabase es la fuente de verdad cuando está conectado.
+  // No duplicar miles de pedidos en localStorage: supera la cuota (~5 MB)
+  // y antes provocaba falsos errores al sincronizar o guardar una compra.
+  // No borrar las copias locales antiguas: quedan intactas por seguridad.
+  if(supabaseClient) return;
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(movements));
+    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
+    localStorage.setItem(PRICES_STORAGE_KEY, JSON.stringify(productPrices));
+    localStorage.setItem(PRICE_META_STORAGE_KEY, JSON.stringify(productCatalogMeta));
+  }catch(error){
+    if(error?.name === "QuotaExceededError" || /quota|exceeded/i.test(String(error?.message||""))){
+      throw new Error("El almacenamiento local está lleno y no se pudo guardar sin conexión. No vuelvas a cargar el movimiento hasta verificarlo. Conectá Supabase y sincronizá; conservá el respaldo JSON.");
+    }
+    throw error;
+  }
 }
 
 function buildSafetySnapshot(reason="automático"){
@@ -75,6 +87,12 @@ function buildSafetySnapshot(reason="automático"){
 }
 
 function saveSafetyBackup(reason="sincronización correcta"){
+  // En modo nube, el respaldo completo se descarga manualmente como JSON.
+  // Guardarlo automáticamente en localStorage puede agotar la cuota.
+  if(supabaseClient){
+    if($("backupStatus")) $("backupStatus").textContent="Datos en Supabase · descargá un respaldo JSON cuando lo necesites.";
+    return null;
+  }
   try{
     const current=localStorage.getItem(SAFETY_BACKUP_KEY);
     if(current) localStorage.setItem(SAFETY_BACKUP_PREVIOUS_KEY,current);
