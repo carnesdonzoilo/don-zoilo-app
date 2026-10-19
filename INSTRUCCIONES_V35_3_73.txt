@@ -1,0 +1,1 @@
+V35.3.73: Balance Diario y estado de resultados consultan gastos desde los movimientos activos en memoria, evitando copias locales desactualizadas. No modifica movimientos, saldos, cierres previos ni tablas Supabase. Actualizar calculo del 19/10/2026 y verificar gastos antes de cerrar.
