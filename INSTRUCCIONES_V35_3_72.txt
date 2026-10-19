@@ -1,0 +1,13 @@
+DON ZOILO V35.3.72 — CORRECCIÓN DE CUOTA LOCAL
+
+Subir el contenido del ZIP al repositorio y desplegar en Vercel.
+
+- Con Supabase conectado, ya no se vuelcan todos los movimientos y pedidos a localStorage.
+- No se eliminan copias locales antiguas, registros de Supabase ni saldos.
+- La descarga manual de respaldo JSON sigue incluyendo todos los registros en memoria.
+- Sin conexión, la app avisa si no puede guardar por falta de espacio.
+- No requiere ejecutar SQL.
+
+IMPORTANTE: El archivo JSON de respaldo descargado el 19/10 debe conservarse fuera del navegador.
+Tras publicar, comprobar el cartel 'Sincronización online activa' antes de registrar compras o pedidos.
+No restaurar el JSON sobre la nube sin comparar los registros: la restauración es aditiva y podría actualizar datos.
