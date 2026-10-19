@@ -91,7 +91,10 @@ function calculations(date,previousOverride,assetsRows=cachedAssets){
   const supplierDebt=typeof sharedSupplierValue==='number'&&Number.isFinite(sharedSupplierValue)
     ? sharedSupplierValue
     : movements.filter(m=>m.status!=='pendiente'&&['compra','pago'].includes(m.type)).reduce((s,m)=>s+(m.type==='compra'?num(m.amount):-num(m.amount)),0);
-  const expenses=movements.filter(m=>m.type==='gasto'&&m.status!=='pendiente'&&m.date===date).reduce((s,m)=>s+num(m.amount),0);
+  const dailyExpenseRows=typeof window.DonZoiloExpenseData?.forDate==='function'
+    ? window.DonZoiloExpenseData.forDate(date)
+    : movements.filter(m=>m.type==='gasto'&&m.status!=='pendiente'&&String(m.date||'').slice(0,10)===date);
+  const expenses=dailyExpenseRows.reduce((s,m)=>s+num(m.amount),0);
   const totalAssets=currentAssets+clientAccounts+inventory;
   const finalEquity=totalAssets-supplierDebt;
   const previous=previousOverride!==undefined?num(previousOverride):previousEquity(date);
@@ -288,7 +291,9 @@ function incomeMonth(){
 }
 function incomeExpenses(month){
   const movements=readJson(MOVEMENTS_KEY,[]);
-  return movements.filter(m=>m.type==='gasto'&&m.status!=='pendiente'&&String(m.date||'').slice(0,7)===month);
+  return typeof window.DonZoiloExpenseData?.forMonth==='function'
+    ? window.DonZoiloExpenseData.forMonth(month)
+    : movements.filter(m=>m.type==='gasto'&&m.status!=='pendiente'&&String(m.date||'').slice(0,7)===month);
 }
 function groupExpenseTotal(list,categories){
   return list.filter(m=>categories.includes(expenseCategoryForIncome(m))).reduce((s,m)=>s+num(m.amount),0);

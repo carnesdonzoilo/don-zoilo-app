@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.72";
+const APP_VERSION = "35.3.73";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -1271,6 +1271,12 @@ function renderExpenseCategories(){
 function expenseMovements(){
   return movements.filter(m=>m.type==="gasto");
 }
+
+// Fuente compartida en memoria: evita leer una copia local desactualizada.
+window.DonZoiloExpenseData = {
+  forDate(date){ return expenseMovements().filter(m=>String(m.date||"").slice(0,10)===date && m.status!=="pendiente"); },
+  forMonth(month){ return expenseMovements().filter(m=>String(m.date||"").slice(0,7)===month && m.status!=="pendiente"); }
+};
 
 function renderExpenseListCategoryOptions(){
   const select=$("expenseListCategory");
