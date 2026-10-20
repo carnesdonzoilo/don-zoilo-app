@@ -9,6 +9,17 @@
   let editingId=null;
   let draftId=null;
   const savingIds=new Set();
+  const saveQueues=new Map();
+  const revisions=new Map();
+  let reloadPending=false;
+  let loading=false;
+  function hasPending(){return saveQueues.size>0 || savingIds.size>0;}
+  function requestReload(showError=false){
+    if(hasPending()){reloadPending=true;return;}
+    loadStock(showError);
+  }
+  function flushReload(){if(!hasPending()&&reloadPending){reloadPending=false;loadStock(false);}}
+
   const byId=id=>document.getElementById(id);
   const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
   const attr=value=>esc(value).replace(/`/g,"&#096;");
@@ -18,22 +29,33 @@
   const uuid=()=>crypto.randomUUID?crypto.randomUUID():`stock-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const nowIso=()=>new Date().toISOString();
   function localRead(){try{return JSON.parse(localStorage.getItem(STOCK_LOCAL_KEY)||"[]")}catch(_){return[]}}
-  function localWrite(){localStorage.setItem(STOCK_LOCAL_KEY,JSON.stringify(stockRows.filter(r=>r.product?.trim())));}
+  // Supabase is authoritative. A full browser cache must never invalidate a cloud save.
+  function localWrite(){
+    try{localStorage.setItem(STOCK_LOCAL_KEY,JSON.stringify(stockRows.filter(r=>r.product?.trim())));return true;}
+    catch(error){console.warn("Copia local de stock no disponible; se mantiene Supabase como fuente principal.",error);return false;}
+  }
   function cloud(){return typeof supabaseClient!=="undefined"&&supabaseClient;}
   function amountOf(row){const basis=num(row.kg)>0?num(row.kg):num(row.quantity);return basis*num(row.unit_cost);}
 
   async function loadStock(showError=false){
+    if(hasPending()){reloadPending=true;return;}
+    if(loading)return;
+    loading=true;
     try{
       if(cloud()){
         const {data,error}=await cloud().from("inventory_stock").select("*").order("product",{ascending:true});
         if(error)throw error;
-        stockRows=data||[]; localWrite();
+        if(hasPending()){reloadPending=true;return;}
+        stockRows=data||[];localWrite();
       }else stockRows=localRead();
+      draftId=null;renderStock();
     }catch(error){
-      console.error("Stock:",error);stockRows=localRead();
-      if(showError)alert("No se pudo leer Stock de Supabase. Se muestra la copia local. "+error.message);
-    }
-    draftId=null;renderStock();
+      console.error("Stock:",error);
+      // Keep currently displayed cloud data instead of overwriting with stale local cache.
+      if(!stockRows.length)stockRows=localRead();
+      renderStock();
+      if(showError)alert("No se pudo actualizar Stock desde Supabase. No se reemplazaron los cambios en pantalla. "+error.message);
+    }finally{loading=false;flushReload();}
   }
 
   function filteredRows(){
@@ -96,30 +118,53 @@
     return row;
   }
 
-  async function persistRow(row,input){
-    if(!row||!row.product.trim()){
-      if(input?.dataset.field!=="product")return;
-      input?.classList.add("stock-cell-error");
-      return;
+  function persistRow(row,input){
+    if(!row||!String(row.product||"").trim()){
+      input?.classList.add("stock-cell-error");return Promise.resolve(false);
     }
-    input?.classList.remove("stock-cell-error");
-    savingIds.add(row.id);input?.closest("tr")?.classList.add("stock-saving");
-    try{
-      let saved=row;
+    const id=row.id;
+    const revision=(revisions.get(id)||0)+1;
+    revisions.set(id,revision);
+    // Snapshot every edit. Sequential writes prevent an older response overwriting a newer value.
+    const snapshot={...row};
+    savingIds.add(id);
+    input?.classList.remove("stock-cell-error","stock-cell-saved");
+    input?.closest("tr")?.classList.add("stock-saving");
+    const previous=saveQueues.get(id)||Promise.resolve();
+    const task=previous.catch(()=>{}).then(async()=>{
       if(cloud()){
-        const {data,error}=await cloud().from("inventory_stock").upsert(row,{onConflict:"id"}).select().single();
-        if(error)throw error;saved=data;
+        const {data,error}=await cloud().from("inventory_stock").upsert(snapshot,{onConflict:"id"}).select().single();
+        if(error)throw error;
+        return data;
       }
-      const i=stockRows.findIndex(r=>r.id===row.id);if(i>=0)stockRows[i]=saved;
-      if(draftId===row.id)draftId=null;
-      localWrite();
-      input?.classList.add("stock-cell-saved");setTimeout(()=>input?.classList.remove("stock-cell-saved"),700);
-    }catch(error){
-      input?.classList.add("stock-cell-error");
-      alert("No se pudo guardar el cambio: "+(error.message||error));
-    }finally{
-      savingIds.delete(row.id);input?.closest("tr")?.classList.remove("stock-saving");updateKpis();
-    }
+      // Offline writes are not presented as cloud-confirmed saves.
+      throw new Error("Sin conexión a Supabase. El cambio no fue confirmado.");
+    }).then(saved=>{
+      if(revisions.get(id)===revision){
+        const i=stockRows.findIndex(r=>r.id===id);
+        if(i>=0)stockRows[i]=saved;
+        if(draftId===id)draftId=null;
+        localWrite();
+        input?.classList.add("stock-cell-saved");
+        setTimeout(()=>input?.classList.remove("stock-cell-saved"),1000);
+      }
+      return true;
+    }).catch(error=>{
+      if(revisions.get(id)===revision){
+        input?.classList.add("stock-cell-error");
+        alert("El cambio de stock NO se guardó en Supabase: "+(error.message||error)+". Conservá el valor en pantalla y volvé a intentar.");
+      }
+      return false;
+    }).finally(()=>{
+      if(saveQueues.get(id)===task){
+        saveQueues.delete(id);savingIds.delete(id);
+        input?.closest("tr")?.classList.remove("stock-saving");
+        flushReload();
+      }
+      updateKpis();
+    });
+    saveQueues.set(id,task);
+    return task;
   }
 
   function addInlineRow(){
@@ -150,7 +195,7 @@
   }
   function closeForm(){const d=byId("stockDialog");if(d.close)d.close();else d.removeAttribute("open");}
   function updatePreview(){byId("stockAmountPreview").value=cash((num(byId("stockKg")?.value)>0?num(byId("stockKg")?.value):num(byId("stockQuantity")?.value))*num(byId("stockUnitCost")?.value));}
-  async function saveRow(event){event.preventDefault();const existing=stockRows.find(r=>r.id===editingId);const row={id:editingId||uuid(),product:byId("stockProduct").value.trim(),detail_status:byId("stockStatus").value.trim(),category:byId("stockCategory").value,unit:byId("stockUnit").value,quantity:num(byId("stockQuantity").value),kg:num(byId("stockKg").value),unit_cost:num(byId("stockUnitCost").value),notes:byId("stockNotes").value.trim(),created_at:existing?.created_at||nowIso(),updated_at:nowIso()};if(!row.product)return alert("Ingresá el nombre del producto.");await persistRow(row);if(!stockRows.some(r=>r.id===row.id))stockRows.push(row);closeForm();renderStock();}
+  async function saveRow(event){event.preventDefault();const existing=stockRows.find(r=>r.id===editingId);const row={id:editingId||uuid(),product:byId("stockProduct").value.trim(),detail_status:byId("stockStatus").value.trim(),category:byId("stockCategory").value,unit:byId("stockUnit").value,quantity:num(byId("stockQuantity").value),kg:num(byId("stockKg").value),unit_cost:num(byId("stockUnitCost").value),notes:byId("stockNotes").value.trim(),created_at:existing?.created_at||nowIso(),updated_at:nowIso()};if(!row.product)return alert("Ingresá el nombre del producto.");const ok=await persistRow(row);if(!ok)return;if(!stockRows.some(r=>r.id===row.id))stockRows.push(row);closeForm();renderStock();}
   async function deleteRow(){const row=stockRows.find(r=>r.id===editingId);await deleteInline(row);closeForm();}
 
   function exportCsv(){
@@ -212,7 +257,7 @@
   function bind(){
     byId("stockNewBtn")?.addEventListener("click",addInlineRow);byId("stockCloseBtn")?.addEventListener("click",closeForm);byId("stockForm")?.addEventListener("submit",saveRow);byId("stockDeleteBtn")?.addEventListener("click",deleteRow);
     ["stockQuantity","stockKg","stockUnitCost"].forEach(id=>byId(id)?.addEventListener("input",updatePreview));
-    byId("stockSearch")?.addEventListener("input",()=>renderStock());byId("stockCategoryFilter")?.addEventListener("change",()=>renderStock());byId("stockRefreshBtn")?.addEventListener("click",()=>loadStock(true));byId("stockExportBtn")?.addEventListener("click",exportCsv);byId("stockPdfBtn")?.addEventListener("click",exportPdfA4);
+    byId("stockSearch")?.addEventListener("input",()=>renderStock());byId("stockCategoryFilter")?.addEventListener("change",()=>renderStock());byId("stockRefreshBtn")?.addEventListener("click",()=>requestReload(true));byId("stockExportBtn")?.addEventListener("click",exportCsv);byId("stockPdfBtn")?.addEventListener("click",exportPdfA4);
     const body=byId("stockTableBody");
     body?.addEventListener("input",e=>{if(e.target.matches(".stock-cell-input"))updateRowFromCell(e.target);});
     body?.addEventListener("change",e=>{if(e.target.matches("select.stock-cell-input")){const row=updateRowFromCell(e.target);persistRow(row,e.target);}});
@@ -223,11 +268,11 @@
       if(e.key==="Escape"){e.target.blur();}
     });
     body?.addEventListener("click",e=>{const del=e.target.closest("[data-delete]");if(del)deleteInline(stockRows.find(r=>r.id===del.dataset.delete));});
-    document.querySelector('[data-view="stock"]')?.addEventListener("click",()=>loadStock(false));
+    document.querySelector('[data-view="stock"]')?.addEventListener("click",()=>requestReload(false));
   }
   document.readyState==="loading"?document.addEventListener("DOMContentLoaded",()=>{bind();loadStock(false);}):(()=>{bind();loadStock(false);})();
 
-  window.addEventListener("donzoilo:cloud-ready",()=>loadStock(false));
-  window.addEventListener("donzoilo:remote-change",e=>{if(e.detail?.table==="inventory_stock")loadStock(false)});
-  window.addEventListener("donzoilo:app-visible",()=>loadStock(false));
+  window.addEventListener("donzoilo:cloud-ready",()=>requestReload(false));
+  window.addEventListener("donzoilo:remote-change",e=>{if(e.detail?.table==="inventory_stock")requestReload(false)});
+  window.addEventListener("donzoilo:app-visible",()=>requestReload(false));
 })();

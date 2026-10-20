@@ -1,0 +1,7 @@
+V35.3.74 - Guardado seguro de Stock
+- Supabase es la fuente principal; el limite localStorage no bloquea el guardado online.
+- Cambios en la misma fila se guardan secuencialmente.
+- Recargas de stock se aplazan durante guardados pendientes.
+- Error de nube visible; no se confirma guardado si falla.
+- No requiere SQL. No modifica datos existentes.
+- Verificar una cifra, salir de la celda, esperar y tocar Actualizar.
