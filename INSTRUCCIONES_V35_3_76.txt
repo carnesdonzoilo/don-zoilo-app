@@ -1,0 +1,1 @@
+V35.3.76: Corrige cierre de balance bloqueado por cuota local. Con Supabase activo no duplica cierres en localStorage y exige confirmación de Supabase. Caché de activos no bloquea. No cambia saldos ni movimientos. No requiere SQL nuevo. Antes de reintentar un cierre fallido, verificar historial.
