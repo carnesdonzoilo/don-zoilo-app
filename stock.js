@@ -31,6 +31,8 @@
   function localRead(){try{return JSON.parse(localStorage.getItem(STOCK_LOCAL_KEY)||"[]")}catch(_){return[]}}
   // Supabase is authoritative. A full browser cache must never invalidate a cloud save.
   function localWrite(){
+    // No duplicar en localStorage el inventario que ya está en Supabase.
+    if(cloud())return true;
     try{localStorage.setItem(STOCK_LOCAL_KEY,JSON.stringify(stockRows.filter(r=>r.product?.trim())));return true;}
     catch(error){console.warn("Copia local de stock no disponible; se mantiene Supabase como fuente principal.",error);return false;}
   }
@@ -264,7 +266,7 @@
     body?.addEventListener("focusout",e=>{if(e.target.matches("input.stock-cell-input")){const row=updateRowFromCell(e.target);persistRow(row,e.target);}});
     body?.addEventListener("keydown",e=>{
       if(!e.target.matches(".stock-cell-input"))return;
-      if(e.key==="Enter"){e.preventDefault();const row=updateRowFromCell(e.target);persistRow(row,e.target);const inputs=[...body.querySelectorAll(".stock-cell-input")];const next=inputs[inputs.indexOf(e.target)+1];next?.focus();next?.select?.();}
+      if(e.key==="Enter"){e.preventDefault();const inputs=[...body.querySelectorAll(".stock-cell-input")];const next=inputs[inputs.indexOf(e.target)+1];if(next){next.focus();next.select?.();}else e.target.blur();}
       if(e.key==="Escape"){e.target.blur();}
     });
     body?.addEventListener("click",e=>{const del=e.target.closest("[data-delete]");if(del)deleteInline(stockRows.find(r=>r.id===del.dataset.delete));});

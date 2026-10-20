@@ -110,9 +110,7 @@
     const client=typeof supabaseClient!=="undefined"?supabaseClient:null;
     try{
       if(client){const {error}=await client.from("inventory_stock").insert(records);if(error)throw error;}
-      else {
-        const key="don_zoilo_stock_v33",current=JSON.parse(localStorage.getItem(key)||"[]");localStorage.setItem(key,JSON.stringify([...current,...records]));
-      }
+      else {throw new Error("Sin conexión a Supabase. No se importaron productos para evitar datos locales sin sincronizar.");}
       alert(`${records.length} productos guardados correctamente.`);closeDialog();
       $("stockRefreshBtn")?.click();
     }catch(error){alert("No se pudo guardar la importación: "+(error.message||error));}

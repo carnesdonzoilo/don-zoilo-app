@@ -1,0 +1,9 @@
+DON ZOILO V35.3.75 - STOCK SIN COPIA LOCAL DUPLICADA
+
+Subir archivos a GitHub manteniendo estructura original.
+Actualizar pagina con Ctrl+F5 en PC (o cerrar y volver a abrir en celular) para evitar JS viejo en cache.
+Stock conectado a Supabase ya no intenta guardar toda la tabla en localStorage.
+Importacion de imagen requiere Supabase activo.
+Enter confirma una sola vez mediante salida del campo.
+No requiere SQL. No modifica filas existentes ni cuentas corrientes.
+Probar primero una cifra, salir del campo, esperar, pulsar Actualizar y verificar.
