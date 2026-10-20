@@ -38,7 +38,11 @@ const uid=()=>crypto.randomUUID?crypto.randomUUID():`balance-${Date.now()}-${Mat
 const today=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10)};
 const readJson=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback))}catch(_){return fallback}};
 const cloud=()=>window.supabaseClient||null;
-function localWrite(){localStorage.setItem(LOCAL_KEY,JSON.stringify(closings))}
+function localWrite(){
+  // Supabase es la fuente de verdad: no bloquear cierres por cuota de caché.
+  if(cloud())return;
+  localStorage.setItem(LOCAL_KEY,JSON.stringify(closings));
+}
 function isOpening(m){return m.type==='ajuste'&&String(m.notes||'').includes('SALDO_INICIAL')}
 function stockValue(rows){return rows.reduce((sum,r)=>{const basis=num(r.kg)>0?num(r.kg):num(r.quantity);return sum+basis*num(r.unit_cost)},0)}
 async function loadCurrentAssets(){
@@ -47,7 +51,8 @@ async function loadCurrentAssets(){
       const {data,error}=await cloud().from('current_assets').select('*').order('sort_order',{ascending:true});
       if(error)throw error;
       cachedAssets=data||[];
-      localStorage.setItem(ASSETS_KEYS[0],JSON.stringify(cachedAssets));
+      try{localStorage.setItem(ASSETS_KEYS[0],JSON.stringify(cachedAssets))}
+      catch(e){console.warn('Caché de activos llena; se usan los datos de Supabase',e)}
       return cachedAssets;
     }
   }catch(e){console.warn('Balance diario: no se pudo leer current_assets desde Supabase',e)}
@@ -387,7 +392,19 @@ async function save(){
   current=calculations($('balanceDate').value,num($('balancePrevious').value),cachedAssets);
   const existing=closings.find(r=>r.balance_date===current.date);
   const record={id:existing?.id||uid(),balance_date:current.date,...current,notes:$('balanceNotes').value.trim(),created_at:existing?.created_at||new Date().toISOString(),updated_at:new Date().toISOString()};delete record.date;
-  try{if(cloud()){const {data,error}=await cloud().from(TABLE).upsert(record,{onConflict:'balance_date'}).select().single();if(error)throw error;Object.assign(record,data)}closings=closings.filter(r=>r.balance_date!==record.balance_date);closings.push(record);localWrite();renderHistory();renderIncomeStatement();alert('Cierre diario guardado correctamente.')}catch(e){alert('No se pudo guardar el cierre: '+(e.message||e))}
+  try{
+    if(cloud()){
+      const {data,error}=await cloud().from(TABLE).upsert(record,{onConflict:'balance_date'}).select().single();
+      if(error)throw error;
+      if(!data||data.balance_date!==record.balance_date)throw new Error('Supabase no confirmó el cierre');
+      Object.assign(record,data);
+    }
+    closings=closings.filter(r=>r.balance_date!==record.balance_date);
+    closings.push(record);
+    if(!cloud())localWrite();
+    renderHistory();renderIncomeStatement();
+    alert(cloud()?'Cierre diario confirmado en Supabase.':'Cierre diario guardado localmente.');
+  }catch(e){alert('No se pudo confirmar el cierre: '+(e.message||e))}
 }
 function balanceClientRows(){
   const getDetail=window.DonZoiloFinancialTotals?.clientAccountDetail;
