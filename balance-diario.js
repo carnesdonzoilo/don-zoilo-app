@@ -10,6 +10,8 @@ const ASSETS_KEYS=['don_zoilo_current_assets_v34_1','don_zoilo_current_assets_v3
 let closings=[];
 let current=null;
 let cachedAssets=[];
+let cloudStockRows=null;
+let cloudStockError=null;
 const $=id=>document.getElementById(id);
 const num=v=>{
   // Los totales compartidos entre módulos ya llegan como Number.
@@ -63,10 +65,28 @@ async function loadCurrentAssets(){
   cachedAssets=[];
   return cachedAssets;
 }
+async function loadBalanceStock(){
+  if(!cloud()){cloudStockRows=null;cloudStockError=null;return;}
+  try{
+    const data=[];
+    for(let start=0;;start+=1000){
+      const result=await cloud().from('inventory_stock').select('*').order('product',{ascending:true}).order('id',{ascending:true}).range(start,start+999);
+      if(result.error)throw result.error;
+      data.push(...(result.data||[]));
+      if((result.data||[]).length<1000)break;
+    }
+    cloudStockRows=data;
+    cloudStockError=null;
+  }catch(e){
+    cloudStockRows=null;
+    cloudStockError=e;
+    console.error('Balance: no se pudo leer stock actualizado desde Supabase',e);
+  }
+}
 function calculations(date,previousOverride,assetsRows=cachedAssets){
   const movements=readJson(MOVEMENTS_KEY,[]);
   const assets=Array.isArray(assetsRows)?assetsRows:[];
-  const stock=readJson(STOCK_KEY,[]);
+  const stock=cloud()? (cloudStockRows||[]) : readJson(STOCK_KEY,[]);
   const assetBreakdown={
     cash:assets.filter(r=>r.asset_type==='cash').reduce((s,r)=>s+num(r.balance),0),
     checks:assets.filter(r=>r.asset_type==='checks').reduce((s,r)=>s+num(r.balance),0),
@@ -385,10 +405,11 @@ function renderIncomeStatement(){
   if($('incomeStatementDetail'))$('incomeStatementDetail').hidden=true;
 }
 
-async function refresh(preserveInput=false){await Promise.all([loadClosings(),loadCurrentAssets()]);const date=$('balanceDate')?.value||today();const saved=closings.find(r=>r.balance_date===date);let previous;if(preserveInput&&$('balancePrevious')?.value!=='')previous=num($('balancePrevious').value);else previous=saved?num(saved.previous_equity):previousEquity(date);current=calculations(date,previous,cachedAssets);if($('balancePrevious'))$('balancePrevious').value=String(current.previous_equity);if($('balanceNotes'))$('balanceNotes').value=saved?.notes||'';render();renderHistory();renderIncomeStatement()}
+async function refresh(preserveInput=false){await Promise.all([loadClosings(),loadCurrentAssets(),loadBalanceStock()]);const date=$('balanceDate')?.value||today();const saved=closings.find(r=>r.balance_date===date);let previous;if(preserveInput&&$('balancePrevious')?.value!=='')previous=num($('balancePrevious').value);else previous=saved?num(saved.previous_equity):previousEquity(date);current=calculations(date,previous,cachedAssets);if($('balancePrevious'))$('balancePrevious').value=String(current.previous_equity);if($('balanceNotes'))$('balanceNotes').value=saved?.notes||'';render();renderHistory();renderIncomeStatement()}
 async function save(){
   if(!current)return;
-  await loadCurrentAssets();
+  await Promise.all([loadCurrentAssets(),loadBalanceStock()]);
+  if(cloud()&&cloudStockError){alert('No se pudo consultar el stock actualizado en Supabase. No se guardó el balance para evitar cifras incorrectas. '+(cloudStockError.message||cloudStockError));return;}
   current=calculations($('balanceDate').value,num($('balancePrevious').value),cachedAssets);
   const existing=closings.find(r=>r.balance_date===current.date);
   const record={id:existing?.id||uid(),balance_date:current.date,...current,notes:$('balanceNotes').value.trim(),created_at:existing?.created_at||new Date().toISOString(),updated_at:new Date().toISOString()};delete record.date;
@@ -529,6 +550,6 @@ setTimeout(()=>{
   $('balanceMonthFilter')?.addEventListener('change',renderHistory);
   if($('incomeStatementMonth'))$('incomeStatementMonth').value=currentMonthValue();
   $('incomeStatementMonth')?.addEventListener('change',renderIncomeStatement);
-},0);bind();window.addEventListener('donzoilo:remote-change',e=>{if(e.detail?.table==='current_assets')refresh(true)});window.addEventListener('donzoilo:app-visible',()=>refresh(true));await refresh(false)}
+},0);bind();window.addEventListener('donzoilo:remote-change',e=>{if(e.detail?.table==='current_assets')refresh(true)});window.addEventListener('donzoilo:app-visible',()=>refresh(true));window.addEventListener('donzoilo:remote-change',e=>{if(e.detail?.table==='inventory_stock')refresh(true)});await refresh(false)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
