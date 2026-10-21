@@ -13,6 +13,7 @@
   const revisions=new Map();
   let reloadPending=false;
   let loading=false;
+  let cloudConfirmed=false;
   function hasPending(){return saveQueues.size>0 || savingIds.size>0;}
   function requestReload(showError=false){
     if(hasPending()){reloadPending=true;return;}
@@ -45,18 +46,27 @@
     loading=true;
     try{
       if(cloud()){
-        const {data,error}=await cloud().from("inventory_stock").select("*").order("product",{ascending:true});
-        if(error)throw error;
+        const data=[];
+        for(let start=0;;start+=1000){
+          const result=await cloud().from("inventory_stock").select("*").order("product",{ascending:true}).order("id",{ascending:true}).range(start,start+999);
+          if(result.error)throw result.error;
+          data.push(...(result.data||[]));
+          if((result.data||[]).length<1000)break;
+        }
+        cloudConfirmed=true;
         if(hasPending()){reloadPending=true;return;}
         stockRows=data||[];localWrite();
+      }else if(window.DON_ZOILO_CLOUD_CONFIG?.url){
+        throw new Error("Supabase todavía no está conectado. Esperá la sincronización y volvé a actualizar.");
       }else stockRows=localRead();
       draftId=null;renderStock();
     }catch(error){
       console.error("Stock:",error);
       // Keep currently displayed cloud data instead of overwriting with stale local cache.
-      if(!stockRows.length)stockRows=localRead();
+      if(!cloudConfirmed && window.DON_ZOILO_CLOUD_CONFIG?.url)stockRows=[];
+      else if(!stockRows.length && !window.DON_ZOILO_CLOUD_CONFIG?.url)stockRows=localRead();
       renderStock();
-      if(showError)alert("No se pudo actualizar Stock desde Supabase. No se reemplazaron los cambios en pantalla. "+error.message);
+      alert("No se pudo confirmar el inventario de Supabase. No uses este importe para el balance hasta recuperar la conexión. "+error.message);
     }finally{loading=false;flushReload();}
   }
 

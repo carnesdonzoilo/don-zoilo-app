@@ -1,0 +1,1 @@
+Don Zoilo V35.3.77: Balance diario consulta inventory_stock en Supabase igual que Stock. Refresca al abrir y antes de guardar. Si falla la consulta, bloquea el cierre para no guardar valores erróneos. No modifica datos, saldos ni movimientos. No requiere SQL.

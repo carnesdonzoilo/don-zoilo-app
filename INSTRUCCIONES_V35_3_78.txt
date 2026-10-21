@@ -1,0 +1,1 @@
+V35.3.78: stock multi-dispositivo. Supabase como fuente central, lectura paginada idéntica para Stock y Balance. No reemplazar por caché local cuando la nube no está confirmada. No modifica datos ni requiere SQL. Si un dispositivo no conecta, se informa el error en lugar de presentar su copia local como inventario actual.
