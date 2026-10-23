@@ -1,0 +1,1 @@
+V35.3.79 - Caja y activos: la caché local llena no bloquea lecturas ni guardados confirmados en Supabase. No se reemplazan registros de nube con datos locales. Si falla la nube, no se muestran saldos locales como confirmados. Sin SQL.
