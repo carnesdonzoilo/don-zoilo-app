@@ -11,7 +11,7 @@ const money=v=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',ma
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const cloud=()=>typeof window.supabaseClient!=='undefined'&&window.supabaseClient;
 function localRead(){try{return JSON.parse(localStorage.getItem(LOCAL_KEY)||'[]')}catch(_){return[]}}
-function localWrite(){localStorage.setItem(LOCAL_KEY,JSON.stringify(rows))}
+function localWrite(){try{localStorage.setItem(LOCAL_KEY,JSON.stringify(rows));return true}catch(e){if(e?.name!=='QuotaExceededError'&&!String(e).includes('quota'))console.warn('No se pudo actualizar caché de activos:',e);return false}}
 function defaults(){const now=new Date().toISOString();return[
 {id:uuid(),asset_type:'cash',name:'EFECTIVO',balance:0,notes:'',sort_order:10},
 {id:uuid(),asset_type:'checks',name:'CHEQUES EN CARTERA',balance:0,notes:'',sort_order:20},
@@ -32,7 +32,7 @@ async function saveRow(r){
       const {error}=await cloud().from(TABLE).upsert(r);
       if(error)throw error;
     }
-    localWrite();
+    localWrite(); // La caché es opcional: Supabase ya confirmó el guardado.
     return true;
   }catch(e){
     const msg=String(e?.message||e||'');
@@ -47,7 +47,26 @@ async function addRow(type){const max=rows.filter(r=>r.asset_type===type).reduce
 async function addInvestmentContribution(id){const r=rows.find(x=>x.id===id&&x.asset_type==='investment');if(!r)return;const raw=prompt(`Nuevo aporte a ${r.name}:`,'');if(raw===null)return;const amount=num(raw);if(!(amount>0)){alert('Ingresá un importe mayor a cero.');return;}r.balance=num(r.balance)+amount;const stamp=new Date().toLocaleDateString('es-AR');const entry=`${stamp}: +${money(amount)}`;r.notes=[String(r.notes||'').trim(),entry].filter(Boolean).join(' | ');localWrite();render();await saveRow(r)}
 async function finishInvestment(id){const r=rows.find(x=>x.id===id&&x.asset_type==='investment');if(!r)return;if(!confirm(`¿Convertir "${r.name}" en Bien de uso / Activo por ${money(r.balance)}?`))return;r.asset_type='fixed_asset';r.notes=[String(r.notes||'').trim(),`Finalizada ${new Date().toLocaleDateString('es-AR')}`].filter(Boolean).join(' | ');localWrite();render();await saveRow(r)}
 function bind(){document.addEventListener('keydown',e=>{const i=e.target.closest('#currentAssets .asset-input');if(i&&e.key==='Enter'){e.preventDefault();i.blur()}});document.addEventListener('change',async e=>{const i=e.target.closest('#currentAssets .asset-input');if(!i)return;const tr=i.closest('[data-asset-id]');const r=rows.find(x=>x.id===tr?.dataset.assetId);if(!r)return;const f=i.dataset.field,v=f==='balance'?num(i.value):i.value.trim();if(r[f]===v)return;r[f]=v;localWrite();totals();await saveRow(r)});document.addEventListener('click',e=>{const a=e.target.closest('[data-add-asset]');if(a)addRow(a.dataset.addAsset);const add=e.target.closest('[data-invest-add]');if(add)addInvestmentContribution(add.dataset.investAdd);const fin=e.target.closest('[data-invest-finish]');if(fin)finishInvestment(fin.dataset.investFinish);const d=e.target.closest('[data-delete-asset]');if(d)removeRow(d.dataset.deleteAsset)})}
-async function loadAssets(show=false){try{if(cloud()){const {data,error}=await cloud().from(TABLE).select('*').order('sort_order',{ascending:true});if(error)throw error;rows=data||[]}else rows=localRead();if(!rows.length){rows=defaults();localWrite();if(cloud())await cloud().from(TABLE).upsert(rows)}localWrite()}catch(e){rows=localRead();if(!rows.length){rows=defaults();localWrite()}if(show)alert('No se pudo leer Caja y Activos desde Supabase. Se muestra la copia local. '+(e.message||e))}render()}
+async function loadAssets(show=false){
+  if(cloud()){
+    try{
+      const {data,error}=await cloud().from(TABLE).select('*').order('sort_order',{ascending:true});
+      if(error)throw error;
+      // Una tabla vacía es un resultado válido: nunca sobrescribir la nube con una caché antigua.
+      rows=data||[];
+      localWrite(); // Optativo: una cuota llena no convierte una lectura válida en error.
+    }catch(e){
+      // No sustituir silenciosamente cifras de nube por una copia antigua.
+      rows=[];
+      if(show)alert('No se pudo confirmar Caja y Activos en Supabase. No se muestran saldos locales antiguos. '+(e.message||e));
+    }
+  }else{
+    rows=localRead();
+    if(!rows.length){rows=defaults();localWrite()}
+    if(show)alert('Sin conexión a Supabase: estos datos son locales y pueden estar desactualizados.');
+  }
+  render();
+}
 function init(){
   injectStyles();injectUI();bind();
   loadAssets(false);
