@@ -1,0 +1,5 @@
+V35.3.80 - Unificacion visual de proveedores por nombre normalizado.
+Corrige Herni/herni duplicado en lista y total de pasivos.
+No cambia, borra ni fusiona movimientos en Supabase.
+No requiere SQL.
+Verificar listado de Proveedores y Balance Diario tras actualizar.
