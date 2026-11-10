@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.79";
+const APP_VERSION = "35.3.80";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3174,14 +3174,23 @@ function isSupplierOpeningMovement(m){
   return m.type==="compra" && String(m.notes||"").includes("SALDO_INICIAL_PROVEEDOR");
 }
 
+// V35.3.80: un nombre por clave normalizada. No altera movimientos guardados.
+// supplierMovementsFor ya usa normalizeClientName, por lo que variantes de
+// mayúsculas/minúsculas comparten el mismo historial y saldo.
 function supplierNames(){
-  const names=new Set();
+  const names=new Map();
   movements.forEach(m=>{
-    if(["compra","pago"].includes(m.type) && String(m.party||"").trim()){
-      names.add(String(m.party).trim());
+    if(!["compra","pago"].includes(m.type)) return;
+    const name=String(m.party||"").trim();
+    const key=normalizeClientName(name);
+    if(!key) return;
+    const existing=names.get(key);
+    // Preferir la forma legible "Herni" sobre "herni" sin renombrar registros.
+    if(!existing || (existing===existing.toLowerCase() && name!==name.toLowerCase())){
+      names.set(key,name);
     }
   });
-  return [...names].sort((a,b)=>a.localeCompare(b,"es"));
+  return [...names.values()].sort((a,b)=>a.localeCompare(b,"es"));
 }
 
 function supplierMovementsFor(name){
