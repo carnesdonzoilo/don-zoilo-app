@@ -1,0 +1,1 @@
+V35.3.83: El informe de comprobantes pendientes muestra el plazo de pago configurado debajo del nombre del cliente. No cambia vencimientos, saldos, pagos ni movimientos. No requiere SQL adicional.
