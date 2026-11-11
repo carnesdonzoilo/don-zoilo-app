@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.80";
+const APP_VERSION = "35.3.81";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3046,7 +3046,7 @@ function printPendingAccountStatement(){
     @media print{body{padding:0}}
   </style></head><body>
     <div class="head">
-      <div><h1>DON ZOILO</h1><div class="subtitle">Cuenta corriente · Solo pendientes</div></div>
+      <div><h1>DON ZOILO</h1><div class="subtitle">Cuenta corriente</div></div>
       <div><strong>${escapeHtml(client)}</strong><br>${new Date().toLocaleDateString("es-AR")}</div>
     </div>
 
@@ -3057,12 +3057,9 @@ function printPendingAccountStatement(){
 
     <div class="summary">
       <div><span>Comprobantes pendientes</span><strong>${pending.length}</strong></div>
-      <div class="final"><span>Total remitos pendientes</span><strong>${money(totalPending)}</strong></div>
-      ${Math.round(correctionPending)!==0?`<div><span>Ajuste de regularización</span><strong>${money(correctionPending)}</strong></div>`:""}
-      <div><span>Saldo actual de cuenta</span><strong>${money(currentBalance)}</strong></div>
+      <div class="final"><span>TOTAL PENDIENTE</span><strong>${money(totalPending)}</strong></div>
     </div>
 
-    <div class="note">Los ajustes usados para regularizar el saldo no reemplazan ni ocultan los remitos pendientes reales.</div>
 
     <script>window.addEventListener("load",()=>setTimeout(()=>window.print(),300));<\/script>
   </body></html>`);
