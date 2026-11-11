@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.82";
+const APP_VERSION = "35.3.83";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2813,7 +2813,7 @@ function printAccountStatement(){
   .summary{margin-top:14px;margin-left:auto;width:320px}.summary div{display:flex;justify-content:space-between;padding:6px;border-bottom:1px solid #ccc}.summary .final{font-size:18px;font-weight:900;border-top:3px solid #111}
   @page{size:A4 portrait;margin:10mm}@media print{body{padding:0}}
   </style></head><body>
-  <div class="head"><div><h1>DON ZOILO</h1><div>Estado de cuenta</div></div><div><strong>${escapeHtml(client)}</strong><br>${new Date().toLocaleDateString("es-AR")}</div></div>
+  <div class="head"><div><h1>DON ZOILO</h1><div>Estado de cuenta</div></div><div style="text-align:right"><strong>${escapeHtml(client)}</strong><div class="subtitle">Plazo de pago: <strong>${days===0?"Contado":days+" días"}</strong></div><div>${new Date().toLocaleDateString("es-AR")}</div></div></div>
   <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Remito</th><th>Factura</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="summary">
     <div><span>Saldo anterior</span><strong>${money(totals.opening)}</strong></div>
@@ -2986,7 +2986,7 @@ function pendingAccountDebtsFor(client){
   return debts.filter(d=>Math.round(Number(d.remaining||0))>0);
 }
 
-// V35.3.82: Plazo por cliente. No altera comprobantes ni movimientos.
+// V35.3.83: Plazo por cliente. No altera comprobantes ni movimientos.
 const PAYMENT_TERMS_KEY="don_zoilo_client_payment_terms_v1";
 let clientPaymentTerms={};
 try{clientPaymentTerms=JSON.parse(localStorage.getItem(PAYMENT_TERMS_KEY)||"{}");}catch(_){clientPaymentTerms={};}
@@ -3029,7 +3029,7 @@ async function saveClientPaymentTerm(){
     if(error){
       if(old===undefined) delete clientPaymentTerms[key]; else clientPaymentTerms[key]=old;
       syncClientPaymentTermSelect();
-      alert("No se guardó el plazo en la nube. Ejecutá primero el SQL de V35.3.82 en Supabase. Detalle: "+error.message);
+      alert("No se guardó el plazo en la nube. Ejecutá primero el SQL de V35.3.83 en Supabase. Detalle: "+error.message);
       return;
     }
   }
@@ -3108,7 +3108,7 @@ function printPendingAccountStatement(){
   </style></head><body>
     <div class="head">
       <div><h1>DON ZOILO</h1><div class="subtitle">Cuenta corriente</div></div>
-      <div><strong>${escapeHtml(client)}</strong><br>${new Date().toLocaleDateString("es-AR")}</div>
+      <div style="text-align:right"><strong>${escapeHtml(client)}</strong><div class="subtitle">Plazo de pago: <strong>${days===0?"Contado":days+" días"}</strong></div><div>${new Date().toLocaleDateString("es-AR")}</div></div>
     </div>
 
     <table>
