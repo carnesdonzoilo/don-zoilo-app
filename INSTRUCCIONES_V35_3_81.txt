@@ -1,0 +1,2 @@
+V35.3.81 — Simplificación de impresión de cuenta corriente.
+Elimina «Solo pendientes», la nota de ajustes y el saldo duplicado. El resumen muestra comprobantes pendientes y TOTAL PENDIENTE. No modifica movimientos, cálculos ni datos en Supabase. No requiere SQL.

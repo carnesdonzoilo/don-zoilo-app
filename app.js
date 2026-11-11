@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.81";
+const APP_VERSION = "35.3.82";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2406,6 +2406,7 @@ function renderAccounts(){
   if($("accountTotalCollected")) $("accountTotalCollected").textContent=money(totals.collected);
   if($("accountOpeningBalance")) $("accountOpeningBalance").textContent=money(totals.opening);
   renderAccountHistory(client);
+  syncClientPaymentTermSelect();
   const collectionClient=$("collectionClient")?.value||"";
   const currentTargets=selectedCollectionTargetIds();
   fillCollectionPendingTargets(collectionClient,currentTargets);
@@ -2985,6 +2986,57 @@ function pendingAccountDebtsFor(client){
   return debts.filter(d=>Math.round(Number(d.remaining||0))>0);
 }
 
+// V35.3.82: Plazo por cliente. No altera comprobantes ni movimientos.
+const PAYMENT_TERMS_KEY="don_zoilo_client_payment_terms_v1";
+let clientPaymentTerms={};
+try{clientPaymentTerms=JSON.parse(localStorage.getItem(PAYMENT_TERMS_KEY)||"{}");}catch(_){clientPaymentTerms={};}
+function paymentTermKey(client){return canonicalClientKey(client||"");}
+function paymentTermDays(client){return Number(clientPaymentTerms[paymentTermKey(client)]??7);}
+function paymentDueDate(date,days){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||""))) return "";
+  const d=new Date(date+"T12:00:00Z");
+  if(Number.isNaN(d.getTime())) return "";
+  d.setUTCDate(d.getUTCDate()+Number(days));
+  return d.toISOString().slice(0,10);
+}
+async function loadClientPaymentTerms(){
+  if(!supabaseClient) return;
+  try{
+    const {data,error}=await supabaseClient.from("client_payment_terms").select("client_key,days");
+    if(error) throw error;
+    for(const row of data||[]) clientPaymentTerms[row.client_key]=Number(row.days);
+    try{localStorage.setItem(PAYMENT_TERMS_KEY,JSON.stringify(clientPaymentTerms));}catch(_){}
+    syncClientPaymentTermSelect();
+  }catch(error){console.warn("No se pudieron leer los plazos de clientes",error);}
+}
+function syncClientPaymentTermSelect(){
+  const select=$("accountPaymentDays");
+  if(!select) return;
+  const client=$("accountClientSelect")?.value||"";
+  select.disabled=!client;
+  select.value=String(paymentTermDays(client));
+}
+async function saveClientPaymentTerm(){
+  const client=$("accountClientSelect")?.value||"";
+  if(!client) return;
+  const select=$("accountPaymentDays");
+  const days=Number(select?.value||0);
+  const key=paymentTermKey(client);
+  const old=clientPaymentTerms[key];
+  clientPaymentTerms[key]=days;
+  if(supabaseClient){
+    const {error}=await supabaseClient.from("client_payment_terms").upsert({client_key:key,days,updated_at:new Date().toISOString()},{onConflict:"client_key"});
+    if(error){
+      if(old===undefined) delete clientPaymentTerms[key]; else clientPaymentTerms[key]=old;
+      syncClientPaymentTermSelect();
+      alert("No se guardó el plazo en la nube. Ejecutá primero el SQL de V35.3.82 en Supabase. Detalle: "+error.message);
+      return;
+    }
+  }
+  try{localStorage.setItem(PAYMENT_TERMS_KEY,JSON.stringify(clientPaymentTerms));}catch(_){}
+}
+window.addEventListener("donzoilo:cloud-ready",()=>{loadClientPaymentTerms();});
+
 function printPendingAccountStatement(){
   const client=$("accountClientSelect")?.value||"";
   if(!client) return alert("Elegí un cliente.");
@@ -3009,11 +3061,18 @@ function printPendingAccountStatement(){
     return alert("Este cliente no tiene comprobantes pendientes.");
   }
 
+  const days=paymentTermDays(client);
+  const today=todayISO();
+  let totalOverdue=0;
   const rows=pending.map(d=>{
     const m=d.movement;
+    // Los saldos anteriores no son remitos fechados y no se marcan vencidos.
+    const due=isOpeningBalanceMovement(m)?"":paymentDueDate(m.date,days);
+    const overdue=Boolean(due && due<today);
+    if(overdue) totalOverdue+=Number(d.remaining||0);
     const label=isOpeningBalanceMovement(m)?"Saldo anterior":"Venta";
     const meta=movementDocumentMeta(m);
-    return `<tr>
+    return `<tr class="${overdue?"overdue":""}">
       <td>${fmtDate(m.date)}</td>
       <td>${escapeHtml(label)}</td>
       <td>${escapeHtml(meta.remito || m.concept || "")}</td>
@@ -3041,6 +3100,8 @@ function printPendingAccountStatement(){
     .summary{margin-top:14px;margin-left:auto;width:340px}
     .summary div{display:flex;justify-content:space-between;padding:7px;border-bottom:1px solid #ccc}
     .summary .final{font-size:18px;font-weight:900;border-top:3px solid #111}
+    tr.overdue td{color:#b91c1c!important;background:#fff1f1!important}
+    .summary .overdue-total{font-size:14px;font-weight:700;color:#b91c1c;border-bottom:0}
     .note{margin-top:14px;font-size:10px;color:#555}
     @page{size:A4 portrait;margin:10mm}
     @media print{body{padding:0}}
@@ -3058,6 +3119,7 @@ function printPendingAccountStatement(){
     <div class="summary">
       <div><span>Comprobantes pendientes</span><strong>${pending.length}</strong></div>
       <div class="final"><span>TOTAL PENDIENTE</span><strong>${money(totalPending)}</strong></div>
+      <div class="overdue-total"><span>TOTAL VENCIDO</span><strong>${money(totalOverdue)}</strong></div>
     </div>
 
 
@@ -5726,6 +5788,7 @@ on("openingBalanceForm","submit",saveOpeningBalance);
 on("collectionForm","submit",saveCollection);
 on("collectionClient","change",()=>fillCollectionPendingTargets($("collectionClient")?.value||""));
 on("accountClientSelect","change",renderAccounts);
+on("accountPaymentDays","change",saveClientPaymentTerm);
 on("refreshAccounts","click",renderAccounts);
 on("collectFullBalance","click",collectFullBalance);
 on("printAccountStatement","click",printAccountStatement);
