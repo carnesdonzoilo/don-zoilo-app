@@ -1,0 +1,1 @@
+V35.3.82: Plazo de pago por cliente (7 días por defecto); impresión Pendientes marca vencidos en rojo y agrega TOTAL VENCIDO. Ejecutar SQL supabase_update_v35_3_82_plazos_clientes.sql en Supabase antes de configurar plazos entre dispositivos. No modifica movimientos, pagos ni saldos.
