@@ -1,0 +1,8 @@
+DON ZOILO V35.3.84 - PLAZO DE 10 DIAS
+
+1. Ejecutar en Supabase SQL Editor el archivo supabase_update_v35_3_84_plazo_10_dias.sql.
+2. Subir todos los archivos de esta version a GitHub y esperar el despliegue en Vercel.
+3. Abrir Cuentas corrientes, elegir cliente y seleccionar 10 dias.
+4. Comprobar el plazo y los vencidos en la impresion de pendientes.
+
+No modifica saldos, remitos ni movimientos.

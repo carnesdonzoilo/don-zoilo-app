@@ -1,0 +1,1 @@
+V35.3.85: En el PDF de Balance Diario, las ventas pendientes vencidas se imprimen en rojo dentro de cada cuadro de cliente, segun su plazo configurado (incluye 10 dias). Se compara vencimiento con fecha del balance; no se colorean saldos anteriores ni ajustes. Sin SQL adicional. No modifica datos, saldos ni movimientos.

@@ -1,0 +1,35 @@
+DON ZOILO V35.3.86 - INSTALACION UNIFICADA
+
+CONTENIDO
+- Plazo de cada cliente visible en la impresion de pendientes.
+- Menu de plazos: Contado, 3, 7, 10, 14, 21 y 30 dias.
+- Pendientes vencidos en rojo y TOTAL VENCIDO.
+- PDF del Balance Diario: ventas vencidas en rojo por cliente y plazo, segun fecha del balance.
+- Mantiene el resto de la app y los datos existentes.
+
+PASO 1: GITHUB
+1. Descargar Don_Zoilo_V35_3_86_TODO_INTEGRADO.zip.
+2. Extraer el ZIP en la computadora.
+3. Abrir la carpeta don-zoilo-app-main.
+4. Entrar a github.com/carnesdonzoilo/don-zoilo-app.
+5. Elegir Add file > Upload files.
+6. Arrastrar EL CONTENIDO de don-zoilo-app-main (archivos y carpetas), NO la carpeta contenedora.
+7. Confirmar los cambios (Commit changes). Si GitHub pregunta por sobrescritura, reemplazar los archivos existentes de la app.
+8. Esperar el despliegue de Vercel y abrir https://don-zoilo-app.vercel.app.
+9. Verificar en el encabezado: Version 35.3.86. Si no cambia, actualizar con Ctrl+F5.
+
+PASO 2: SUPABASE
+1. En la carpeta extraida don-zoilo-app-main abrir EJECUTAR_EN_SUPABASE_V35_3_86.sql con Bloc de notas.
+2. Seleccionar todo (Ctrl+A) y copiar (Ctrl+C).
+3. Entrar al proyecto habitual de Supabase > SQL Editor > New query.
+4. Pegar (Ctrl+V) y pulsar Run.
+5. Debe indicar Success. No rows returned. El aviso sobre operaciones destructivas se debe al DROP CONSTRAINT: solo sustituye la validacion de dias, NO borra registros.
+6. No ejecutar otros archivos SQL del ZIP; son historicos.
+
+PASO 3: PRUEBA
+1. En Cuentas corrientes elegir un cliente y seleccionar 10 dias; esperar guardado.
+2. Abrir Imprimir estado de cuenta: debe verse el plazo en el encabezado, y los vencidos en rojo con TOTAL VENCIDO.
+3. Generar PDF de Balance Diario: revisar que las ventas vencidas aparezcan rojas dentro de cada cuadro.
+4. Abrir en celular y refrescar; debe cargar la misma version.
+
+RECOMENDACION: antes de subir, descargar un respaldo JSON desde la app y conservarlo. No usar Restaurar respaldo para instalar esta version.
