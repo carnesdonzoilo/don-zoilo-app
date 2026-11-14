@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.83";
+const APP_VERSION = "35.3.86";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -2992,6 +2992,8 @@ let clientPaymentTerms={};
 try{clientPaymentTerms=JSON.parse(localStorage.getItem(PAYMENT_TERMS_KEY)||"{}");}catch(_){clientPaymentTerms={};}
 function paymentTermKey(client){return canonicalClientKey(client||"");}
 function paymentTermDays(client){return Number(clientPaymentTerms[paymentTermKey(client)]??7);}
+// Consulta de solo lectura para el PDF de Balance Diario.
+window.DonZoiloPaymentTerms={daysForClient:paymentTermDays};
 function paymentDueDate(date,days){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||""))) return "";
   const d=new Date(date+"T12:00:00Z");

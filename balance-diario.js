@@ -450,6 +450,22 @@ function pdfDate(v){
 function simplePdfBlob(){
   const W=595,H=842,M=18, sidebarW=180, gap=9, mainW=W-M*2-sidebarW-gap, colGap=7, colW=(mainW-colGap)/2;
   const clients=balanceClientRows();
+  // El PDF consulta el plazo configurado, sin alterar movimientos ni saldos.
+  const termDaysFor=client=>{
+    const fn=window.DonZoiloPaymentTerms?.daysForClient;
+    return typeof fn==='function'?Number(fn(client)):7;
+  };
+  const isOverdue=(client,p)=>{
+    if(String(p.type||'').toLowerCase()!=='venta')return false;
+    const date=String(p.date||'').slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return false;
+    const days=termDaysFor(client);
+    if(!Number.isFinite(days)||days<0)return false;
+    const due=new Date(date+'T12:00:00Z');
+    if(Number.isNaN(due.getTime()))return false;
+    due.setUTCDate(due.getUTCDate()+days);
+    return due.toISOString().slice(0,10)<String(current.date||'').slice(0,10);
+  };
   const suppliers=balanceSupplierRows();
   const assetSplit=balanceAssetSplit();
   const clean=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'').replace(/([\\()])/g,'\\$1');
@@ -459,6 +475,7 @@ function simplePdfBlob(){
   const line=(x1,y1,x2,y2,w=.45,dash=false)=>ops.push(`${w} w ${dash?'[2 2] 0 d':'[] 0 d'} ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
   const box=(x,y,w,h,fill=false)=>{if(fill)ops.push(`0.94 g ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f 0 g`);ops.push(`0.55 w ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S`)};
   const rightText=(right,y,t,size=7,bold=false)=>{const approx=clean(t).length*size*.49;text(right-approx,y,t,size,bold)};
+  const redText=(draw)=>{ops.push('0.75 0.08 0.08 rg');draw();ops.push('0 0 0 rg');};
   const titleY=815;
   text(M,titleY,'DON ZOILO',16,true); text(M,titleY-13,'CARNES DE CONFIANZA',7,false);
   text(232,titleY,'BALANCE DIARIO',14,true); text(228,titleY-13,'TU NEGOCIO, EN UN SOLO VISTAZO',6,false);
@@ -493,13 +510,15 @@ function simplePdfBlob(){
         const remitoNum=remitoRaw.replace(/^remito\s*/i,'').trim();
         let doc=remitoNum?`Remito ${remitoNum}`:(p.invoice?`Factura ${p.invoice}`:'Comprobante pendiente');
         if(p.invoice&&remitoNum)doc=`Factura ${p.invoice} / Remito ${remitoNum}`;
-        detail.push([pdfDate(p.date||p.created_at),doc,num(p.remaining)]);
+        detail.push([pdfDate(p.date||p.created_at),doc,num(p.remaining),isOverdue(r.client,p)]);
       });
       if(Math.round(num(r.correctionPending||0))!==0)detail.push(['','Saldo anterior / regularizacion',num(r.correctionPending)]);
       const recon=num(r.reconciliation||0);if(Math.abs(recon)>=.5)detail.push(['',recon<0?'Saldo a favor / excedente':'Diferencia de cuenta',recon]);
       if(!pending.length&&num(r.balance)>0&&!detail.length)detail.push(['','Sin comprobantes individualizados',num(r.balance)]);
       detail.forEach(d=>{
-        text(x+4,cy,(d[0]?d[0]+'  ':'')+d[1],fs,false);rightText(x+colW-4,cy,fmt(d[2]),fs,false);cy-=lh;
+        const draw=()=>{text(x+4,cy,(d[0]?d[0]+'  ':'')+d[1],fs,false);rightText(x+colW-4,cy,fmt(d[2]),fs,false);};
+        if(d[3])redText(draw);else draw();
+        cy-=lh;
       });
       // V35.3.50: el renglón TOTAL queda limpio, sin línea punteada atravesándolo.
       text(x+4,cy,`TOTAL ${String(r.client||'').toUpperCase()}:`,fs+.15,true);rightText(x+colW-4,cy,fmt(r.balance),fs+.15,true);
