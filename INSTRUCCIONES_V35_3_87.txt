@@ -1,0 +1,1 @@
+V35.3.87 — En Saldos, al hacer clic en el nombre de un cliente se abre directamente el informe Solo pendientes de ese cliente, con su plazo y vencimientos en rojo. Se reutiliza la función existente de Cuentas corrientes. No requiere SQL ni modifica datos, saldos o movimientos.
