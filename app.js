@@ -47,7 +47,7 @@ const PRICES_STORAGE_KEY = "don_zoilo_product_prices_v1";
 const PRICE_META_STORAGE_KEY = "don_zoilo_product_catalog_meta_v1";
 const SAFETY_BACKUP_KEY = "don_zoilo_safety_backup_v1";
 const SAFETY_BACKUP_PREVIOUS_KEY = "don_zoilo_safety_backup_previous_v1";
-const APP_VERSION = "35.3.86";
+const APP_VERSION = "35.3.87";
 function localLoad(){
   movements = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
   orders = JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "[]");
@@ -3039,8 +3039,8 @@ async function saveClientPaymentTerm(){
 }
 window.addEventListener("donzoilo:cloud-ready",()=>{loadClientPaymentTerms();});
 
-function printPendingAccountStatement(){
-  const client=$("accountClientSelect")?.value||"";
+function printPendingAccountStatement(clientOverride){
+  const client=typeof clientOverride==="string" && clientOverride.trim() ? clientOverride.trim() : ($("accountClientSelect")?.value||"");
   if(!client) return alert("Elegí un cliente.");
 
   // V35.3.33: el detalle impreso trabaja con la misma precisión visible ($ enteros).
@@ -5917,5 +5917,5 @@ on("expenseDate","focus",()=>{
 
 document.addEventListener("click",event=>{
   const button=event.target.closest(".balance-client-link");
-  if(button) openBalanceDetail(button.dataset.client||button.textContent.trim());
+  if(button) printPendingAccountStatement(button.dataset.client||button.textContent.trim());
 });
